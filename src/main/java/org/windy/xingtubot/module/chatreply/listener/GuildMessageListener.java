@@ -41,9 +41,13 @@ public class GuildMessageListener implements Listener {
         }
 
         List<WhitelistModule.WhiteListEntry> entries = WhiteListAPI.getEntriesByFormId(formId);
-        String senderName = entries.isEmpty()
-                ? ChatreplyModule.getInstance().plugin.getConfig().getString("entries-Empty", "群成员")
-                : entries.get(0).player;
+        String senderName;
+        if (entries.isEmpty()) {
+            senderName = ChatreplyModule.getInstance().plugin.getConfig().getString("entries-Empty", "群成员");
+         //   Bukkit.getLogger().warning("[ChatReply] 来自未绑定白名单用户的消息：FormId=" + formId + "，将使用默认昵称：" + senderName);
+        } else {
+            senderName = entries.get(0).player;
+        }
 
         // 构建主消息部分
         String chatPrefix = ChatreplyModule.getInstance().plugin.getConfig()
