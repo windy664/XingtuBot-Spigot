@@ -1,0 +1,74 @@
+
+####################################
+#机器人配置
+####################################
+# 是否启用调试模式，输出原始 JSON 消息
+debug: false
+
+# WebSocket 地址
+WebSocket: "ws://127.0.0.1:8080"
+
+# 是否自动连接
+AutoOpen: true
+
+# 断开是否自动重连
+Reconnect: true
+
+# 最多重连次数
+MaxReconnect: 10
+
+# 每个任务最大处理时间（秒）
+TaskTimeout: 10
+
+# 最大线程池数量（未实现线程池时用于保留）
+MaxActiveCount: 10
+
+#跨服标识
+server-name: server
+
+##########################################
+#白名单配置
+##########################################
+
+#默认密码，可到 https://www.lddgo.net/string/randompassword 生成
+default-password: yC[c=a8G
+
+#登录提示词
+login-prompt: "登录"
+
+#Authme注册提示词
+register-prompt: "&b📢 &f请输入您的&cQQ号码 &f或 输入&c/register <密码> 密码 &f完成注册"
+
+#输入完毕后的验证码提示词
+title-code: "验证码 {0}"
+subtitle-code: "请在群内 @机器人 <验证码> 完成发送"
+login-mssage: "请在群内发送 @机器人 登录 或 输入/login <密码> 完成登录"
+login-success: "您已成功登录服务器，祝您游戏愉快！"
+
+#######################
+#敏感词处理
+#######################
+Enable: true
+
+Cloud-Thesaurus:
+  Enabled: true
+  Ignored: ['nt']   # 云词库忽略的词（不当敏感词处理）
+  Urls:
+    - 'https://raw.githubusercontent.com/Yurinann/Filter-Thesaurus-Cloud/main/database.json'
+    # - 'https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/main/ThirdPartyCompatibleFormats/TrChat/SensitiveLexicon.json'
+
+Local:
+  - NMSL
+  - fuck
+  - shit
+
+Ignored-Punctuations: ['!','.',',','#','$','%','&','*','(',')','|','?','/','@','"','\\',';','[',']','{','}','+','~','-','_','=','^','<','>',' ','　','！','。','，','￥','（','）','？','、','“','‘','；','【','】','——','……','《','》','\\', '`']
+
+Replacement: '*'
+
+#####################
+# 消息处理
+#####################
+startsWith: "say"
+entries-Empty: "群成员"
+chat-format: "🐧§cQQ群 §7| §f"
