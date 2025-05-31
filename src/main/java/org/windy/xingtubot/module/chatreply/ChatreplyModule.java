@@ -25,7 +25,7 @@ public class ChatreplyModule implements Listener {
         Bukkit.getPluginManager().registerEvents(new GuildMessageListener(), plugin);
         plugin.getCommand("messagereply").setExecutor(new ReplyCommand());
 
-        plugin.getLogger().info("ChatreplyModule 模块已启用");
+        plugin.getLogger().info("群服回复模块已启用");
         sensitiveFilter.reloadCloudWords();
     }
 

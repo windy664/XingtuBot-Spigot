@@ -5,7 +5,9 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.windy.xingtubot.event.GuildMessageEvent;
+import org.windy.xingtubot.module.aichat.AIChatModule;
 import org.windy.xingtubot.module.chatreply.ChatreplyModule;
+import org.windy.xingtubot.module.chatreply.listener.GuildMessageListener;
 import org.windy.xingtubot.module.whitelist.WhitelistModule;
 
 import java.util.regex.Matcher;
@@ -16,9 +18,13 @@ public final class XingtuBot extends JavaPlugin implements Listener {
 
     private XingtuSocketClient socketClient;
     private GuildMessageEvent lastEvent;
+    private static XingtuBot instance;
 
     @Override
     public void onEnable() {
+
+        instance = this;
+
         saveDefaultConfig(); // 初始化 config.yml
         getLogger().info("星途Bukkit插件启动...");
 
@@ -52,11 +58,24 @@ public final class XingtuBot extends JavaPlugin implements Listener {
                 getCommand("xtb").setTabCompleter(new CommandHandler(this));
             }
         }
+        if (config.getBoolean("whitelist-enable", true)) {
+            new WhitelistModule(this);
+        }
+        if (config.getBoolean("chatreply-enable", true)) {
+            new ChatreplyModule(this);
+        }
+        if (config.getBoolean("aichat-enable", true)) {
+            // 从配置文件中获取 API 密钥
+            String apiKey = getConfig().getString("deepseek-api-key");
 
-        new WhitelistModule(this);
-        new ChatreplyModule(this);
+            // 实例化 AIChatModule
+            AIChatModule aiChatModule = new AIChatModule(getConfig(), getLogger(), apiKey);
 
+            // 注册事件监听器
+            getServer().getPluginManager().registerEvents(aiChatModule, this);
 
+            getLogger().info("AI模块已启用！");
+        }
     }
 
     @Override
@@ -80,5 +99,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
     public void setLastEvent(GuildMessageEvent event) {
         this.lastEvent = event;
     }
-
+    public static XingtuBot getInstance() {
+        return instance;
+    }
 }

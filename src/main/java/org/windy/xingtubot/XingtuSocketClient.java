@@ -57,9 +57,9 @@ public class XingtuSocketClient extends WebSocketClient {
         // 加载白名单 JSON 并发送给框架
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                File file = new File(plugin.getDataFolder().getParentFile(), "XintuWhiteList/whitelist.json");
+                File file = new File(plugin.getDataFolder(), "whitelist.json");
                 if (!file.exists()) {
-                    plugin.getLogger().warning("当前未安装附属插件Xingtu白名单。");
+                    plugin.getLogger().warning("获取白名单失败。");
                     return;
                 }
 
@@ -98,8 +98,10 @@ public class XingtuSocketClient extends WebSocketClient {
                 Consumer<String> replyCallback = (replyMsg) -> {
                     try {
                         incoming.addProperty("reply", replyMsg);
-                        this.send(incoming.toString());
+
                         incoming.addProperty("server", plugin.getConfig().getString("server-name", "服务器")); // 添加服务器标识字段
+
+                        this.send(incoming.toString());
                     } catch (Exception e) {
                         plugin.getLogger().warning("返回至框架出现错误：" + e.getMessage());
                     }
@@ -111,7 +113,7 @@ public class XingtuSocketClient extends WebSocketClient {
 
                 Bukkit.getPluginManager().callEvent(event);
 
-               // Bukkit.broadcastMessage("来自群 " + guildId + " 的 " + formId + "： " + msg);
+                // Bukkit.broadcastMessage("来自群 " + guildId + " 的 " + formId + "： " + msg);
 
             } catch (Exception e) {
                 plugin.getLogger().warning("处理消息异常" + e.getMessage());

@@ -30,6 +30,9 @@ server-name: server
 #白名单配置
 ##########################################
 
+#是否启用白名单
+whitelist-enable: true
+
 #默认密码，可到 https://www.lddgo.net/string/randompassword 生成
 default-password: yC[c=a8G
 
@@ -46,29 +49,50 @@ login-mssage: "🔈§f请在群内发送 §b@机器人 §c登录 或 §f输入§
 login-success: "您已成功登录服务器，祝您游戏愉快！"
 
 #######################
-#敏感词处理
+#群服互联
 #######################
-Enable: true
 
+#是否开启群服互联
+chatreply-enable: true
+
+#群服互联触发提示词
+startsWith: "say"
+
+#无白名单人员昵称
+entries-Empty: "群成员"
+#服务器内的消息格式
+chat-format: "🐧§cQQ群 §7| §f"
+
+#是否启用敏感词处理
+Enable: true
 Cloud-Thesaurus:
   Enabled: true
   Ignored: ['nt']   # 云词库忽略的词（不当敏感词处理）
   Urls:
     - 'https://raw.githubusercontent.com/Yurinann/Filter-Thesaurus-Cloud/main/database.json'
     # - 'https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/main/ThirdPartyCompatibleFormats/TrChat/SensitiveLexicon.json'
-
 Local:
   - NMSL
   - fuck
   - shit
-
 Ignored-Punctuations: ['!','.',',','#','$','%','&','*','(',')','|','?','/','@','"','\\',';','[',']','{','}','+','~','-','_','=','^','<','>',' ','　','！','。','，','￥','（','）','？','、','“','‘','；','【','】','——','……','《','》','\\', '`']
 
 Replacement: '*'
 
-#####################
-# 消息处理
-#####################
-startsWith: "say"
-entries-Empty: "群成员"
-chat-format: "🐧§cQQ群 §7| §f"
+
+
+######################
+#Deepseek API 相关
+######################
+deepseek-enable: true
+deepseek-api-key: "填入你的deepseek key密匙"
+ignored-prefix:
+  - "^\\."        # 忽略以 . 开头的消息
+  - "^/"          # 忽略命令消息
+  - "^登录"        # 忽略以“登录”开头的消息
+  - "^list"       # 忽略以 list 开头的消息
+  - "^say"        # 忽略以 say 开头的消息
+  - "^\\d{4}"     # 忽略以 4 位数字开头的消息（如 1234、2024）
+
+#AI人格设定
+personality: "你是一位温柔、体贴、爱说简单话的女朋友，总是安静地倾听，温柔地回应，回复不超过150字"
