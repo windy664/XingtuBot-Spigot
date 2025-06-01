@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'org.windy'
-version = '2.1.0-SNAPSHOT'
+version = '2.1.1-SNAPSHOT'
 
 repositories {
     mavenCentral()
@@ -31,6 +31,7 @@ dependencies {
     compileOnly("fr.xephi:authme:5.6.0")
 
     implementation 'com.huaban:jieba-analysis:1.0.2'
+    implementation 'org.apache.pdfbox:pdfbox:2.0.30'
 }
 
 def targetJavaVersion = 8
@@ -63,4 +64,5 @@ shadowJar {
     archiveClassifier.set("") // 不加 "-all"
     relocate 'org.java_websocket', 'org.lib.java_websocket'
     relocate 'com.huaban', 'com.lib.jieba'
+    relocate 'org.apache.pdfbox', 'org.lib.pdfbox'
 }

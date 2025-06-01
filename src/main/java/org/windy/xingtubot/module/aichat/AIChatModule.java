@@ -15,6 +15,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class AIChatModule implements Listener {
 
@@ -35,10 +37,14 @@ public class AIChatModule implements Listener {
     public void onGuildMessage(GuildMessageEvent event) {
         String msg = event.getMessage().trim();
         List<String> ignoredPrefixes = config.getStringList("ignored-prefix");
-
         for (String prefix : ignoredPrefixes) {
-            if (msg.matches(prefix)) return;
+            Pattern pattern = Pattern.compile(prefix);
+            Matcher matcher = pattern.matcher(msg);
+            if (matcher.find() && matcher.start() == 0) {
+                return; // 忽略这条消息
+            }
         }
+
 
         String guildId = event.getGuildId();
         String formId = event.getFormId();

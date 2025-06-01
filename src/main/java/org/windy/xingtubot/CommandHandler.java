@@ -30,6 +30,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             case "reload":
                 plugin.reloadConfig();
                 sender.sendMessage("§a配置已重新加载。");
+
                 return true;
 
             case "connect":

@@ -1,6 +1,8 @@
 package org.windy.xingtubot.module.aichat;
 
 import com.huaban.analysis.jieba.JiebaSegmenter;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.io.IOException;
@@ -11,18 +13,25 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class AIChatKnowledgeBase {
-    private final Map<String, String> docs = new HashMap<>();
+    private final Map<String, String> docs = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> index = new ConcurrentHashMap<>();
     private final JiebaSegmenter segmenter = new JiebaSegmenter();
     private final boolean debug;
+    private final Path folder = Paths.get("plugins/XingtuBot/knowledge");
 
     public AIChatKnowledgeBase(FileConfiguration config) {
         this.debug = config.getBoolean("debug", false);
         loadKnowledgeBase();
     }
 
+    public void reload() {
+        docs.clear();
+        index.clear();
+        loadKnowledgeBase();
+        log("知识库已热重载。");
+    }
+
     public void loadKnowledgeBase() {
-        Path folder = Paths.get("plugins/XingtuBot/knowledge");
         if (!Files.exists(folder)) {
             log("知识库文件夹不存在！");
             return;
@@ -31,21 +40,37 @@ public class AIChatKnowledgeBase {
         try {
             Files.walk(folder)
                     .filter(Files::isRegularFile)
-                    .forEach(path -> {
-                        try {
-                            String fileName = path.getFileName().toString().toLowerCase();
-                            if (!fileName.endsWith(".md") && !fileName.endsWith(".txt")) return;
-
-                            String content = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
-                            docs.put(fileName, content);
-                            indexFile(fileName, content);
-                            log("已索引文件：" + fileName);
-                        } catch (IOException e) {
-                            log("读取文件失败：" + path.getFileName());
-                        }
-                    });
+                    .forEach(this::loadFile);
         } catch (IOException e) {
             log("加载知识库失败：" + e.getMessage());
+        }
+    }
+
+    private void loadFile(Path path) {
+        try {
+            String fileName = path.getFileName().toString().toLowerCase();
+            String content;
+
+            if (fileName.endsWith(".pdf")) {
+                content = extractTextFromPDF(path);
+            } else if (fileName.endsWith(".md") || fileName.endsWith(".txt") || fileName.endsWith(".yml")) {
+                content = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+            } else {
+                return;
+            }
+
+            docs.put(fileName, content);
+            indexFile(fileName, content);
+            log("已索引文件：" + fileName);
+        } catch (IOException e) {
+            log("读取文件失败：" + path.getFileName());
+        }
+    }
+
+    private String extractTextFromPDF(Path path) throws IOException {
+        try (PDDocument document = PDDocument.load(path.toFile())) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            return stripper.getText(document);
         }
     }
 
