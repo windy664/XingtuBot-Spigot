@@ -26,7 +26,14 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         instance = this;
 
         saveDefaultConfig(); // 初始化 config.yml
-        getLogger().info("星途Bukkit插件启动...");
+        getLogger().info("");
+        getLogger().info(" _|      _|  _|_|_|  _|      _|    _|_|_|  _|_|_|_|_|  _|    _|  ");
+        getLogger().info("   _|  _|      _|    _|_|    _|  _|            _|      _|    _|  ");
+        getLogger().info("     _|        _|    _|  _|  _|  _|  _|_|      _|      _|    _|  ");
+        getLogger().info("   _|  _|      _|    _|    _|_|  _|    _|      _|      _|    _|  ");
+        getLogger().info(" _|      _|  _|_|_|  _|      _|    _|_|_|      _|        _|_|    ");
+        getLogger().info("");
+        getLogger().info("星途机器人插件已启动！");
 
         FileConfiguration config = getConfig();
         boolean debug = config.getBoolean("debug", false);
@@ -59,9 +66,11 @@ public final class XingtuBot extends JavaPlugin implements Listener {
             }
         }
         if (config.getBoolean("whitelist-enable", true)) {
+            getLogger().info("白名单模块已开启！");
             new WhitelistModule(this);
         }
         if (config.getBoolean("chatreply-enable", true)) {
+            getLogger().info("聊天回复模块已开启!");
             new ChatreplyModule(this);
         }
         if (config.getBoolean("aichat-enable", true)) {
