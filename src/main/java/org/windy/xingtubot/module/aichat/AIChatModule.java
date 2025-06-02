@@ -5,6 +5,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.windy.xingtubot.XingtuBot;
 import org.windy.xingtubot.event.GuildMessageEvent;
 
 import java.io.IOException;
@@ -38,12 +39,18 @@ public class AIChatModule implements Listener {
         String msg = event.getMessage().trim();
         List<String> ignoredPrefixes = config.getStringList("ignored-prefix");
         for (String prefix : ignoredPrefixes) {
-            Pattern pattern = Pattern.compile(prefix);
-            Matcher matcher = pattern.matcher(msg);
-            if (matcher.find() && matcher.start() == 0) {
-                return; // 忽略这条消息
+            // 修复点：添加 ^ 和 $ 确保完整匹配（按需调整）
+            String regex = "^" + Pattern.quote(prefix.substring(1)) + ".*";
+            Pattern pattern = Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
+            Matcher matcher = pattern.matcher(msg.trim());
+
+            if (matcher.find()) {
+                XingtuBot.getInstance().log("收到消息: '" + msg + "' | 规则: " + regex);
+                XingtuBot.getInstance().log("匹配到忽略规则: " + regex);
+                return; // 直接忽略
             }
         }
+
 
 
         String guildId = event.getGuildId();
@@ -75,6 +82,7 @@ public class AIChatModule implements Listener {
         // 异步调用AI接口，防止主线程卡死
         CompletableFuture.supplyAsync(() -> {
             try {
+                XingtuBot.getInstance().log("向AI请求：" + messages);
                 return callAI(messages);
             } catch (Exception e) {
                 logger.warning("AI 请求失败：" + e.getMessage());

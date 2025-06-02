@@ -1,21 +1,48 @@
 package org.windy.xingtubot.module.whitelist.api;
 
-import org.windy.xingtubot.XingtuBot;
-import org.windy.xingtubot.module.whitelist.WhitelistModule;
-import org.windy.xingtubot.module.whitelist.WhitelistModule.WhiteListEntry;
-import org.windy.xingtubot.module.whitelist.api.WhiteListAPI;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 
+import java.io.*;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class WhiteListAPI {
+    private static final File JSON_FILE = new File("whitelist.json");
+    private static final Gson GSON = new GsonBuilder()
+            .setPrettyPrinting()
+            .excludeFieldsWithoutExposeAnnotation()  // 如果使用注解方式
+            .create();
+    private static List<WhiteListEntry> cachedEntries = loadEntries();
+
+    private static List<WhiteListEntry> loadEntries() {
+        if (!JSON_FILE.exists()) return new ArrayList<>();
+        try (Reader reader = new FileReader(JSON_FILE)) {
+            Type listType = new TypeToken<List<WhiteListEntry>>() {}.getType();
+            return GSON.fromJson(reader, listType);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return new ArrayList<>();
+        }
+    }
+
+    private static void saveEntries() {
+        try (Writer writer = new FileWriter(JSON_FILE)) {
+            GSON.toJson(cachedEntries, writer);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
     /**
      * 获取所有白名单条目
      */
     public static List<WhiteListEntry> getAllEntries() {
-        return WhitelistModule.getInstance().getWhiteListEntries();
+        return cachedEntries;
     }
 
     /**
@@ -37,13 +64,17 @@ public class WhiteListAPI {
     }
 
     /**
-     * 根据formId获取所有相关条目
+     * 根据 formId 获取所有关联的玩家名
      */
-    public static List<WhiteListEntry> getEntriesByFormId(String formId) {
+    public static List<String> getPlayersByFormId(String formId) {
         return getAllEntries().stream()
-                .filter(entry -> entry.formId.equals(formId))
+                .filter(entry -> entry.formId != null && entry.formId.equals(formId))
+                .map(entry -> entry.player)
                 .collect(Collectors.toList());
     }
+
+
+
 
     /**
      * 判断某个玩家是否在白名单中
@@ -58,12 +89,10 @@ public class WhiteListAPI {
     public static boolean addEntry(String formId, String player, String code, String qq) {
         if (isWhitelisted(player)) return false;
 
-        List<WhiteListEntry> list = getAllEntries();
-        int nextIndex = list.size() + 1;
-
+        int nextIndex = cachedEntries.size() + 1;
         WhiteListEntry entry = new WhiteListEntry(nextIndex, formId, player, code, qq);
-        list.add(entry);
-        WhitelistModule.getInstance().saveWhiteList();
+        cachedEntries.add(entry);
+        saveEntries();
         return true;
     }
 
@@ -73,10 +102,28 @@ public class WhiteListAPI {
     public static boolean removeEntryByPlayer(String playerName) {
         Optional<WhiteListEntry> opt = getEntryByPlayer(playerName);
         if (opt.isPresent()) {
-            getAllEntries().remove(opt.get());
-            WhitelistModule.getInstance().saveWhiteList();
+            cachedEntries.remove(opt.get());
+            saveEntries();
             return true;
         }
         return false;
+    }
+    // 在WhiteListAPI类中添加
+    public static class WhiteListEntry {
+        public int index;
+        public String timestamp;
+        public String formId;
+        public String player;
+        public String code;
+        public String qq;
+
+        // 保持原有构造函数和方法
+        public WhiteListEntry(int index, String formId, String player, String code, String qq) {
+            this.index = index;
+            this.formId = formId;
+            this.player = player;
+            this.code = code;
+            this.qq = qq;
+        }
     }
 }

@@ -63,7 +63,7 @@ public class WhitelistModule implements Listener {
         File messagesDir = new File(authMeDataFolder, "messages");
 
 
-// 处理所有YML文件
+        // 处理所有YML文件
         File[] ymlFiles = messagesDir.listFiles((dir, name) -> name.endsWith(".yml"));
         if (ymlFiles == null || ymlFiles.length == 0) {
             plugin.getLogger().warning("⚠️ AuthMe消息目录中没有找到YML文件");

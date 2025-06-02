@@ -9,13 +9,15 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.windy.xingtubot.XingtuBot;
 import org.windy.xingtubot.event.GuildMessageEvent;
 import org.windy.xingtubot.module.chatreply.ChatreplyModule;
 import org.windy.xingtubot.module.chatreply.ReplyCommand;
-import org.windy.xingtubot.module.whitelist.WhitelistModule;
+//import org.windy.xingtubot.module.whitelist.WhitelistModule;
 import org.windy.xingtubot.module.whitelist.api.WhiteListAPI;
 
 import java.util.List;
+import java.util.Optional;
 
 public class GuildMessageListener implements Listener {
 
@@ -40,13 +42,14 @@ public class GuildMessageListener implements Listener {
             return;
         }
 
-        List<WhitelistModule.WhiteListEntry> entries = WhiteListAPI.getEntriesByFormId(formId);
+// 修改后的正确写法
+        List<String> players = WhiteListAPI.getPlayersByFormId(formId);
         String senderName;
-        if (entries.isEmpty()) {
+        if (players.isEmpty()) {
             senderName = ChatreplyModule.getInstance().plugin.getConfig().getString("entries-Empty", "群成员");
-         //   Bukkit.getLogger().warning("[ChatReply] 来自未绑定白名单用户的消息：FormId=" + formId + "，将使用默认昵称：" + senderName);
+            XingtuBot.getInstance().log("[ChatReply] 来自未绑定白名单用户的消息：FormId=" + formId + "，将使用默认昵称：" + senderName);
         } else {
-            senderName = entries.get(0).player;
+            senderName = players.get(0); // ✅ 因为players是List<String>
         }
 
         // 构建主消息部分

@@ -73,7 +73,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
             getLogger().info("聊天回复模块已开启!");
             new ChatreplyModule(this);
         }
-        if (config.getBoolean("aichat-enable", true)) {
+        if (config.getBoolean("deepseek-enable", true)) {
             // 从配置文件中获取 API 密钥
             String apiKey = getConfig().getString("deepseek-api-key");
 
@@ -110,5 +110,11 @@ public final class XingtuBot extends JavaPlugin implements Listener {
     }
     public static XingtuBot getInstance() {
         return instance;
+    }
+
+    public void log(String message) {
+        if (getConfig().getBoolean("debug", false)) {
+            getLogger().info("[调试模式] " + message);
+        }
     }
 }
