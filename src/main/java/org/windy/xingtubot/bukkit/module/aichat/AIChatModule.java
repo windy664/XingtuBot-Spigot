@@ -1,12 +1,12 @@
-package org.windy.xingtubot.module.aichat;
+package org.windy.xingtubot.bukkit.module.aichat;
 
 import com.google.gson.*;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.windy.xingtubot.XingtuBot;
-import org.windy.xingtubot.event.GuildMessageEvent;
+import org.windy.xingtubot.bukkit.XingtuBot;
+import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -91,13 +91,13 @@ public class AIChatModule implements Listener {
         }).thenAccept(reply -> {
             if (reply != null) {
                 // Bukkit主线程回复消息
-                Bukkit.getScheduler().runTask(org.windy.xingtubot.XingtuBot.getInstance(), () -> {
+                Bukkit.getScheduler().runTask(XingtuBot.getInstance(), () -> {
                     event.reply(reply);
                     messages.add(createMessage("assistant", reply));
                     memory.setMessages(key, messages);
                 });
             } else {
-                Bukkit.getScheduler().runTask(org.windy.xingtubot.XingtuBot.getInstance(), () -> {
+                Bukkit.getScheduler().runTask(XingtuBot.getInstance(), () -> {
                     event.reply("AI 无法处理该请求。");
                 });
             }

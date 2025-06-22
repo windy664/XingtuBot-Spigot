@@ -1,14 +1,13 @@
-package org.windy.xingtubot;
+package org.windy.xingtubot.bukkit;
 
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.windy.xingtubot.event.GuildMessageEvent;
-import org.windy.xingtubot.module.aichat.AIChatModule;
-import org.windy.xingtubot.module.chatreply.ChatreplyModule;
-import org.windy.xingtubot.module.chatreply.listener.GuildMessageListener;
-import org.windy.xingtubot.module.whitelist.WhitelistModule;
+import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
+import org.windy.xingtubot.bukkit.module.aichat.AIChatModule;
+import org.windy.xingtubot.bukkit.module.chatreply.ChatreplyModule;
+import org.windy.xingtubot.bukkit.module.whitelist.WhitelistModule;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

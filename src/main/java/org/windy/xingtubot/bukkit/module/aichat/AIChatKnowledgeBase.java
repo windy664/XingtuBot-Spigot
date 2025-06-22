@@ -1,4 +1,4 @@
-package org.windy.xingtubot.module.aichat;
+package org.windy.xingtubot.bukkit.module.aichat;
 
 import com.huaban.analysis.jieba.JiebaSegmenter;
 import org.apache.pdfbox.pdmodel.PDDocument;
