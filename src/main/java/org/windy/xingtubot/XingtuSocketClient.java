@@ -52,7 +52,7 @@ public class XingtuSocketClient extends WebSocketClient {
                     log("发送 Ping 失败：" + e.getMessage());
                 }
             }
-        }, 0L, 20L * 30); // 每 30 秒
+        }, 0L, 20L * 60); // 每 30 秒
 
         // 加载白名单 JSON 并发送给框架
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
