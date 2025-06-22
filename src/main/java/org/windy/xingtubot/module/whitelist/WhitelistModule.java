@@ -10,16 +10,13 @@ import org.bukkit.event.*;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.Plugin;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.windy.xingtubot.XingtuBot;
 import org.windy.xingtubot.event.GuildMessageEvent;
 
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.lang.reflect.Type;
-import java.text.MessageFormat;
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Pattern;
 
 public class WhitelistModule implements Listener {
@@ -29,7 +26,7 @@ public class WhitelistModule implements Listener {
     public final List<WhiteListEntry> whiteListEntries = new ArrayList<>();
 
     private final Map<String, String> pendingQQ = new HashMap<>();   // playerName -> QQ
-    private final Map<String, String> pendingCode = new HashMap<>(); // playerName -> code
+   // private final Map<String, String> pendingCode = new HashMap<>(); // playerName -> code
 
     private static final Pattern QQ_PATTERN = Pattern.compile("^[1-9][0-9]{4,14}$");
     private static final Pattern CODE_PATTERN = Pattern.compile("^\\d{4}$");
@@ -123,10 +120,10 @@ public class WhitelistModule implements Listener {
         return whiteListEntries.stream().anyMatch(entry -> entry.player.equalsIgnoreCase(playerName));
     }
 
-    private String generateCode() {
+    /*private String generateCode() {
         return String.format("%04d", ThreadLocalRandom.current().nextInt(0, 10000));
     }
-
+*/
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
@@ -142,21 +139,16 @@ public class WhitelistModule implements Listener {
         String name = player.getName();
         String msg = event.getMessage();
 
-        // 若处于待输入QQ状态
         if (pendingQQ.containsKey(name) && pendingQQ.get(name) == null) {
             event.setCancelled(true);
             if (!QQ_PATTERN.matcher(msg).matches()) {
                 player.sendMessage("§cQQ号格式不正确，请重新输入（5~15位数字）");
                 return;
             }
-            // 正确QQ
+
             pendingQQ.put(name, msg);
-            String code = generateCode();
-            pendingCode.put(name, code);
-            player.sendMessage("§a您的验证码为: §e" + code + "，请发送至QQ群完成验证。");
-            String titlePattern = plugin.getConfig().getString("title-code");
-            String title = MessageFormat.format(titlePattern, code);
-            player.sendTitle(title, plugin.getConfig().getString("subtitle-code"), 10, 200, 20);
+            player.sendTitle(plugin.getConfig().getString("title-code"), plugin.getConfig().getString("subtitle-code"), 10, 200, 20);
+
             // 异步下载 QQ 头像
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 try {
@@ -169,14 +161,15 @@ public class WhitelistModule implements Listener {
             });
         }
     }
+//'yuushya:block_blueprint'
 
     @EventHandler
     public void onGuildMessage(GuildMessageEvent event) {
         String message = event.getMessage();
         String formId = event.getFormId();
 
-        if (plugin.getConfig().getString("login-prompt","登录").equals(message)) { // 使用 equals 比较字符串内容
-            // 查找白名单中 formId 对应的玩家名
+        // ✅ 登录逻辑
+        if (plugin.getConfig().getString("login-prompt", "登录").equals(message)) {
             String playerName = null;
             for (WhiteListEntry entry : whiteListEntries) {
                 if (entry.formId.equals(formId)) {
@@ -192,68 +185,75 @@ public class WhitelistModule implements Listener {
 
             Player player = Bukkit.getPlayerExact(playerName);
             if (player != null && player.isOnline()) {
-                // 调用 AuthMe 强制登录
                 AuthMeApi.getInstance().forceLogin(player);
                 event.reply(plugin.getConfig().getString("login-success"));
             } else {
                 event.reply("⚠️ 玩家 " + playerName + " 当前不在线，无法自动登录。");
             }
-
             return;
         }
 
+        // ✅ 异步执行验证逻辑
+        if (message.contains("验证")) {
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                String playerName = null;
+                String qq = null;
 
-        if (!CODE_PATTERN.matcher(message).matches()) return;
+                synchronized (pendingQQ) {
+                    for (Map.Entry<String, String> entry : pendingQQ.entrySet()) {
+                        if (entry.getValue() != null) {
+                            playerName = entry.getKey();
+                            qq = entry.getValue();
+                            break;
+                        }
+                    }
+                }
 
-        for (Map.Entry<String, String> entry : pendingCode.entrySet()) {
-            String player = entry.getKey();
-            String code = entry.getValue();
+                if (playerName == null || qq == null) {
+                    Bukkit.getScheduler().runTask(plugin, () -> event.reply("⚠️ 当前没有待验证的玩家！"));
+                    return;
+                }
 
-            if (code.equals(message)) {
-
-                String qq = pendingQQ.get(player);
-                String formIdUrl = "https://q.qlogo.cn/qqapp/102093306/" + formId + "/640";
-                File qqImg = new File(plugin.getDataFolder(), "cache/qq_" + player + ".jpg");
+                // 下载头像并比对（耗时操作）
+                File qqImg = new File(plugin.getDataFolder(), "cache/qq_" + playerName + ".jpg");
                 File formImg;
-
                 try {
-                    formImg = downloadImage(formIdUrl, "form_" + player + ".jpg");
+                    String formIdUrl = "https://q.qlogo.cn/qqapp/102093306/" + formId + "/640";
+                    formImg = downloadImage(formIdUrl, "form_" + playerName + ".jpg");
                 } catch (IOException e) {
                     plugin.getLogger().warning("下载FormId头像失败: " + e.getMessage());
+                    Bukkit.getScheduler().runTask(plugin, () -> event.reply("❌ 下载头像失败，请稍后重试！"));
                     return;
                 }
 
                 if (!areImagesSimilar(qqImg, formImg)) {
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        event.reply("⚠️ 验证失败：QQ头像与FormId头像不一致！");
-                    });
+                    Bukkit.getScheduler().runTask(plugin, () -> event.reply("⚠️ 验证失败：QQ头像与FormId头像不一致！"));
                     return;
                 }
 
-
-                int nextIndex = whiteListEntries.size() + 1;
-                whiteListEntries.add(new WhiteListEntry(nextIndex, formId, player, code, qq));
-                saveWhiteList();
-
-                pendingQQ.remove(player);
-                pendingCode.remove(player);
-
+                // 更新白名单（主线程）
+                String finalPlayerName = playerName;
+                String finalQQ = qq;
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    event.reply("✅ 验证成功！恭喜玩家 " + player + " (QQ: " + qq + ") 申请通过！");
-                    Player p = Bukkit.getPlayerExact(player);
+                    int nextIndex = whiteListEntries.size() + 1;
+                    whiteListEntries.add(new WhiteListEntry(nextIndex, formId, finalPlayerName, null, finalQQ));
+                    saveWhiteList();
+                    pendingQQ.remove(finalPlayerName);
+
+                    event.reply("验证成功！玩家 " + finalPlayerName + " (QQ: " + finalQQ + ") 已添加至白名单！");
+
+                    Player p = Bukkit.getPlayerExact(finalPlayerName);
                     if (p != null && p.isOnline()) {
                         p.sendMessage("§a验证成功！你已可以正常游玩了！");
-                        AuthMeApi.getInstance().forceRegister(p, plugin.getConfig().getString("default-password","yC[c=a8G"), true); // true = 自动登录
+                        AuthMeApi.getInstance().forceRegister(p,
+                                plugin.getConfig().getString("default-password", "yC[c=a8G"),
+                                true); // 自动注册并登录
                     }
                 });
-                return;
-            }
+            });
         }
-
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            event.reply("❌ 验证失败：验证码无效或已使用。");
-        });
     }
+
 
     public static class WhiteListEntry {
         int index; // 序号
@@ -309,13 +309,6 @@ public class WhitelistModule implements Listener {
             plugin.getLogger().warning("图片对比失败: " + e.getMessage());
             return false;
         }
-    }
-    public static WhitelistModule getInstance() {
-        return instance;
-    }
-
-    public List<WhiteListEntry> getWhiteListEntries() {
-        return whiteListEntries;
     }
 
 }
