@@ -161,7 +161,6 @@ public class WhitelistModule implements Listener {
             });
         }
     }
-//'yuushya:block_blueprint'
 
     @EventHandler
     public void onGuildMessage(GuildMessageEvent event) {

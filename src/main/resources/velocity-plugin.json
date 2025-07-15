@@ -1,0 +1,10 @@
+{
+  "id": "xingtubotvelocity",
+  "name": "XingtuBotVelocity",
+  "version": "1.0",
+  "authors": ["风吟"],
+  "main": "org.windy.xingtubot.velocity.XingtuBotVelocity",
+  "description": "Velocity plugin to handle cross-server teleport requests from Bukkit plugins via plugin messaging.",
+  "url": "https://your.plugin.website",
+  "api-version": "1.0"
+}
