@@ -53,7 +53,9 @@ public class ReplyCommand implements CommandExecutor {
         }
 
         originalEvent.reply("<" + ((Player) sender).getDisplayName() + "> " + replyContent);
-        ((Player) sender).chat("§2@QQ群 §f" + replyContent);
+
+        ((Player) sender).chat("&2@QQ群 &f" + replyContent);
+
         return true;
     }
 }

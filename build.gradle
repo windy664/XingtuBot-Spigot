@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'org.windy'
-version = '2.2.0'
+version = '2.2.1'
 
 repositories {
     mavenCentral()
@@ -19,6 +19,7 @@ repositories {
     maven { url = 'https://oss.sonatype.org/content/repositories/snapshots/' }
     maven { url = "https://repo.codemc.io/repository/maven-public/" }
     maven { url = "https://mvnrepository.com/artifact/com.huaban/jieba-analysis" }
+    maven { url = "https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp" }
     maven {
         name = 'papermc'
         url = 'https://repo.papermc.io/repository/maven-public/'
@@ -38,6 +39,8 @@ dependencies {
     implementation 'org.apache.pdfbox:pdfbox:2.0.30'
 
     implementation 'com.velocitypowered:velocity-api:3.1.1:all@jar'
+
+    implementation 'com.squareup.okhttp3:okhttp:5.1.0'
 
 }
 
@@ -70,6 +73,4 @@ processResources {
 shadowJar {
     archiveClassifier.set("") // 不加 "-all"
     relocate 'org.java_websocket', 'org.lib.java_websocket'
-    relocate 'com.huaban', 'com.lib.jieba'
-    relocate 'org.apache.pdfbox', 'org.lib.pdfbox'
 }

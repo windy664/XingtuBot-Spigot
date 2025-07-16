@@ -193,7 +193,7 @@ public class WhitelistModule implements Listener {
         }
 
         // ✅ 异步执行验证逻辑
-        if (message.contains("验证")) {
+        if (message.contains("白名单")) {
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 String playerName = null;
                 String qq = null;

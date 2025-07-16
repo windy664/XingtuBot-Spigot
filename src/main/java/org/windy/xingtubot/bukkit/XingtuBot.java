@@ -55,7 +55,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
 
         //版本验证，是否开启版本补全
         String nmsPackageName = Bukkit.getServer().getClass().getPackage().getName();
-        String versionSegment = nmsPackageName.split("\\.")[3]; // 获取版本部分，如v1_13_R1
+        String versionSegment = nmsPackageName.split("\\.")[2];
         Pattern pattern = Pattern.compile("v(\\d+)_R");
         Matcher matcher = pattern.matcher(versionSegment);
         if (matcher.find()) {
