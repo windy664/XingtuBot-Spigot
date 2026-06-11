@@ -1,5 +1,6 @@
 package org.windy.xingtubot.bukkit.module.chatreply;
 
+import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -53,6 +54,7 @@ public class ReplyCommand implements CommandExecutor {
         }
 
         originalEvent.reply("<" + ((Player) sender).getDisplayName() + "> " + replyContent);
+
 
         ((Player) sender).chat("&2@QQ群 &f" + replyContent);
 

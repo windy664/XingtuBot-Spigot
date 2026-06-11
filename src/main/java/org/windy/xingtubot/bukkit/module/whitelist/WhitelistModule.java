@@ -142,7 +142,7 @@ public class WhitelistModule implements Listener {
         if (pendingQQ.containsKey(name) && pendingQQ.get(name) == null) {
             event.setCancelled(true);
             if (!QQ_PATTERN.matcher(msg).matches()) {
-                player.sendMessage("§cQQ号格式不正确，请重新输入（5~15位数字）");
+                player.sendMessage("§cQQ号格式不正确，请输入您的QQ号（5~15位数字）");
                 return;
             }
 
