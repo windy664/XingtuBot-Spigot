@@ -1,1 +1,5 @@
 rootProject.name = 'XingtuBot'
+
+include 'common'
+include 'spigot'
+include 'velocity'
