@@ -1,0 +1,29 @@
+plugins {
+    id 'com.github.johnrengelman.shadow'
+}
+
+dependencies {
+    implementation project(':common')
+
+    compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
+    compileOnly 'fr.xephi:authme:5.6.0'
+
+    // spigot 模块内仍直接使用 Gson（白名单/AI 消息构建）
+    implementation 'com.google.code.gson:gson:2.10.1'
+}
+
+processResources {
+    def props = [version: version]
+    inputs.properties props
+    filteringCharset 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}
+
+shadowJar {
+    archiveClassifier.set('') // 不加 "-all"
+    relocate 'org.java_websocket', 'org.lib.java_websocket'
+}
+
+build.dependsOn shadowJar

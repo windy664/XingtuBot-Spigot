@@ -1,0 +1,14 @@
+name: XingtuBot
+version: '${version}'
+main: org.windy.xingtubot.bukkit.XingtuBot
+authors: [ 风吟 ]
+softdepend:
+  - AuthMe
+  - PlaceholderAPI
+commands:
+  xtb:
+    description: 星途框架Bukkit插件
+    usage: /xtb <reload|connect|reply>
+  messagereply:
+    description: 回复某位群成员
+    usage: /messagereply <formId> <内容>
