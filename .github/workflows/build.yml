@@ -37,9 +37,16 @@ jobs:
       - name: Build with Gradle (shadowJar)
         run: ./gradlew shadowJar
 
-      - name: Upload jar to GitHub Actions Artifacts
+      - name: Upload Spigot jar
         uses: actions/upload-artifact@v4
         with:
           name: XingtuBot-Spigot
-          path: build/libs/*.jar
+          path: spigot/build/libs/*.jar
+          retention-days: 30
+
+      - name: Upload Velocity jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: XingtuBot-Velocity
+          path: velocity/build/libs/*.jar
           retention-days: 30
