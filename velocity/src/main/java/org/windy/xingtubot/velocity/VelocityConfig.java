@@ -26,6 +26,7 @@ public class VelocityConfig implements BotConfig {
             Files.createDirectories(dataDir);
             Path file = dataDir.resolve("config.yml");
             if (!Files.exists(file)) {
+                // 与 Spigot 端共用同一份 config.yml（合并 jar 内只有这一份）
                 try (InputStream in = getClass().getClassLoader().getResourceAsStream("config.yml")) {
                     if (in != null) Files.copy(in, file);
                 }

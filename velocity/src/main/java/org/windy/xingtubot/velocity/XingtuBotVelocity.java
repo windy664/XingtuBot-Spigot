@@ -11,7 +11,7 @@ import org.slf4j.Logger;
 import org.windy.xingtubot.common.ai.AiService;
 import org.windy.xingtubot.common.bot.BotCore;
 import org.windy.xingtubot.common.service.McmodApiService;
-import org.windy.xingtubot.common.ws.StandardWebSocketClient;
+import org.windy.xingtubot.common.ws.WebSocketClientBridge;
 
 import java.nio.file.Path;
 import java.util.concurrent.Executors;
@@ -30,7 +30,8 @@ public class XingtuBotVelocity {
     private final Path dataDir;
 
     private BotCore botCore;
-    private StandardWebSocketClient wsClient;
+    // 仅依赖接口，避免把 java-websocket 暴露到 velocity 编译期
+    private WebSocketClientBridge wsClient;
     private VelocityAdapter adapter;
     private final ScheduledExecutorService monitorScheduler =
             Executors.newSingleThreadScheduledExecutor();
@@ -59,7 +60,7 @@ public class XingtuBotVelocity {
         BotCommandHandler commandHandler = new BotCommandHandler(proxy, aiService, mcmod);
 
         try {
-            wsClient = new StandardWebSocketClient(wsUrl);
+            wsClient = WebSocketClientBridge.create(wsUrl);
             wsClient.enableHeartbeat(heartbeatMillis);
 
             botCore = new BotCore(adapter, wsClient, serverName);

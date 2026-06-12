@@ -3,6 +3,5 @@ dependencies {
     implementation 'org.java-websocket:Java-WebSocket:1.5.3'
     // JSON
     implementation 'com.google.code.gson:gson:2.10.1'
-    // HTTP（AI 调用）
-    implementation 'com.squareup.okhttp3:okhttp:5.1.0'
+    // AI 调用使用 JDK 自带 HttpURLConnection，无需额外 HTTP 库
 }

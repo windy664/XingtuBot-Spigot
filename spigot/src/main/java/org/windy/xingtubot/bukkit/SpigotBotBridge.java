@@ -6,7 +6,7 @@ import org.bukkit.Bukkit;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
 import org.windy.xingtubot.common.bot.BotCore;
 import org.windy.xingtubot.common.event.BotMessageEvent;
-import org.windy.xingtubot.common.ws.StandardWebSocketClient;
+import org.windy.xingtubot.common.ws.WebSocketClientBridge;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -20,12 +20,13 @@ import java.nio.file.Files;
 public class SpigotBotBridge {
     private final XingtuBot plugin;
     private final BotCore botCore;
-    private final StandardWebSocketClient wsClient;
+    // 仅依赖接口，避免把 java-websocket 暴露到 spigot 编译期
+    private final WebSocketClientBridge wsClient;
 
     public SpigotBotBridge(XingtuBot plugin, String wsUrl, String serverName,
                            boolean heartbeat, long heartbeatMillis) throws Exception {
         this.plugin = plugin;
-        this.wsClient = new StandardWebSocketClient(wsUrl);
+        this.wsClient = WebSocketClientBridge.create(wsUrl);
         if (heartbeat) {
             wsClient.enableHeartbeat(heartbeatMillis);
         }

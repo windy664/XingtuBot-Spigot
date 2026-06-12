@@ -1,20 +1,9 @@
-plugins {
-    id 'com.github.johnrengelman.shadow'
-}
-
 dependencies {
     implementation project(':common')
 
     compileOnly 'com.velocitypowered:velocity-api:3.1.1'
     annotationProcessor 'com.velocitypowered:velocity-api:3.1.1'
 
-    // 读取 velocity 端配置（Velocity 运行时已自带 snakeyaml）
+    // 读取 velocity 端配置；打包时由 bundle 重定位，避免与平台自带版本冲突
     implementation 'org.yaml:snakeyaml:1.33'
 }
-
-shadowJar {
-    archiveClassifier.set('')
-    relocate 'org.java_websocket', 'org.lib.java_websocket'
-}
-
-build.dependsOn shadowJar
