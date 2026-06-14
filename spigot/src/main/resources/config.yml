@@ -20,6 +20,31 @@ HeartbeatSeconds: 90
 server-name: server
 
 ##########################################
+# QQ 官方 OpenAPI（主动调用 / 发消息，第二条通信路）
+# 收事件仍走上面的 WebSocket / 后续的 Webhook；
+# 发消息（被动回复）走这条出站 HTTPS，国内可直连、无需备案。
+##########################################
+#是否启用 OpenAPI 发送路
+openapi-enable: false
+#机器人 AppID（开放平台获取）
+openapi-app-id: ""
+#机器人 AppSecret / ClientSecret
+openapi-client-secret: ""
+#是否使用沙箱环境（true=sandbox，false=正式）
+openapi-sandbox: false
+
+##########################################
+# Webhook 收事件（长轮询，搭配 SCF 中转）
+# 新机器人 WebSocket 网关已停用，收事件走这条：
+#   插件长轮询中转的 /poll 出站拉取，回复走上面的 OpenAPI。
+# 启用后将不再使用顶部的 WebSocket 配置。
+##########################################
+#是否启用 Webhook 长轮询模式
+webhook-enable: false
+#SCF 中转的基础地址（不带 /poll），如 https://service-xxx.gz.apigw.tencentcs.com
+webhook-relay-url: ""
+
+##########################################
 #白名单配置
 ##########################################
 
