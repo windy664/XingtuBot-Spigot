@@ -139,8 +139,20 @@ public class McmodApiService {
             Entry target = session.results.get(index);
             sessions.remove(formId);
             event.reply("正在查询「" + target.title + "」详情，请稍候...");
-            event.reply(getDetail(target));
+            if (markdownEnabled) {
+                // 卡片化：Markdown 渲染（链接可点、字段分行）；不支持的通道自动降级为文本
+                event.replyMarkdown(getDetailMarkdown(target), null);
+            } else {
+                event.reply(getDetail(target));
+            }
         }
+    }
+
+    /** 是否用 Markdown 卡片输出详情（需机器人有原生 markdown 权限）。 */
+    private volatile boolean markdownEnabled = false;
+
+    public void setMarkdownEnabled(boolean enabled) {
+        this.markdownEnabled = enabled;
     }
 
     // ==================== 搜索与详情 ====================
@@ -367,6 +379,55 @@ public class McmodApiService {
                 "标签: " + e.tags + "\n" +
                 "链接: " + e.address + "\n" +
                 "简介: " + (e.description.length() > 1000 ? e.description.substring(0, 1000) + "…" : e.description);
+    }
+
+    // ==================== Markdown 卡片化 ====================
+
+    /** 详情的 Markdown 版本（链接可点、字段分行）。失败回退到简洁文本。 */
+    private String getDetailMarkdown(Entry e) {
+        try {
+            if (e.address != null && !e.address.isEmpty()) {
+                String path = e.address.replace("https://www.mcmod.cn/", "").replace(".html", "");
+                String[] parts = path.split("/");
+                if (parts.length >= 2 && Arrays.asList("class", "modpack").contains(parts[0])) {
+                    String json = fetchJson(DETAIL_URL + parts[0] + "/" + parts[1]);
+                    JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+                    String subtitle = opt(root, "subtitle");
+                    String author = parseAuthors(root.getAsJsonArray("authors"));
+                    String mcVersion = parseVersions(root.getAsJsonObject("supported_versions"))
+                            .replace("\n", "；");
+                    String env = opt(root, "operating_environment");
+                    String tags = parseTags(root.getAsJsonArray("tag_links"));
+                    String lastEdit = opt(root, "last_edit_time");
+                    String desc = cleanText(opt(root, "description"));
+                    if (desc.isEmpty()) desc = e.description;
+                    if (desc.length() > 400) desc = desc.substring(0, 400) + "…";
+                    return mdCard(subtitle.isEmpty() ? e.title : subtitle,
+                            author, tags, mcVersion, env, lastEdit, desc, e.address);
+                }
+            }
+        } catch (Exception ex) {
+            warn("[MCMOD] Markdown 详情失败: " + ex.getMessage());
+        }
+        // 回退：概览卡片
+        String desc = e.description.length() > 400 ? e.description.substring(0, 400) + "…" : e.description;
+        return mdCard(e.cname.isEmpty() ? e.title : e.cname + "（" + e.title + "）",
+                e.authors, e.tags, "—", "—", "—", desc, e.address);
+    }
+
+    private String mdCard(String title, String author, String tags, String version,
+                          String env, String lastEdit, String desc, String url) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("# ").append(title).append("\n");
+        if (author != null && !author.isEmpty()) sb.append("**作者** ").append(author).append("\n");
+        if (tags != null && !tags.isEmpty()) sb.append("**标签** ").append(tags).append("\n");
+        if (version != null && !version.isEmpty()) sb.append("**支持版本** ").append(version).append("\n");
+        if (env != null && !env.isEmpty() && !env.equals("—")) sb.append("**环境** ").append(env).append("\n");
+        if (lastEdit != null && !lastEdit.isEmpty() && !lastEdit.equals("—"))
+            sb.append("**更新** ").append(lastEdit).append("\n");
+        sb.append("\n> ").append(desc).append("\n");
+        if (url != null && !url.isEmpty()) sb.append("\n[🔗 在 MC百科 查看](").append(url).append(")");
+        return sb.toString();
     }
 
     private void cleanExpiredSessions() {

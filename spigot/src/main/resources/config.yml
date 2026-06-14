@@ -7,7 +7,25 @@
 # 是否启用调试模式，输出原始 JSON 消息
 debug: false
 
-# WebSocket 地址
+# mcmod 查询详情用 Markdown 卡片输出（需机器人有原生 markdown 权限，否则 false 用纯文本）
+mcmod-markdown: false
+
+##########################################
+# 机器人超级管理员（按 openid，webhook 自带不可伪造）
+# openid 可在 debug 日志的「收到事件」里 author.member_openid 看到
+##########################################
+admin-openids:
+  - "B2A902B3F33ABE93A73402BB7806E861"
+
+####################################
+# 通信模式总开关（三选一，互斥）
+#   websocket = 老星途框架 WS（收+回都走下面的 WebSocket 地址）
+#   webhook   = SCF 长轮询收事件 + OpenAPI 回复（新机器人用这个）
+#   off       = 不启用机器人通信，纯净启动
+####################################
+bot-mode: websocket
+
+# WebSocket 地址（仅 bot-mode: websocket 时使用）
 WebSocket: "ws://127.0.0.1:8080"
 
 # 是否自动连接
@@ -20,13 +38,16 @@ HeartbeatSeconds: 90
 server-name: server
 
 ##########################################
-# QQ 官方 OpenAPI（主动调用 / 发消息，第二条通信路）
-# 收事件仍走上面的 WebSocket / 后续的 Webhook；
-# 发消息（被动回复）走这条出站 HTTPS，国内可直连、无需备案。
+# Webhook 模式专用配置（仅 bot-mode: webhook 时使用）
+#   收事件：插件长轮询 SCF 中转的 /poll 出站拉取
+#   发回复：走下面的 OpenAPI 出站，国内可直连、无需备案
 ##########################################
-#是否启用 OpenAPI 发送路
-openapi-enable: false
-#机器人 AppID（开放平台获取）
+#SCF 中转的基础地址（只到域名，不带 /poll 或 /qq）
+webhook-relay-url: ""
+#短轮询间隔（秒）：插件每隔多久向 SCF 取一次消息。
+#越大越省 SCF 费用，代价是消息最多延迟这么多秒。建议 3~5。
+poll-interval-seconds: 3
+#机器人 AppID（开放平台获取，回复发消息用）
 openapi-app-id: ""
 #机器人 AppSecret / ClientSecret
 openapi-client-secret: ""
@@ -34,15 +55,26 @@ openapi-client-secret: ""
 openapi-sandbox: false
 
 ##########################################
-# Webhook 收事件（长轮询，搭配 SCF 中转）
-# 新机器人 WebSocket 网关已停用，收事件走这条：
-#   插件长轮询中转的 /poll 出站拉取，回复走上面的 OpenAPI。
-# 启用后将不再使用顶部的 WebSocket 配置。
+# 回复形态（仅 webhook 模式）：所有文本回复按此发送
+#   text       = 只发文字（默认）
+#   voice      = 只发语音（文本经 TTS 转 silk）
+#   text+voice = 先发文字，再发该文字的语音
+# 语音由 SCF 中转完成（默认 Edge TTS，免费零配置，无需任何密钥）
 ##########################################
-#是否启用 Webhook 长轮询模式
-webhook-enable: false
-#SCF 中转的基础地址（不带 /poll），如 https://service-xxx.gz.apigw.tencentcs.com
-webhook-relay-url: ""
+reply-mode: text：群里发「测试」或「/demo」触发
+# QQ 被动回复每条消息最多 5 次，所以用 demo-types 选本次发哪些
+# 可选: text,image,voice,video,markdown（逗号分隔）
+##########################################
+#本次 demo 发送的类型
+demo-types: "text,image,markdown"
+#图片地址（公网可达；留空则用 SCF 自带图床 /demo.png）
+demo-image-url: ""
+#语音地址（silk 格式、公网可达；为空跳过）
+demo-voice-url: ""
+#视频地址（mp4、公网可达；为空跳过）
+demo-video-url: ""
+#Markdown 的键盘按钮模板 id（开放平台报备，为空则不带按钮）
+demo-markdown-keyboard-id: ""
 
 ##########################################
 #白名单配置
@@ -50,6 +82,23 @@ webhook-relay-url: ""
 
 #是否启用白名单
 whitelist-enable: true
+
+#白名单角色：auto(默认,按bot-mode自动) / local(强制本地全干) / slave(强制手脚,由Velocity主导)
+whitelist-role: auto
+
+##########################################
+# 绑定数据存储
+#   json   = 单文件 binding.json（默认，零配置，单服够用）
+#   sqlite = 单文件 binding.db（零配置；多子服时仅大脑直连，子服走大脑代理）
+#   mysql  = 连接 MySQL（多子服共享一份数据，各端直连，推荐多服用）
+##########################################
+storage-type: json
+#--- 仅 storage-type: mysql 时需要 ---
+mysql-host: "127.0.0.1"
+mysql-port: 3306
+mysql-database: "xingtubot"
+mysql-user: "root"
+mysql-password: ""
 
 force-bind: true
 

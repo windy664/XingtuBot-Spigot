@@ -3,13 +3,24 @@ package org.windy.xingtubot.velocity;
 import com.google.inject.Inject;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.command.SimpleCommand;
+import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.kyori.adventure.text.Component;
 import org.slf4j.Logger;
+import com.velocitypowered.api.proxy.messages.ChannelIdentifier;
+import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import org.windy.xingtubot.common.ai.AiService;
+import org.windy.xingtubot.common.binding.BindingRepository;
+import org.windy.xingtubot.common.binding.BindingService;
+import org.windy.xingtubot.common.binding.BindingStorageFactory;
 import org.windy.xingtubot.common.bot.BotCore;
+import org.windy.xingtubot.common.bot.BotLauncher;
+import org.windy.xingtubot.common.bridge.CrossServerProtocol;
+import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.poll.QqWebhookBot;
 import org.windy.xingtubot.common.service.McmodApiService;
 import org.windy.xingtubot.common.ws.WebSocketClientBridge;
 
@@ -17,6 +28,7 @@ import java.nio.file.Path;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 @Plugin(
         id = "xingtubotvelocity",
@@ -32,7 +44,9 @@ public class XingtuBotVelocity {
     private BotCore botCore;
     // 仅依赖接口，避免把 java-websocket 暴露到 velocity 编译期
     private WebSocketClientBridge wsClient;
+    private QqWebhookBot webhookBot;
     private VelocityAdapter adapter;
+    private BotCommandHandler commandHandler;
     private final ScheduledExecutorService monitorScheduler =
             Executors.newSingleThreadScheduledExecutor();
 
@@ -41,6 +55,11 @@ public class XingtuBotVelocity {
         this.proxy = proxy;
         this.logger = logger;
         this.dataDir = dataDir;
+        // 不在构造函数里注册事件/通道：此时插件容器尚未就绪，必须等 ProxyInitializeEvent。
+    }
+
+    @Subscribe
+    public void onProxyInit(ProxyInitializeEvent event) {
         init();
     }
 
@@ -48,32 +67,78 @@ public class XingtuBotVelocity {
         VelocityConfig config = new VelocityConfig(dataDir);
         String apiKey = config.getString("deepseek-api-key", "");
         String baseUrl = config.getString("deepseek-base-url", "https://api.deepseek.com");
-        String wsUrl = config.getString("WebSocket", "ws://127.0.0.1:8080");
-        String serverName = config.getString("server-name", "velocity");
-        long heartbeatMillis = config.getInt("HeartbeatSeconds", 30) * 1000L;
 
         VelocityBotLogger botLogger = new VelocityBotLogger(logger);
         AiService aiService = new AiService(apiKey, baseUrl);
         McmodApiService mcmod = new McmodApiService(botLogger);
+        // mcmod 详情卡片化（Markdown）开关，需机器人有原生 markdown 权限
+        mcmod.setMarkdownEnabled(config.getBoolean("mcmod-markdown", false));
 
         adapter = new VelocityAdapter(proxy);
-        BotCommandHandler commandHandler = new BotCommandHandler(proxy, aiService, mcmod);
 
+        // 白名单「大脑」：Velocity 收群消息 + 头像比对 + pending，AuthMe 执行下发给子服。
+        // 仅当 Velocity 自己会收群消息（bot-mode 非 off）时才当大脑，否则建了也收不到消息。
+        BindingService bindingService = null;
+        boolean velocityIsBrain = config.getBoolean("whitelist-enable", true)
+                && BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
+        if (velocityIsBrain) {
+            String appId = config.getString("openapi-app-id", "");
+            if (appId.isEmpty()) {
+                logger.warn("[XingtuBot] 未配置 openapi-app-id，白名单头像比对将无法工作");
+            }
+            ChannelIdentifier bridgeChannel = MinecraftChannelIdentifier.from(CrossServerProtocol.CHANNEL);
+            PluginMessageAuthAdapter authAdapter = new PluginMessageAuthAdapter(proxy, bridgeChannel);
+            // 大脑端：按 storage-type 建仓库（json/sqlite 文件落数据目录，mysql 直连）
+            BindingRepository store = BindingStorageFactory.create(
+                    config, true, dataDir.toFile(), logger::warn);
+            bindingService = new BindingService(store, authAdapter, appId, logger::warn);
+            new VelocityBridge(proxy, this, bridgeChannel, bindingService, authAdapter, logger::warn);
+            adapter.log("✅ 白名单大脑已就绪（Velocity 主导，子服执行 AuthMe）");
+        }
+
+        commandHandler = new BotCommandHandler(proxy, aiService, mcmod, config, bindingService);
+        proxy.getCommandManager().register("vxtb", new VxtbCommand());
+
+        // 收到消息后的统一处理（两种模式共用）
+        Consumer<BotMessageEvent> listener = event -> {
+            adapter.log("[VC] 收到Bot消息: " + event.getMessage());
+            commandHandler.handle(event);
+        };
+
+        switch (BotLauncher.resolveMode(config)) {
+            case OFF:
+                adapter.log("通信模式 = off，机器人通信未启用。");
+                return;
+            case WEBHOOK:
+                webhookBot = BotLauncher.buildWebhook(config, adapter, listener);
+                if (webhookBot != null) {
+                    webhookBot.start();
+                    adapter.log("✅ 通信模式 = webhook（SCF 长轮询 + OpenAPI 回复）已启动");
+                } else {
+                    logger.error("[XingtuBot] Webhook 模式配置不全，需填写 webhook-relay-url / openapi-app-id / openapi-client-secret，未启动。");
+                }
+                return;
+            case WEBSOCKET:
+            default:
+                startWebSocket(config, listener);
+        }
+    }
+
+    /** WebSocket 模式：老星途框架长连接。 */
+    private void startWebSocket(VelocityConfig config, Consumer<BotMessageEvent> listener) {
+        String wsUrl = config.getString("WebSocket", "ws://127.0.0.1:8080");
+        String serverName = config.getString("server-name", "velocity");
+        long heartbeatMillis = config.getInt("HeartbeatSeconds", 30) * 1000L;
         try {
             wsClient = WebSocketClientBridge.create(wsUrl);
             wsClient.enableHeartbeat(heartbeatMillis);
 
             botCore = new BotCore(adapter, wsClient, serverName);
-            botCore.addMessageListener(event -> {
-                adapter.log("[VC] 收到Bot消息: " + event.getMessage());
-                commandHandler.handle(event);
-            });
+            botCore.addMessageListener(listener);
 
             botCore.start();
-            adapter.log("✅ XingtuBotVelocity 已启动，WebSocket正在连接...");
-
+            adapter.log("✅ 通信模式 = websocket，正在连接 " + wsUrl);
             startConnectionMonitor();
-            proxy.getCommandManager().register("vxtb", new VxtbCommand());
         } catch (Exception e) {
             logger.error("[XingtuBot] WebSocket启动失败: {}", e.getMessage());
         }
@@ -105,7 +170,7 @@ public class XingtuBotVelocity {
             String[] args = invocation.arguments();
 
             if (args.length == 0) {
-                sender.sendMessage(Component.text("用法: /vxtb <connect|disconnect|status>"));
+                sender.sendMessage(Component.text("用法: /vxtb <connect|disconnect|status|captureid>"));
                 return;
             }
 
@@ -118,6 +183,16 @@ public class XingtuBotVelocity {
                     break;
                 case "status":
                     handleStatus(sender);
+                    break;
+                case "captureid":
+                    if (commandHandler == null) {
+                        sender.sendMessage(Component.text("❌ 机器人未就绪"));
+                    } else {
+                        commandHandler.startCaptureOpenid();
+                        sender.sendMessage(Component.text(
+                                "✅ 已开启 openid 捕获。请让目标用户在群里 @机器人 发任意一句话，"
+                                + "其 openid 将打印到本控制台（一次性）。"));
+                    }
                     break;
                 default:
                     sender.sendMessage(Component.text("未知子命令: " + args[0]));

@@ -3,7 +3,6 @@ version: '${version}'
 main: org.windy.xingtubot.bukkit.XingtuBot
 authors: [ 风吟 ]
 softdepend:
-  - AuthMe
   - PlaceholderAPI
 commands:
   xtb:

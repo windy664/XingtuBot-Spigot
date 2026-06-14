@@ -2,7 +2,7 @@ dependencies {
     implementation project(':common')
 
     compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
-    compileOnly 'fr.xephi:authme:5.6.0'
+    // AuthMe 依赖已移除：改用自研登录锁（PlayerLockListener + LockState）
 
     // spigot 模块内仍直接使用 Gson（白名单/AI 消息构建）
     implementation 'com.google.code.gson:gson:2.10.1'

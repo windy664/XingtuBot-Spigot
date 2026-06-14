@@ -7,9 +7,11 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
 import org.windy.xingtubot.bukkit.module.aichat.AIChatModule;
 import org.windy.xingtubot.bukkit.module.chatreply.ChatreplyModule;
+import org.windy.xingtubot.bukkit.module.whitelist.SpigotBridge;
 import org.windy.xingtubot.bukkit.module.whitelist.WhitelistModule;
 import org.windy.xingtubot.common.ai.AiService;
-import org.windy.xingtubot.common.api.QqOpenApiClient;
+import org.windy.xingtubot.common.bot.BotLauncher;
+import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.poll.QqWebhookBot;
 
@@ -44,12 +46,28 @@ public final class XingtuBot extends JavaPlugin implements Listener {
     }
 
     private void startBot(FileConfiguration config) {
-        // Webhook 长轮询模式（新机器人推荐）：启用后不再使用 WebSocket
-        if (config.getBoolean("webhook-enable", false)) {
-            startWebhookBot(config);
-            return;
+        BotConfig cfg = new SpigotConfig(config);
+        switch (BotLauncher.resolveMode(cfg)) {
+            case OFF:
+                getLogger().info("通信模式 = off，机器人通信未启用。");
+                return;
+            case WEBHOOK:
+                webhookBot = BotLauncher.buildWebhook(cfg, new SpigotAdapter(this), this::dispatchToBukkit);
+                if (webhookBot != null) {
+                    webhookBot.start();
+                    getLogger().info("通信模式 = webhook（SCF 长轮询 + OpenAPI 回复）已启动");
+                } else {
+                    getLogger().severe("Webhook 模式配置不全，需填写 webhook-relay-url / openapi-app-id / openapi-client-secret，未启动。");
+                }
+                return;
+            case WEBSOCKET:
+            default:
+                startWebSocketBot(config);
         }
+    }
 
+    /** WebSocket 模式：老星途框架长连接。 */
+    private void startWebSocketBot(FileConfiguration config) {
         String wsUrl = config.getString("WebSocket", "ws://127.0.0.1:3001");
         String serverName = config.getString("server-name", "服务器");
         boolean autoOpen = config.getBoolean("AutoOpen", true);
@@ -60,32 +78,9 @@ public final class XingtuBot extends JavaPlugin implements Listener {
             if (autoOpen) {
                 botBridge.connect();
             }
+            getLogger().info("通信模式 = websocket，已连接 " + wsUrl);
         } catch (Exception e) {
             getLogger().severe("连接 WebSocket 出错：" + e.getMessage());
-        }
-    }
-
-    /** Webhook 模式：长轮询收事件 + OpenAPI 回复。 */
-    private void startWebhookBot(FileConfiguration config) {
-        String relayUrl = config.getString("webhook-relay-url", "");
-        String appId = config.getString("openapi-app-id", "");
-        String secret = config.getString("openapi-client-secret", "");
-        boolean sandbox = config.getBoolean("openapi-sandbox", false);
-
-        if (relayUrl.isEmpty() || appId.isEmpty() || secret.isEmpty()) {
-            getLogger().severe("Webhook 模式需要配置 webhook-relay-url / openapi-app-id / openapi-client-secret");
-            return;
-        }
-
-        try {
-            QqOpenApiClient api = new QqOpenApiClient(
-                    appId, secret, sandbox ? QqOpenApiClient.API_SANDBOX : QqOpenApiClient.API_PROD, null);
-            webhookBot = new QqWebhookBot(new SpigotAdapter(this), relayUrl, api);
-            webhookBot.addMessageListener(this::dispatchToBukkit);
-            webhookBot.start();
-            getLogger().info("Webhook 长轮询模式已启动（收事件走 SCF，回复走 OpenAPI）");
-        } catch (Exception e) {
-            getLogger().severe("启动 Webhook 模式出错：" + e.getMessage());
         }
     }
 
@@ -93,7 +88,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
     private void dispatchToBukkit(BotMessageEvent e) {
         Bukkit.getScheduler().runTask(this, () -> {
             GuildMessageEvent event = new GuildMessageEvent(
-                    e.getGuildId(), e.getFormId(), e.getMessage(), e::reply);
+                    e.getGuildId(), e.getFormId(), e.getMessage(), e.getReplier());
             setLastEvent(event);
             Bukkit.getPluginManager().callEvent(event);
         });
@@ -109,8 +104,27 @@ public final class XingtuBot extends JavaPlugin implements Listener {
 
     private void enableModules(FileConfiguration config) {
         if (config.getBoolean("whitelist-enable", true)) {
-            getLogger().info("白名单模块已开启！");
-            new WhitelistModule(this);
+            // 角色选择：
+            //   whitelist-role: auto(默认) → 看 bot-mode：off=手脚(代理主导)，否则本地全干
+            //                   local       → 强制本地
+            //                   slave       → 强制手脚
+            String role = config.getString("whitelist-role", "auto").trim().toLowerCase();
+            boolean slave;
+            if (role.equals("slave")) {
+                slave = true;
+            } else if (role.equals("local")) {
+                slave = false;
+            } else { // auto
+                slave = BotLauncher.resolveMode(new SpigotConfig(config)) == BotLauncher.Mode.OFF;
+            }
+
+            if (slave) {
+                getLogger().info("白名单：手脚模式(slave)已开启，由 Velocity 主导");
+                new SpigotBridge(this);
+            } else {
+                getLogger().info("白名单：本地模式已开启");
+                new WhitelistModule(this);
+            }
         }
         if (config.getBoolean("chatreply-enable", true)) {
             getLogger().info("聊天回复模块已开启!");

@@ -38,7 +38,7 @@ public class SpigotBotBridge {
     private void dispatch(BotMessageEvent e) {
         Bukkit.getScheduler().runTask(plugin, () -> {
             GuildMessageEvent event = new GuildMessageEvent(
-                    e.getGuildId(), e.getFormId(), e.getMessage(), e::reply);
+                    e.getGuildId(), e.getFormId(), e.getMessage(), e.getReplier());
             plugin.setLastEvent(event);
             Bukkit.getPluginManager().callEvent(event);
         });
