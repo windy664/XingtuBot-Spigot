@@ -4,7 +4,7 @@ import org.windy.xingtubot.common.service.Translator;
 import org.windy.xingtubot.common.util.Md;
 
 /**
- * 负责 GitHub 事件的文本处理、翻译和 Markdown 排版，将冗长的逻辑从 Module 中剥离。
+ * 负责 GitHub 事件的文本处理、翻译和 Markdown 排版。
  */
 public class GithubMessageBuilder {
 
@@ -63,7 +63,8 @@ public class GithubMessageBuilder {
         return card.link("🔗 查看此次代码变更", url).build();
     }
 
-    public String buildIssue(String owner, String repo, int number, String title, String action, String url) {
+    public String buildIssue(String owner, String repo, int number, String title, String action,
+                             String author, String labels, String body, String url) {
         String emoji = "open".equalsIgnoreCase(action) ? "🟢" : "🔴";
         String actionZh = "open".equalsIgnoreCase(action) ? "开启" : ("closed".equalsIgnoreCase(action) ? "关闭" : action);
         String translated = translate(title);
@@ -71,16 +72,30 @@ public class GithubMessageBuilder {
         Md card = Md.card(emoji, "Issue #" + number + " [" + actionZh + "]")
                 .subtitle("**" + owner + "/" + repo + "**");
 
+        // 标题 + 翻译
         if (!translated.equals(title) && !translated.isEmpty()) {
             card.quote("🌐 " + translated + "\n📝 原文: " + truncate(title, 100));
         } else {
             card.quote("📝 " + truncate(title, 150));
         }
 
+        // 作者
+        card.field("👤", "作者", author);
+
+        // 标签
+        card.field("🏷", "标签", labels);
+
+        // 正文预览
+        if (body != null && !body.trim().isEmpty()) {
+            String preview = truncate(body.trim().replaceAll("\\s+", " "), 120);
+            card.field("📄", "简介", preview);
+        }
+
         return card.link("🔗 参与讨论", url).build();
     }
 
-    public String buildPr(String owner, String repo, int number, String title, String action, String url) {
+    public String buildPr(String owner, String repo, int number, String title, String action,
+                          String author, String body, String url) {
         String emoji = "open".equalsIgnoreCase(action) ? "🟡" : "🟣";
         String actionZh = "open".equalsIgnoreCase(action) ? "发起" : ("closed".equalsIgnoreCase(action) ? "关闭/合并" : action);
         String translated = translate(title);
@@ -92,6 +107,13 @@ public class GithubMessageBuilder {
             card.quote("🌐 " + translated + "\n📝 原文: " + truncate(title, 100));
         } else {
             card.quote("📝 " + truncate(title, 150));
+        }
+
+        card.field("👤", "作者", author);
+
+        if (body != null && !body.trim().isEmpty()) {
+            String preview = truncate(body.trim().replaceAll("\\s+", " "), 120);
+            card.field("📄", "简介", preview);
         }
 
         return card.link("🔗 审查代码请求", url).build();

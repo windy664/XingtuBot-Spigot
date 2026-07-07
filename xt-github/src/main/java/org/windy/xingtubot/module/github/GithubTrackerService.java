@@ -17,8 +17,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * GitHub 项目追踪服务（重构版）。
- * 优化：抽离了冗余的缓存清理和判重逻辑，极大缩减了代码体积。
+ * GitHub 项目追踪服务。
+ * 轮询 GitHub/Gitee API，检测新 release/commit/issue/PR 并回调 listener。
  */
 public class GithubTrackerService {
 
@@ -37,12 +37,15 @@ public class GithubTrackerService {
 
     private ScheduledExecutorService scheduler;
     private ChangeListener listener;
+    private GithubSeenStore seenStore;
 
     public interface ChangeListener {
         void onNewRelease(String owner, String repo, String tagName, String name, String url);
         void onNewCommit(String owner, String repo, String sha, String message, String author, String url);
-        void onNewIssue(String owner, String repo, int number, String title, String action, String url);
-        void onNewPr(String owner, String repo, int number, String title, String action, String url);
+        void onNewIssue(String owner, String repo, int number, String title, String action,
+                        String author, String labels, String body, String url);
+        void onNewPr(String owner, String repo, int number, String title, String action,
+                     String author, String body, String url);
     }
 
     public GithubTrackerService(BotLogger logger, File dataDir) {
@@ -54,6 +57,7 @@ public class GithubTrackerService {
     public void setPollIntervalSeconds(int sec) { this.pollIntervalSeconds = sec; }
     public void setMirrors(List<String> mirrors) { this.mirrors = mirrors != null ? mirrors : new ArrayList<>(); }
     public void setChangeListener(ChangeListener listener) { this.listener = listener; }
+    public void setSeenStore(GithubSeenStore store) { this.seenStore = store; }
 
     public void start() {
         loadWatched();
@@ -130,7 +134,6 @@ public class GithubTrackerService {
         }
     }
 
-    // --- 核心抽取：通用缓存判定与清理逻辑 ---
     private <T> boolean cacheAndCheckNew(Set<T> cache, T id) {
         if (cache.contains(id)) return false;
         cache.add(id);
@@ -212,7 +215,26 @@ public class GithubTrackerService {
                 String title = obj.get("title").getAsString();
                 String state = obj.get("state").getAsString();
                 String url = obj.has("html_url") ? obj.get("html_url").getAsString() : wr.webBase() + "/" + wr.path() + "/issues/" + num;
-                listener.onNewIssue(wr.owner, wr.repo, num, title, state, url);
+                String author = "";
+                if (obj.has("user") && obj.get("user").isJsonObject()) {
+                    JsonObject user = obj.getAsJsonObject("user");
+                    if (user.has("login") && !user.get("login").isJsonNull()) author = user.get("login").getAsString();
+                }
+                String labels = "";
+                if (obj.has("labels") && obj.get("labels").isJsonArray()) {
+                    List<String> names = new ArrayList<>();
+                    for (JsonElement le : obj.getAsJsonArray("labels")) {
+                        if (le.isJsonObject() && le.getAsJsonObject().has("name")) {
+                            names.add(le.getAsJsonObject().get("name").getAsString());
+                        }
+                    }
+                    labels = String.join(", ", names);
+                }
+                String body = "";
+                if (obj.has("body") && !obj.get("body").isJsonNull()) {
+                    body = obj.get("body").getAsString();
+                }
+                listener.onNewIssue(wr.owner, wr.repo, num, title, state, author, labels, body, url);
             }
         }
         return changed;
@@ -234,17 +256,27 @@ public class GithubTrackerService {
                 String title = obj.get("title").getAsString();
                 String state = obj.get("state").getAsString();
                 String url = obj.has("html_url") ? obj.get("html_url").getAsString() : wr.webBase() + "/" + wr.path() + "/pull/" + num;
-                listener.onNewPr(wr.owner, wr.repo, num, title, state, url);
+                String author = "";
+                if (obj.has("user") && obj.get("user").isJsonObject()) {
+                    JsonObject user = obj.getAsJsonObject("user");
+                    if (user.has("login") && !user.get("login").isJsonNull()) author = user.get("login").getAsString();
+                }
+                String body = "";
+                if (obj.has("body") && !obj.get("body").isJsonNull()) {
+                    body = obj.get("body").getAsString();
+                }
+                listener.onNewPr(wr.owner, wr.repo, num, title, state, author, body, url);
             }
         }
         return changed;
     }
 
+    /** 首次订阅时，把当前最新的 release/commit/issue/PR 全部标记为已见，防止刷屏。 */
     private void initSeenState(String key) {
         WatchedRepo wr = watched.get(key);
         if (wr == null) return;
         try {
-            JsonArray releases = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/releases?per_page=1", wr.gitee);
+            JsonArray releases = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/releases?per_page=5", wr.gitee);
             if (releases != null && releases.size() > 0) {
                 Set<String> seen = seenReleaseIds.computeIfAbsent(key, k -> Collections.synchronizedSet(new LinkedHashSet<>()));
                 for (JsonElement el : releases) seen.add(el.getAsJsonObject().get("id").getAsString());
@@ -256,6 +288,28 @@ public class GithubTrackerService {
                 seenCommitSha.put(key, commits.get(0).getAsJsonObject().get("sha").getAsString());
             }
         } catch (Exception ignored) {}
+        if (wr.watchIssues) {
+            try {
+                JsonArray issues = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/issues?state=all&per_page=5&sort=created", wr.gitee);
+                if (issues != null) {
+                    Set<Integer> seen = seenIssueIds.computeIfAbsent(key, k -> Collections.synchronizedSet(new LinkedHashSet<>()));
+                    for (JsonElement el : issues) {
+                        JsonObject obj = el.getAsJsonObject();
+                        if (obj.has("pull_request")) continue;
+                        seen.add(obj.get("number").getAsInt());
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
+        if (wr.watchPrs) {
+            try {
+                JsonArray prs = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/pulls?state=all&per_page=5&sort=created", wr.gitee);
+                if (prs != null) {
+                    Set<Integer> seen = seenPrIds.computeIfAbsent(key, k -> Collections.synchronizedSet(new LinkedHashSet<>()));
+                    for (JsonElement el : prs) seen.add(el.getAsJsonObject().get("number").getAsInt());
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
     private JsonArray apiGetArray(String urlStr, boolean gitee) throws Exception {
@@ -330,6 +384,17 @@ public class GithubTrackerService {
 
     @SuppressWarnings("unchecked")
     private void loadState() {
+        // 优先从 DB 加载
+        if (seenStore != null) {
+            try {
+                seenStore.loadAll(seenReleaseIds, seenCommitSha, seenIssueIds, seenPrIds);
+                logger.info("[Github] 已从数据库加载 seen state");
+                return;
+            } catch (Exception e) {
+                logger.warn("[Github] 从数据库加载 state 失败，回退 YAML: " + e.getMessage());
+            }
+        }
+        // 回退 YAML
         if (!stateFile.exists()) return;
         try (Reader r = new InputStreamReader(new FileInputStream(stateFile), StandardCharsets.UTF_8)) {
             Map<String, Object> state = new org.yaml.snakeyaml.Yaml().load(r);
@@ -354,6 +419,16 @@ public class GithubTrackerService {
     }
 
     private void saveState() {
+        // 优先写 DB
+        if (seenStore != null) {
+            try {
+                seenStore.saveAll(seenReleaseIds, seenCommitSha, seenIssueIds, seenPrIds);
+                return;
+            } catch (Exception e) {
+                logger.warn("[Github] 写入数据库失败，回退 YAML: " + e.getMessage());
+            }
+        }
+        // 回退 YAML
         Map<String, Object> state = new LinkedHashMap<>();
 
         Map<String, List<String>> relMap = new LinkedHashMap<>();

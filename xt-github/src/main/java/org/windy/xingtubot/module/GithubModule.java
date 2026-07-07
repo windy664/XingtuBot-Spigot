@@ -8,15 +8,16 @@ import org.windy.xingtubot.common.module.capability.ProactiveSender;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 import org.windy.xingtubot.common.service.Translator;
 import org.windy.xingtubot.module.github.GithubMessageBuilder;
+import org.windy.xingtubot.module.github.GithubSeenStore;
 import org.windy.xingtubot.module.github.GithubTrackerService;
 import org.windy.xingtubot.module.github.GithubWatchCommand;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * GitHub 项目追踪模块（重构版）：负责核心生命周期调度。
- * 将排版逻辑抽离，使其专注于模块和消息分发。
+ * GitHub 项目追踪模块：负责核心生命周期调度和消息分发。
  */
 public final class GithubModule implements BotModule {
 
@@ -40,6 +41,30 @@ public final class GithubModule implements BotModule {
         tracker.setPollIntervalSeconds(config.getInt("github-poll-interval-seconds", 300));
         tracker.setMirrors(config.getStringList("github-mirrors"));
 
+        // DB 持久化（可选，默认 yaml 文件）
+        String storageType = config.getString("github-storage-type", "yaml").trim().toLowerCase();
+        if ("sqlite".equals(storageType) || "mysql".equals(storageType)) {
+            try {
+                GithubSeenStore store;
+                if ("sqlite".equals(storageType)) {
+                    File db = new File(ctx.dataFolder(), "github-seen.db");
+                    store = GithubSeenStore.sqlite(db.getAbsolutePath(), ctx.logger()::warn);
+                } else {
+                    store = GithubSeenStore.mysql(
+                            config.getString("mysql-host", "127.0.0.1"),
+                            config.getInt("mysql-port", 3306),
+                            config.getString("mysql-database", "xingtubot"),
+                            config.getString("mysql-user", "root"),
+                            config.getString("mysql-password", ""),
+                            ctx.logger()::warn);
+                }
+                tracker.setSeenStore(store);
+                ctx.logger().info("[Github] seen state 持久化: " + storageType);
+            } catch (Exception e) {
+                ctx.logger().warn("[Github] 初始化 DB 持久化失败，回退 YAML: " + e.getMessage());
+            }
+        }
+
         List<String> targetGroups = parseTargetGroups(config.getStringList("allowed-groups"));
         boolean toAll = config.getStringList("allowed-groups").isEmpty() || config.getStringList("allowed-groups").contains("*");
 
@@ -59,13 +84,17 @@ public final class GithubModule implements BotModule {
             }
 
             @Override
-            public void onNewIssue(String owner, String repo, int number, String title, String action, String url) {
-                push(builder.buildIssue(owner, repo, number, title, action, url), targetGroups, toAll, sender, ctx);
+            public void onNewIssue(String owner, String repo, int number, String title, String action,
+                                   String author, String labels, String body, String url) {
+                push(builder.buildIssue(owner, repo, number, title, action, author, labels, body, url),
+                        targetGroups, toAll, sender, ctx);
             }
 
             @Override
-            public void onNewPr(String owner, String repo, int number, String title, String action, String url) {
-                push(builder.buildPr(owner, repo, number, title, action, url), targetGroups, toAll, sender, ctx);
+            public void onNewPr(String owner, String repo, int number, String title, String action,
+                                String author, String body, String url) {
+                push(builder.buildPr(owner, repo, number, title, action, author, body, url),
+                        targetGroups, toAll, sender, ctx);
             }
         });
 

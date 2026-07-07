@@ -1,6 +1,10 @@
 // 附属扩展插件：GitHub 项目追踪（release / commit / issue / PR 推送）
-// 二合一 jar。common-core 走 compileOnly。
+// shadowJar 独立部署。common-core 走 compileOnly。
 // 软依赖 xt-modquery（Translator）和主插件（ProactiveSender / GameEcho）
+
+plugins {
+    id 'com.github.johnrengelman.shadow'
+}
 
 dependencies {
     compileOnly project(':common-core')
@@ -13,11 +17,28 @@ dependencies {
 
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'org.yaml:snakeyaml:1.33'
+
+    // DB 持久化（github-storage-type=sqlite/mysql 时需要，运行时由主插件 bundle 提供）
+    compileOnly 'org.xerial:sqlite-jdbc:3.45.1.0'
+    compileOnly 'com.mysql:mysql-connector-j:8.3.0'
 }
 
 base {
     archivesName = 'XingtuBot-Github'
 }
+
+// 本模块无独立 jar，只产出 shadowJar
+jar.enabled = false
+
+shadowJar {
+    archiveClassifier.set('')
+
+    // 重定位，避免与核心 jar 的同版本库冲突
+    relocate 'com.google.gson', 'org.lib.gson'
+    relocate 'org.yaml.snakeyaml', 'org.lib.snakeyaml'
+}
+
+build.dependsOn shadowJar
 
 processResources {
     def props = [version: version]
