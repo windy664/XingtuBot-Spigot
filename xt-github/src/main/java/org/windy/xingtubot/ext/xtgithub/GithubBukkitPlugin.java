@@ -17,7 +17,13 @@ public final class GithubBukkitPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
+        // 从 Bukkit 注册表服务获取主核心
         XingtuBotHost host = getServer().getServicesManager().load(XingtuBotHost.class);
+
+        if (host == null) {
+            getLogger().warning("[Github] 找不到主插件服务，扩展加载失败！请确认前置是否已安装。");
+            return;
+        }
 
         BotLogger logger = new BotLogger() {
             @Override public void info(String msg) { getLogger().info(msg); }

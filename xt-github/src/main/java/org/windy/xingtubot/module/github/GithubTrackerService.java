@@ -17,8 +17,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * GitHub 项目追踪服务：定期轮询 GitHub API，检测 release/commit/issue/PR 变化。
- * 优化：增加了缓存状态的持久化（github-state.yml），解决重启后历史数据丢失导致的重复刷屏问题。
+ * GitHub 项目追踪服务（重构版）。
+ * 优化：抽离了冗余的缓存清理和判重逻辑，极大缩减了代码体积。
  */
 public class GithubTrackerService {
 
@@ -30,7 +30,6 @@ public class GithubTrackerService {
 
     private final Map<String, WatchedRepo> watched = new ConcurrentHashMap<>();
 
-    // 追踪缓存，用于持久化记忆
     private final Map<String, Set<String>> seenReleaseIds = new ConcurrentHashMap<>();
     private final Map<String, String> seenCommitSha = new ConcurrentHashMap<>();
     private final Map<String, Set<Integer>> seenIssueIds = new ConcurrentHashMap<>();
@@ -58,28 +57,20 @@ public class GithubTrackerService {
 
     public void start() {
         loadWatched();
-        loadState(); // 加载历史记忆
+        loadState();
         scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "github-tracker");
             t.setDaemon(true);
             return t;
         });
         scheduler.scheduleWithFixedDelay(this::poll, 10, pollIntervalSeconds, TimeUnit.SECONDS);
-        logger.info("[Github] 追踪服务已启动（内存已恢复，监控 " + watched.size() + " 个仓库）");
+        logger.info("[Github] 追踪服务已启动（已加载 " + watched.size() + " 个仓库）");
     }
 
     public void stop() {
         if (scheduler != null) scheduler.shutdownNow();
         saveWatched();
-        saveState(); // 停机时保存记忆
-    }
-
-    public boolean watch(String owner, String repo) {
-        return watch(owner, repo, false);
-    }
-
-    public boolean watchGitee(String owner, String repo) {
-        return watch(owner, repo, true);
+        saveState();
     }
 
     public boolean watch(String owner, String repo, boolean gitee) {
@@ -94,22 +85,13 @@ public class GithubTrackerService {
         watched.put(key, wr);
         initSeenState(key);
         saveWatched();
-        saveState(); // 立刻保存记忆
+        saveState();
         return true;
-    }
-
-    private static String repoKey(String owner, String repo, boolean gitee) {
-        return (gitee ? "gitee:" : "") + owner + "/" + repo;
-    }
-
-    public boolean unwatch(String owner, String repo) {
-        return unwatch(owner, repo, false);
     }
 
     public boolean unwatch(String owner, String repo, boolean gitee) {
         String key = repoKey(owner, repo, gitee);
-        WatchedRepo removed = watched.remove(key);
-        if (removed == null) return false;
+        if (watched.remove(key) == null) return false;
         seenReleaseIds.remove(key);
         seenCommitSha.remove(key);
         seenIssueIds.remove(key);
@@ -119,65 +101,63 @@ public class GithubTrackerService {
         return true;
     }
 
-    public List<WatchedRepo> listWatched() {
-        return new ArrayList<>(watched.values());
+    public List<WatchedRepo> listWatched() { return new ArrayList<>(watched.values()); }
+
+    private static String repoKey(String owner, String repo, boolean gitee) {
+        return (gitee ? "gitee:" : "") + owner + "/" + repo;
     }
 
     private void poll() {
         boolean stateChanged = false;
         for (WatchedRepo wr : watched.values()) {
             String key = repoKey(wr.owner, wr.repo, wr.gitee);
+            if (wr.watchReleases) stateChanged |= safePoll(() -> pollReleases(key, wr), key, "Releases");
+            if (wr.watchCommits) stateChanged |= safePoll(() -> pollCommits(key, wr), key, "Commits");
+            if (wr.watchIssues) stateChanged |= safePoll(() -> pollIssues(key, wr), key, "Issues");
+            if (wr.watchPrs) stateChanged |= safePoll(() -> pollPullRequests(key, wr), key, "PRs");
+        }
+        if (stateChanged) saveState();
+    }
 
-            if (wr.watchReleases) {
-                try { if (pollReleases(key, wr)) stateChanged = true; }
-                catch (Exception e) { logger.warn("[Github] 轮询 " + key + " Releases 失败: " + e.getMessage()); }
-            }
-            if (wr.watchCommits) {
-                try { if (pollCommits(key, wr)) stateChanged = true; }
-                catch (Exception e) { logger.warn("[Github] 轮询 " + key + " Commits 失败: " + e.getMessage()); }
-            }
-            if (wr.watchIssues) {
-                try { if (pollIssues(key, wr)) stateChanged = true; }
-                catch (Exception e) { logger.warn("[Github] 轮询 " + key + " Issues 失败: " + e.getMessage()); }
-            }
-            if (wr.watchPrs) {
-                try { if (pollPullRequests(key, wr)) stateChanged = true; }
-                catch (Exception e) { logger.warn("[Github] 轮询 " + key + " PRs 失败: " + e.getMessage()); }
+    private interface PollTask { boolean execute() throws Exception; }
+
+    private boolean safePoll(PollTask task, String key, String type) {
+        try {
+            return task.execute();
+        } catch (Exception e) {
+            logger.warn(String.format("[Github] 轮询 %s 的 %s 失败: %s", key, type, e.getMessage()));
+            return false;
+        }
+    }
+
+    // --- 核心抽取：通用缓存判定与清理逻辑 ---
+    private <T> boolean cacheAndCheckNew(Set<T> cache, T id) {
+        if (cache.contains(id)) return false;
+        cache.add(id);
+        if (cache.size() > 50) {
+            synchronized (cache) {
+                Iterator<T> it = cache.iterator();
+                for (int i = 0; i < 10 && it.hasNext(); i++) { it.next(); it.remove(); }
             }
         }
-        if (stateChanged) saveState(); // 如果有更新，定时刷新到磁盘
+        return true;
     }
 
-    private static String repoPath(WatchedRepo wr) {
-        return wr.owner + "/" + wr.repo;
-    }
-
-    // 返回 boolean 表示是否有新数据（触发 state 更新）
     private boolean pollReleases(String key, WatchedRepo wr) throws Exception {
-        JsonArray arr = apiGetArray(wr.apiBase() + "/repos/" + repoPath(wr) + "/releases?per_page=5", wr.gitee);
+        JsonArray arr = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/releases?per_page=5", wr.gitee);
         if (arr == null) return false;
         boolean changed = false;
 
         Set<String> seen = seenReleaseIds.computeIfAbsent(key, k -> Collections.synchronizedSet(new LinkedHashSet<>()));
         for (JsonElement el : arr) {
             JsonObject obj = el.getAsJsonObject();
-            String id = obj.get("id").getAsString();
-            if (seen.contains(id)) continue;
-            seen.add(id);
+            if (!cacheAndCheckNew(seen, obj.get("id").getAsString())) continue;
             changed = true;
 
-            if (seen.size() > 50) {
-                synchronized (seen) {
-                    Iterator<String> it = seen.iterator();
-                    for (int i = 0; i < 10 && it.hasNext(); i++) { it.next(); it.remove(); }
-                }
-            }
             if (listener != null) {
                 String tagName = obj.has("tag_name") ? obj.get("tag_name").getAsString() : "?";
                 String name = obj.has("name") && !obj.get("name").isJsonNull() ? obj.get("name").getAsString() : tagName;
-                String url = obj.has("html_url") && !obj.get("html_url").isJsonNull()
-                        ? obj.get("html_url").getAsString()
-                        : wr.webBase() + "/" + repoPath(wr) + "/releases/tag/" + tagName;
+                String url = obj.has("html_url") && !obj.get("html_url").isJsonNull() ? obj.get("html_url").getAsString() : wr.webBase() + "/" + wr.path() + "/releases/tag/" + tagName;
                 listener.onNewRelease(wr.owner, wr.repo, tagName, name, url);
             }
         }
@@ -185,39 +165,38 @@ public class GithubTrackerService {
     }
 
     private boolean pollCommits(String key, WatchedRepo wr) throws Exception {
-        JsonArray arr = apiGetArray(wr.apiBase() + "/repos/" + repoPath(wr) + "/commits?per_page=5", wr.gitee);
+        JsonArray arr = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/commits?per_page=5", wr.gitee);
         if (arr == null || arr.size() == 0) return false;
+
         String latestSha = arr.get(0).getAsJsonObject().get("sha").getAsString();
         String prevSha = seenCommitSha.get(key);
         if (latestSha.equals(prevSha)) return false;
 
         seenCommitSha.put(key, latestSha);
-        if (prevSha == null) return true; // 首次记录
+        if (prevSha == null) return true;
 
         for (JsonElement el : arr) {
             JsonObject obj = el.getAsJsonObject();
             String sha = obj.get("sha").getAsString();
             if (sha.equals(prevSha)) break;
+
             if (listener != null) {
                 JsonObject commit = obj.getAsJsonObject("commit");
-                String message = commit.has("message") && !commit.get("message").isJsonNull()
-                        ? commit.get("message").getAsString() : "";
+                String msg = commit.has("message") && !commit.get("message").isJsonNull() ? commit.get("message").getAsString() : "";
                 String author = "?";
                 if (commit.has("author") && commit.get("author").isJsonObject()) {
                     JsonObject a = commit.getAsJsonObject("author");
                     if (a.has("name") && !a.get("name").isJsonNull()) author = a.get("name").getAsString();
                 }
-                String url = obj.has("html_url") && !obj.get("html_url").isJsonNull()
-                        ? obj.get("html_url").getAsString()
-                        : wr.webBase() + "/" + repoPath(wr) + "/commit/" + sha;
-                listener.onNewCommit(wr.owner, wr.repo, sha.substring(0, 7), message, author, url);
+                String url = obj.has("html_url") && !obj.get("html_url").isJsonNull() ? obj.get("html_url").getAsString() : wr.webBase() + "/" + wr.path() + "/commit/" + sha;
+                listener.onNewCommit(wr.owner, wr.repo, sha.substring(0, 7), msg, author, url);
             }
         }
         return true;
     }
 
     private boolean pollIssues(String key, WatchedRepo wr) throws Exception {
-        JsonArray arr = apiGetArray(wr.apiBase() + "/repos/" + repoPath(wr) + "/issues?state=all&per_page=5&sort=created", wr.gitee);
+        JsonArray arr = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/issues?state=all&per_page=5&sort=created", wr.gitee);
         if (arr == null) return false;
         boolean changed = false;
 
@@ -226,20 +205,13 @@ public class GithubTrackerService {
             JsonObject obj = el.getAsJsonObject();
             if (obj.has("pull_request")) continue;
             int num = obj.get("number").getAsInt();
-            if (seen.contains(num)) continue;
-            seen.add(num);
+            if (!cacheAndCheckNew(seen, num)) continue;
             changed = true;
 
-            if (seen.size() > 50) {
-                synchronized (seen) {
-                    Iterator<Integer> it = seen.iterator();
-                    for (int i = 0; i < 10 && it.hasNext(); i++) { it.next(); it.remove(); }
-                }
-            }
             if (listener != null) {
                 String title = obj.get("title").getAsString();
                 String state = obj.get("state").getAsString();
-                String url = obj.has("html_url") ? obj.get("html_url").getAsString() : wr.webBase() + "/" + repoPath(wr) + "/issues/" + num;
+                String url = obj.has("html_url") ? obj.get("html_url").getAsString() : wr.webBase() + "/" + wr.path() + "/issues/" + num;
                 listener.onNewIssue(wr.owner, wr.repo, num, title, state, url);
             }
         }
@@ -247,7 +219,7 @@ public class GithubTrackerService {
     }
 
     private boolean pollPullRequests(String key, WatchedRepo wr) throws Exception {
-        JsonArray arr = apiGetArray(wr.apiBase() + "/repos/" + repoPath(wr) + "/pulls?state=all&per_page=5&sort=created", wr.gitee);
+        JsonArray arr = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/pulls?state=all&per_page=5&sort=created", wr.gitee);
         if (arr == null) return false;
         boolean changed = false;
 
@@ -255,20 +227,13 @@ public class GithubTrackerService {
         for (JsonElement el : arr) {
             JsonObject obj = el.getAsJsonObject();
             int num = obj.get("number").getAsInt();
-            if (seen.contains(num)) continue;
-            seen.add(num);
+            if (!cacheAndCheckNew(seen, num)) continue;
             changed = true;
 
-            if (seen.size() > 50) {
-                synchronized (seen) {
-                    Iterator<Integer> it = seen.iterator();
-                    for (int i = 0; i < 10 && it.hasNext(); i++) { it.next(); it.remove(); }
-                }
-            }
             if (listener != null) {
                 String title = obj.get("title").getAsString();
                 String state = obj.get("state").getAsString();
-                String url = obj.has("html_url") ? obj.get("html_url").getAsString() : wr.webBase() + "/" + repoPath(wr) + "/pull/" + num;
+                String url = obj.has("html_url") ? obj.get("html_url").getAsString() : wr.webBase() + "/" + wr.path() + "/pull/" + num;
                 listener.onNewPr(wr.owner, wr.repo, num, title, state, url);
             }
         }
@@ -279,14 +244,14 @@ public class GithubTrackerService {
         WatchedRepo wr = watched.get(key);
         if (wr == null) return;
         try {
-            JsonArray releases = apiGetArray(wr.apiBase() + "/repos/" + repoPath(wr) + "/releases?per_page=1", wr.gitee);
+            JsonArray releases = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/releases?per_page=1", wr.gitee);
             if (releases != null && releases.size() > 0) {
                 Set<String> seen = seenReleaseIds.computeIfAbsent(key, k -> Collections.synchronizedSet(new LinkedHashSet<>()));
                 for (JsonElement el : releases) seen.add(el.getAsJsonObject().get("id").getAsString());
             }
         } catch (Exception ignored) {}
         try {
-            JsonArray commits = apiGetArray(wr.apiBase() + "/repos/" + repoPath(wr) + "/commits?per_page=1", wr.gitee);
+            JsonArray commits = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/commits?per_page=1", wr.gitee);
             if (commits != null && commits.size() > 0) {
                 seenCommitSha.put(key, commits.get(0).getAsJsonObject().get("sha").getAsString());
             }
@@ -317,8 +282,6 @@ public class GithubTrackerService {
             return JsonParser.parseReader(r).getAsJsonArray();
         }
     }
-
-    // ===== 持久化与状态记忆 (代替数据库) =====
 
     @SuppressWarnings("unchecked")
     private void loadWatched() {
@@ -393,7 +356,6 @@ public class GithubTrackerService {
     private void saveState() {
         Map<String, Object> state = new LinkedHashMap<>();
 
-        // 转换 Set 为 List 以便 YAML 序列化
         Map<String, List<String>> relMap = new LinkedHashMap<>();
         seenReleaseIds.forEach((k, v) -> relMap.put(k, new ArrayList<>(v)));
         state.put("releases", relMap);
@@ -427,6 +389,7 @@ public class GithubTrackerService {
             this.repo = repo;
         }
 
+        public String path() { return owner + "/" + repo; }
         public String apiBase() { return gitee ? "https://gitee.com/api/v5" : "https://api.github.com"; }
         public String webBase() { return gitee ? "https://gitee.com" : "https://github.com"; }
     }

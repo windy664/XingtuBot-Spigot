@@ -91,7 +91,6 @@ public class GithubWatchCommand implements GroupCommand {
         event.reply(removed ? "✅ 已取消订阅 " + label : "⚠️ 未找到订阅 " + label);
     }
 
-    /** 是否为 Gitee 目标（gitee: 前缀或 gitee.com 链接）。 */
     private boolean isGitee(String input) {
         String s = input.toLowerCase();
         return s.startsWith("gitee:") || s.contains("gitee.com/");
@@ -118,9 +117,7 @@ public class GithubWatchCommand implements GroupCommand {
     }
 
     private String normalizeRepo(String input) {
-        // 去掉 gitee: 前缀
         if (input.toLowerCase().startsWith("gitee:")) input = input.substring("gitee:".length());
-        // 去掉各平台域名前缀
         for (String prefix : new String[]{
                 "https://github.com/", "http://github.com/",
                 "https://gitee.com/", "http://gitee.com/"}) {
@@ -136,7 +133,6 @@ public class GithubWatchCommand implements GroupCommand {
     @Override
     public String name() { return "github"; }
 
-    /** 项目追踪是服务器管理功能，整组仅超管可用。 */
     @Override
     public boolean adminOnly() { return true; }
 
@@ -147,4 +143,5 @@ public class GithubWatchCommand implements GroupCommand {
     @Override
     public String description() { return "GitHub / Gitee 项目追踪（release/commit/issue/PR）"; }
     @Override
-    public String category() { return "🔍 模组工具"; }}
+    public String category() { return "🔍 模组工具"; }
+}
