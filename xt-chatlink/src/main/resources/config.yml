@@ -1,0 +1,118 @@
+# XingtuBot-Chatlink: 群服互联配置
+
+# 群服互联功能开关
+chatreply-enable: true
+
+# 游戏内聊天格式前缀
+chat-format: "§b[QQ群] §f"
+
+# QQ 群消息触发前缀（为空则全部转发）
+startsWith: ""
+
+# 回复按钮（Velocity）
+chat-reply-button: false
+
+# 游戏→QQ 聊天行 markdown 模板。占位符：{player}=玩家名、{message}=发言内容。
+# 主动推送走 markdown 通道，模板里的 **加粗** 等修饰会真实渲染；玩家名/正文自动转义防注入。
+# 例：
+#   💬 **{player}**：{message}      → 💬 加粗名 + 全角冒号 + 内容（默认）
+#   <{player}> {message}           → IRC 风格
+#   **[游戏]** **{player}**：{message}
+chatlink-format: "💬 **{player}**：{message}"
+
+# 【旧】游戏内群名前缀，已被 chatlink-format 取代；保留仅为兼容，不再生效。
+group-prefix: "[游戏]"
+
+# 未绑定玩家在群里的昵称显示
+entries-Empty: "群成员"
+
+# 敏感词过滤（作用于群服互联双向）
+sensitive-filter-chatlink: true
+
+# 群聊白名单（群 openid 列表，"*" = 全部群）
+allowed-groups:
+  - "*"
+
+####################################
+# 机器人消息回显到游戏（默认开启）
+# 机器人往 QQ 群发消息时，同时发一份到游戏给在线玩家看（命令回复 + github/modquery 等通知）。
+# 此前在核心 config，现归口到群服互联（xt-chatlink）。
+####################################
+echo-bot-to-game: true
+# 回显前缀（§ 颜色码生效）。
+# 占位符 {bot} = 机器人昵称（bot 连接后为 QQ 官方昵称，连接前为「机器人」），每次回显实时解析。
+echo-format: "§b[{bot}] §f"
+
+##########################################
+# 敏感词过滤（详细配置）
+# 作用范围：群服互联（玩家↔群双向）
+# 命中的词会被替换为 Replacement 字符
+##########################################
+# 是否启用（总开关）
+Enable: true
+# 替换字符
+Replacement: '*'
+# 本地词库
+Local:
+  - NMSL
+  - fuck
+  - shit
+# 云端词库
+Cloud-Thesaurus:
+  Enabled: true
+  # 云词库里不当敏感词处理的词
+  Ignored: ['nt']
+  Urls:
+    - 'https://raw.githubusercontent.com/Yurinann/Filter-Thesaurus-Cloud/main/database.json'
+# 匹配时忽略的标点符号（敏感词中间插入这些字符仍会被匹配）
+Ignored-Punctuations:
+  - '!'
+  - '.'
+  - ','
+  - '#'
+  - '$'
+  - '%'
+  - '&'
+  - '*'
+  - '('
+  - ')'
+  - '|'
+  - '?'
+  - '/'
+  - '@'
+  - '"'
+  - '\\'
+  - ';'
+  - '['
+  - ']'
+  - '{'
+  - '}'
+  - '+'
+  - '~'
+  - '-'
+  - '_'
+  - '='
+  - '^'
+  - '<'
+  - '>'
+  - ' '
+  - '　'
+  - '！'
+  - '。'
+  - '，'
+  - '￥'
+  - '（'
+  - '）'
+  - '？'
+  - '、'
+  - '"'
+  - "'"
+  - "'"
+  - '；'
+  - '【'
+  - '】'
+  - '——'
+  - '……'
+  - '《'
+  - '》'
+  - '`'

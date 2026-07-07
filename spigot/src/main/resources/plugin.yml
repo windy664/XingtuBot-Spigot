@@ -4,10 +4,16 @@ main: org.windy.xingtubot.bukkit.XingtuBot
 authors: [ 风吟 ]
 softdepend:
   - PlaceholderAPI
+  - ProtocolLib
 commands:
   xtb:
-    description: 星途框架Bukkit插件
-    usage: /xtb <reload|connect|reply>
-  messagereply:
-    description: 回复某位群成员
-    usage: /messagereply <formId> <内容>
+    description: 昕途框架Bukkit插件
+    usage: /xtb <reload|connect|reply|status|list|debug>
+  qq:
+    description: 向 QQ 群发送消息
+    usage: /qq <消息内容>
+    permission: xingtubot.qq.send
+permissions:
+  xingtubot.qq.send:
+    description: 允许向 QQ 群发送消息
+    default: op

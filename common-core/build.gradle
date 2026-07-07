@@ -1,0 +1,20 @@
+dependencies {
+    // WebSocket（主插件 gateway 通信）
+    implementation 'org.java-websocket:Java-WebSocket:1.5.3'
+    // JSON（全项目通用）
+    implementation 'com.google.code.gson:gson:2.10.1'
+    // YAML（配置解析 + 自定义问答 replies.yml）
+    implementation 'org.yaml:snakeyaml:1.33'
+    // QR 码生成（主插件扫码接入 + xt-auth 加群二维码）
+    implementation 'com.google.zxing:core:3.5.2'
+
+    // ─── 以下依赖仅特定扩展使用，由各自扩展 shadow ───
+    // Redis（xt-auth 跨服桥）
+    compileOnly 'redis.clients:jedis:5.1.0'
+
+    // 数据库驱动（绑定存储 / openid 昵称缓存）。代码直接 new 驱动实例注册（非反射），故需编译期可见。
+    // sqlite：implementation → 编译期可见 + 打包进 bundle（storage-type=sqlite 开箱即用，含各平台原生库）。
+    // mysql：compileOnly → 编译期可见但不打包（连带 protobuf 体积大，且多服才用）；用 mysql 的自备 connector。
+    implementation 'org.xerial:sqlite-jdbc:3.45.1.0'
+    compileOnly 'com.mysql:mysql-connector-j:8.3.0'
+}

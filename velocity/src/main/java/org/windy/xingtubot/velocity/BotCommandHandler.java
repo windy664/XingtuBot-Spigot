@@ -1,180 +1,141 @@
 package org.windy.xingtubot.velocity;
 
-import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
-import com.velocitypowered.api.proxy.server.RegisteredServer;
 import net.kyori.adventure.text.Component;
-import org.windy.xingtubot.common.ai.AiService;
 import org.windy.xingtubot.common.auth.PermissionService;
-import org.windy.xingtubot.common.binding.BindingService;
-import org.windy.xingtubot.common.command.GroupCommandRegistry;
-import org.windy.xingtubot.common.command.impl.AnimePicCommand;
-import org.windy.xingtubot.common.command.impl.BindingListCommand;
-import org.windy.xingtubot.common.command.impl.FortuneCommand;
-import org.windy.xingtubot.common.command.impl.QueryBindingCommand;
-import org.windy.xingtubot.common.command.impl.UnbindCommand;
-import org.windy.xingtubot.common.command.impl.WeatherCommand;
 import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.demo.RichReplyDemo;
 import org.windy.xingtubot.common.event.BotMessageEvent;
-import org.windy.xingtubot.common.service.McmodApiService;
+import org.windy.xingtubot.common.handler.HandlerContext;
+import org.windy.xingtubot.common.handler.HandlerRegistry;
+import org.windy.xingtubot.common.handler.impl.OpenIdCaptureHandler;
+import org.windy.xingtubot.common.image.TextImageRenderer;
+import org.windy.xingtubot.common.module.ModuleContextImpl;
+import org.windy.xingtubot.common.module.capability.*;
+import org.windy.xingtubot.common.queue.PendingMessageQueue;
+import org.windy.xingtubot.common.reply.PlaceholderResolver;
 
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 /**
- * Bot 指令处理器：解析群消息中的命令（AI / 查服 / MCMOD 搜索）。
+ * Velocity 端核心命令处理器。
+ *
+ * <p>只做框架：注册平台能力服务 → 暴露 XingtuBotHost → 注册对外 API → 群消息分发。
+ * 一切功能由附属扩展插件（xt-*）提供。
+ * BindingService/BindingRepository 由 xt-auth 注册为 service，这里不再创建。
  */
 public class BotCommandHandler {
-    private final ProxyServer proxy;
-    private final AiService aiService;
-    private final McmodApiService mcmodService;
+
+    private final HandlerRegistry registry;
+    private final OpenIdCaptureHandler openIdCapture;
     private final BotConfig config;
-    private final BindingService bindingService; // 可为 null（未启用白名单大脑时）
-    private final GroupCommandRegistry commands;
-    private final PermissionService permission;
+    private final org.windy.xingtubot.common.api.XingtuBotServiceImpl service;
+    private final ModuleContextImpl moduleCtx;
+    private final LazyProactiveSender proactiveSender = new LazyProactiveSender();
 
-    public BotCommandHandler(ProxyServer proxy, AiService aiService, McmodApiService mcmodService,
-                             BotConfig config, BindingService bindingService) {
-        this.proxy = proxy;
-        this.aiService = aiService;
-        this.mcmodService = mcmodService;
+    public BotCommandHandler(ProxyServer proxy, org.slf4j.Logger slf4jLogger,
+                             BotConfig config, VelocityBridge bridge,
+                             TextImageRenderer textImage, java.nio.file.Path dataDir) {
         this.config = config;
-        this.bindingService = bindingService;
 
-        // 超管权限（按 openid）
-        this.permission = new PermissionService(config.getStringList("admin-openids"));
-        // 群指令工具集（天气/运势/随机图片…），专属有界线程池执行，与主线程/公共池隔离
-        this.commands = new GroupCommandRegistry(permission,
-                m -> proxy.getConsoleCommandSource().sendMessage(Component.text("[群指令] " + m)))
-                .register(new WeatherCommand())
-                .register(new FortuneCommand())
-                .register(new AnimePicCommand(config.getString("webhook-relay-url", "")));
+        PermissionService permission = new PermissionService(config.getStringList("admin-openids"));
+        registry = new HandlerRegistry(permission,
+                m -> proxy.getConsoleCommandSource().sendMessage(Component.text("[群指令] " + m)));
+        registry.setListenMode(config.getString("listen-mode", "mention"));
 
-        // 管理指令（依赖绑定库，仅在白名单大脑启用时注册）
-        if (bindingService != null) {
-            commands.register(new UnbindCommand(bindingService.getStore()))
-                    .register(new QueryBindingCommand(bindingService.getStore()))
-                    .register(new BindingListCommand(bindingService.getStore()));
+        org.windy.xingtubot.common.platform.BotLogger botLogger =
+                new VelocityBotLogger(slf4jLogger);
+
+        moduleCtx = new ModuleContextImpl(
+                registry, config, botLogger, null, permission,
+                dataDir != null ? dataDir.toFile() : null);
+
+        // ===== openid 捕获 =====
+        openIdCapture = new OpenIdCaptureHandler();
+        openIdCapture.setConsoleLogger(m -> proxy.getConsoleCommandSource().sendMessage(Component.text(m)));
+        registry.register(openIdCapture);
+
+        // ===== 内置核心命令：「id」回显用户/群 openid（配置辅助）=====
+        registry.register(new org.windy.xingtubot.common.handler.impl.WhoAmIHandler());
+
+        // ===== 平台能力注册（供附属插件 getService 获取）=====
+        if (textImage != null) moduleCtx.registerService(TextImageRenderer.class, textImage);
+        moduleCtx.registerService(ProactiveSender.class, proactiveSender);
+
+        // 机器人消息回显到游戏（GameEcho 服务 + 命令回复回显）已下放到 xt-chatlink（群服互联范畴）。
+
+        // PlaceholderResolver：惰性获取 BindingService（由 xt-auth 注册）
+        moduleCtx.registerService(PlaceholderResolver.class,
+                new VelocityPlaceholders(proxy, null, bridge,
+                        config.getString("entries-Empty", "群成员")));
+
+        // BindingService / BindingRepository 由 xt-auth 扩展插件注册为 service，主插件不再创建
+
+        if (bridge != null) {
+            moduleCtx.registerService(CrossServerConsole.class,
+                    (CrossServerConsole) (server, cmd, callback) -> bridge.dispatchConsole(server, cmd, callback));
         }
+
+        moduleCtx.registerService(ServerQuery.class, new VelocityServerQuery(proxy));
+
+        // GameChatBridge：惰性解析 GroupChatLink + BindingService（由扩展插件注册为 service）
+        moduleCtx.registerService(GameChatBridge.class, (GameChatBridge) (event, content) -> {
+            GroupChatLink gcl = moduleCtx.getService(GroupChatLink.class);
+            if (gcl != null) {
+                // 群图片 → ChatImage 码：装 mod 的玩家看到图，没装的看到文本，游戏照常
+                String withImg = org.windy.xingtubot.common.util.ChatImageCode.appendTo(
+                        content, event.getImageUrls(), event.getUsername());
+                gcl.onGroupMessage(event, senderNameOf(event), withImg);
+            }
+        });
+
+        // 对外 API
+        service = new org.windy.xingtubot.common.api.XingtuBotServiceImpl(null);
+        service.setRegistry(registry);
+        registry.setHookService(service);
+        // 注册进服务总线：附属插件（如 xt-auth）经 ctx.getService(XingtuBotService.class) 取它读 appId。
+        // Velocity 此前漏了这步（Bukkit 在 SpigotCommandHandler 走 ServicesManager 注册过）→ xt-auth 取到
+        // null → getBotAppId() 空 → 绑定 openid 头像 URL 落空（表现为 APPID_EMPTY / 企鹅占位图）。
+        // 此处注册的是同一 service 实例，appId 稍后由 XingtuBotVelocity.setApiClient 填入；xt-auth 惰性现取即可。
+        moduleCtx.registerService(org.windy.xingtubot.common.api.XingtuBotService.class, service);
+
+        // 初始化 handler
+        HandlerContext ctx = new HandlerContext(config, null, permission, proxy);
+        registry.initAll(ctx);
     }
 
-    // 后台 openid 捕获模式：开启后，下一条群消息把发送者 openid 打印到控制台并自动关闭
-    private final java.util.concurrent.atomic.AtomicBoolean captureOpenid =
-            new java.util.concurrent.atomic.AtomicBoolean(false);
+    public org.windy.xingtubot.common.api.XingtuBotServiceImpl getService() { return service; }
+    public ModuleContextImpl getHost() { return moduleCtx; }
+    public LazyProactiveSender getProactiveSender() { return proactiveSender; }
 
-    /** 由后台命令调用：开启一次性 openid 捕获。 */
-    public void startCaptureOpenid() {
-        captureOpenid.set(true);
-    }
+    public void shutdown() { registry.shutdownAll(); }
+
+    public void startCaptureOpenid() { openIdCapture.enableCapture(); }
 
     public void handle(BotMessageEvent event) {
         String msg = event.getMessage();
-        if (msg == null || msg.trim().isEmpty()) return;
-
-        // ==================== openid 捕获（后台 /xtb captureid 触发）====================
-        if (captureOpenid.compareAndSet(true, false)) {
-            String openid = event.getFormId();
-            String who = msg.trim();
-            proxy.getConsoleCommandSource().sendMessage(Component.text(
-                    "════════ openid 捕获 ════════\n"
-                    + "发送者说：" + who + "\n"
-                    + "openid = " + openid + "\n"
-                    + "把它加入 config.yml 的 admin-openids 即可设为超管\n"
-                    + "═══════════════════════════"));
-            event.reply("✅ 已捕获你的 openid，请管理员查看后台控制台");
-            return;
+        // 纯图片消息正文为空但带图也要放行（转发进游戏）；文字、图片都空才丢
+        if ((msg == null || msg.trim().isEmpty()) && event.getImageUrls().isEmpty()) return;
+        String t = msg == null ? "" : msg.trim();
+        // 菜单走自定义回复（replies.yml 里 trigger=菜单, content={menu}）；先派发。
+        boolean handled = registry.dispatch(event);
+        // 兜底：replies.yml 没配 菜单 条目时，仍用 buildMenu 生成全部命令菜单。
+        if (!handled && (t.equals("菜单") || t.equals("帮助") || t.equalsIgnoreCase("help"))) {
+            boolean isAdmin = new PermissionService(config.getStringList("admin-openids")).isAdmin(event.getFormId());
+            event.replyMarkdown(registry.buildMenu(isAdmin), null);
         }
+        String pending = PendingMessageQueue.getInstance().drainForGroup(event.getGuildId());
+        if (pending != null) event.reply(pending);
+    }
 
-        // ==================== 白名单 / 登录（Velocity 主导，跨服执行 AuthMe）====================
-        if (bindingService != null) {
-            String trimmed = msg.trim();
-            String openid = event.getFormId();
-            String loginPrompt = config.getString("login-prompt", "登录");
-            if (loginPrompt.equals(trimmed)) {
-                CompletableFuture.runAsync(() -> event.reply(bindingService.loginByGroup(openid).message));
-                return;
-            }
-            if (trimmed.contains("白名单")) {
-                CompletableFuture.runAsync(() -> event.reply(bindingService.bindByGroupAvatar(openid).message));
-                return;
-            }
+    /** 惰性获取发送者名：从 service 获取 BindingService（由 xt-auth 注册）。 */
+    private String senderNameOf(BotMessageEvent event) {
+        org.windy.xingtubot.common.binding.BindingService bs =
+                moduleCtx.getService(org.windy.xingtubot.common.binding.BindingService.class);
+        if (bs != null) {
+            List<String> players = bs.getStore().getPlayersByOpenid(event.getFormId());
+            if (!players.isEmpty()) return players.get(0);
         }
-
-        // ==================== 帮助菜单 ====================
-        String t = msg.trim();
-        if (t.equals("菜单") || t.equals("帮助") || t.equalsIgnoreCase("help")) {
-            boolean isAdmin = permission.isAdmin(event.getFormId());
-            if (commands.hasMenuEntries()) {
-                event.replyMarkdown(commands.buildMenu(isAdmin), null);
-            } else {
-                event.reply("暂无可用指令");
-            }
-            return;
-        }
-
-        // ==================== 群指令工具集（天气/运势/随机图片）====================
-        if (commands.dispatch(event)) {
-            return;
-        }
-
-        // ==================== 富消息 demo（发「测试」触发）====================
-        if (RichReplyDemo.maybeHandle(event, config)) {
-            return;
-        }
-
-        // ==================== AI 聊天 ====================
-        if (msg.startsWith("ai ")) {
-            String userMsg = msg.substring(3).trim();
-            proxy.getConsoleCommandSource().sendMessage(Component.text("[Bot] AI请求: " + userMsg));
-            CompletableFuture.runAsync(() -> {
-                try {
-                    event.reply(aiService.chat(userMsg));
-                } catch (Exception e) {
-                    event.reply("AI请求异常: " + e.getMessage());
-                }
-            });
-            return;
-        }
-
-        // ==================== 查服 ====================
-        if ("/查服".equalsIgnoreCase(msg.trim())) {
-            AtomicInteger total = new AtomicInteger(0);
-            StringBuilder sb = new StringBuilder();
-            sb.append("【服务器在线情况】\n");
-            sb.append("-----------------------\n");
-
-            for (RegisteredServer reg : proxy.getAllServers()) {
-                String serverName = reg.getServerInfo().getName();
-                List<Player> playersOnServer = proxy.getAllPlayers().stream()
-                        .filter(player -> player.getCurrentServer()
-                                .map(conn -> conn.getServerInfo().getName().equals(serverName))
-                                .orElse(false))
-                        .collect(Collectors.toList());
-
-                int count = playersOnServer.size();
-                total.addAndGet(count);
-                sb.append(serverName).append(" (").append(count).append("人)\n");
-
-                if (!playersOnServer.isEmpty()) {
-                    String players = playersOnServer.stream()
-                            .map(Player::getUsername)
-                            .collect(Collectors.joining(", "));
-                    sb.append("  └─ ").append(players).append("\n");
-                }
-            }
-
-            sb.append("-----------------------\n");
-            sb.append("全服总人数: ").append(total.get()).append("人");
-            event.reply(sb.toString());
-            return;
-        }
-
-        // ==================== MCMOD 搜索 ====================
-        if (msg.toLowerCase().startsWith("/mod ") || msg.matches("\\d+")) {
-            CompletableFuture.runAsync(() -> mcmodService.handleMessage(event));
-        }
+        if (event.getUsername() != null && !event.getUsername().isEmpty()) return event.getUsername();
+        return config.getString("entries-Empty", "群成员");
     }
 }

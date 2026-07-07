@@ -1,0 +1,93 @@
+# XingtuBot-AI: AI 对话配置
+
+# AI 对话功能开关
+llm-enable: false
+
+# LLM API 配置
+llm-api-key: ""
+llm-base-url: "https://api.deepseek.com"
+llm-model: "deepseek-chat"
+
+# AI 人格设定
+personality: "温柔、体贴、爱说简单话的女朋友，总是安静地倾听，温柔地回应，回复不超过100字"
+
+# 监听模式：mention=只响应@（默认），all=响应所有群消息
+listen-mode: mention
+
+# AI 忽略的消息前缀（正则，命中则不触发 AI 回复）
+ignored-prefix:
+  - "^\\."         # 以 . 开头的消息
+  - "^\\d{4}\\s*"  # 4位数字开头（QQ号）
+
+##########################################
+# 敏感词过滤（AI 输出）
+##########################################
+# AI 对话回复是否过滤（LLM 输出不可控，建议开）
+sensitive-filter-ai: true
+# 是否启用（总开关）
+Enable: true
+# 替换字符
+Replacement: '*'
+# 本地词库
+Local:
+  - NMSL
+  - fuck
+  - shit
+# 云端词库
+Cloud-Thesaurus:
+  Enabled: true
+  Ignored: ['nt']
+  Urls:
+    - 'https://raw.githubusercontent.com/Yurinann/Filter-Thesaurus-Cloud/main/database.json'
+# 匹配时忽略的标点符号
+Ignored-Punctuations:
+  - '!'
+  - '.'
+  - ','
+  - '#'
+  - '$'
+  - '%'
+  - '&'
+  - '*'
+  - '('
+  - ')'
+  - '|'
+  - '?'
+  - '/'
+  - '@'
+  - '"'
+  - '\\'
+  - ';'
+  - '['
+  - ']'
+  - '{'
+  - '}'
+  - '+'
+  - '~'
+  - '-'
+  - '_'
+  - '='
+  - '^'
+  - '<'
+  - '>'
+  - ' '
+  - '　'
+  - '！'
+  - '。'
+  - '，'
+  - '￥'
+  - '（'
+  - '）'
+  - '？'
+  - '、'
+  - '"'
+  - "'"
+  - "'"
+  - '；'
+  - '【'
+  - '】'
+  - '——'
+  - '……'
+  - '《'
+  - '》'
+  - '`'

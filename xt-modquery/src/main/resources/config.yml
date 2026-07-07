@@ -1,0 +1,69 @@
+# Modquery: 模组查询
+
+#开关
+modsearch-enable: true
+
+# MC百科查资料开关
+mcmod-enable: false
+
+# 你的MCMOD cookie：
+# 1.解决：用浏览器（建议挂代理）打开 https://www.mcmod.cn 正常搜一次（如弹验证码先填），
+# 2.按 F12 → 网络 → 点搜索请求 → 请求标头里复制 Cookie。建议复制【整段 Cookie】
+# 3.（至少含 _uuid 和 MCMOD_SEED；带上登录态 Example_auth 则模组卡的「热评」也能拉取）。
+# 4.失效（搜不到/日志报验证码拦截）就重新复制一份。_uuid 长效，不常换。
+mcmod-cookie: ""
+
+# Modrinth 结果是否用 Markdown 渲染（true=markdown 卡片，false=纯文本）。
+modrinth-markdown: true
+
+# 中文别名（中文名 → 英文搜索词）
+mod-aliases:
+  创造: create
+  机械动力: create
+  工业: industrial-craft
+  拔刀剑: slashblade
+  植物魔法: botania
+  JEI: jei
+
+# 百度翻译（Modrinth/CurseForge 英文结果→中文；MCMOD 中文原生不需要翻译）
+# ⚠️ 第二个键是 appkey（密钥），不是 secret——填错名字翻译不生效。
+baidu-translate-appid: ""
+baidu-translate-appkey: ""
+
+# CurseForge API Key（可选，扩展搜索源）
+curseforge-api-key: ""
+
+# ===== LLM 辅助别名（可选）=====
+llm-enable: false
+llm-api-key: ""
+llm-base-url: "https://api.deepseek.com"
+llm-model: "deepseek-chat"
+
+# ===== 模组更新订阅（/modwatch）=====
+# 总开关 + 检查间隔（分钟）
+modwatch-enable: true
+modwatch-interval-minutes: 60
+
+# 单模组监控（/modwatch add <slug>）不指定时的默认 MC 版本 / 加载器
+modwatch-mc-version: "1.20.1"
+modwatch-loader: "forge"
+
+# ===== 新模组发现 feed =====
+# 自动发现"新出 / 新支持目标版本"的模组并推送（含老模组更新到该版本）
+modwatch-feed-enable: true
+# 关注的 MC 版本（逗号分隔多个）；改这里会重置发现基线
+modwatch-feed-versions: "26.2"
+# 关注的分类/加载器（逗号分隔），如 neoforge / fabric / forge
+modwatch-feed-categories: "neoforge"
+# 每次发现拉取条数 + 检查间隔（分钟）
+modwatch-feed-limit: 20
+modwatch-feed-interval-minutes: 120
+
+# 通知推送目标群（留空 = 推送到机器人已知的全部群）
+notify-target-groups: []      # 模组更新提醒的目标群
+modwatch-feed-notify: []      # 新模组发现的目标群
+
+# 预置监控的 Modrinth 模组（一般用 /modwatch add 动态添加；也可在此预置 slug）
+modwatch-list: []
+
+

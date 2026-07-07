@@ -1,0 +1,65 @@
+// 附属扩展插件：白名单+登录（绑定系统 + QQ 群侧白名单处理 + 平台原生锁/地图）
+// 二合一 jar：同时携带 plugin.yml(Bukkit) 与注解处理器生成的 velocity-plugin.json。
+// common-core 走 compileOnly——运行期从主插件 classloader 解析，绝不可 shade。
+// 本插件自有依赖（jedis / JDBC 驱动）走 shadow 打包进自身 jar。
+
+import org.gradle.api.attributes.java.TargetJvmVersion
+
+plugins {
+    id 'com.github.johnrengelman.shadow'
+}
+
+dependencies {
+    // ProtocolLib JVM 版本门禁放行（同 spigot/build.gradle）
+    components {
+        withModule('net.dmulloy2:ProtocolLib') {
+            allVariants {
+                attributes {
+                    attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 8)
+                }
+            }
+        }
+    }
+    compileOnly project(':common-core')
+    // 平台原生代码引用 XingtuBot/SpigotConfig 等主插件类（运行期由主插件提供）
+    compileOnly project(':spigot')
+    compileOnly project(':velocity')
+    compileOnly project(':bungeecord')
+
+    compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
+
+    compileOnly 'net.md-5:bungeecord-api:1.20-R0.2-SNAPSHOT'
+    compileOnly 'com.velocitypowered:velocity-api:3.1.1'
+    annotationProcessor 'com.velocitypowered:velocity-api:3.1.1'
+
+    // 加群二维码地图（ProtocolLib 纯发包，软依赖）
+    compileOnly 'net.dmulloy2:ProtocolLib:5.4.0'
+    // Velocity 端地图发包（PacketEvents，软依赖）
+    compileOnly 'com.github.retrooper:packetevents-velocity:2.7.0'
+
+    // 跨服 Redis 信道（RedisChannel/RedisManager）已收归核心：jedis 由核心 bundle 打包，
+    // 本插件只经 CrossServerChannel 接口取用核心创建的实例，不再自带 jedis。
+    // 数据库驱动由主插件 classloader 提供（common-core runtimeOnly）。
+}
+
+base {
+    archivesName = 'XingtuBot-Auth'
+}
+
+shadowJar {
+    archiveBaseName.set('XingtuBot-Auth')
+    archiveClassifier.set('')
+
+    mergeServiceFiles()
+}
+
+build.dependsOn shadowJar
+
+processResources {
+    def props = [version: version]
+    inputs.properties props
+    filteringCharset 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}

@@ -1,0 +1,10 @@
+name: XingtuBot-Chatlink
+version: '${version}'
+main: org.windy.xingtubot.ext.xtchatlink.ChatlinkBukkitPlugin
+authors: [ 风吟 ]
+depend:
+  - XingtuBot
+commands:
+  messagereply:
+    description: 回复某位群成员
+    usage: /messagereply <formId> <内容>

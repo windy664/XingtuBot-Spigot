@@ -1,0 +1,5 @@
+name: XingtuBot-Group
+version: '2.2.1'
+main: org.windy.xingtubot.ext.xtgroup.GroupBungeeCordPlugin
+depends: [XingtuBotBungeeCord]
+author: 风吟

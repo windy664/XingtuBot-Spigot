@@ -1,8 +1,13 @@
 dependencies {
-    implementation project(':common')
+    implementation project(':common-core')
+    // 功能模块经 ServiceLoader 在 bundle 装配，平台不直接依赖任何 feature 模块。
 
     compileOnly 'com.velocitypowered:velocity-api:3.1.1'
     annotationProcessor 'com.velocitypowered:velocity-api:3.1.1'
+
+    // PacketEvents（Velocity 平台）：软依赖，仅用于「加群二维码地图」代理端发包。
+    // 运行期由服务器的 PacketEvents 插件提供；没装则回退到聊天提示（不发地图）。
+    compileOnly 'com.github.retrooper:packetevents-velocity:2.7.0'
 
     // 读取 velocity 端配置；打包时由 bundle 重定位，避免与平台自带版本冲突
     implementation 'org.yaml:snakeyaml:1.33'

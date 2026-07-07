@@ -1,10 +1,15 @@
 package org.windy.xingtubot.bukkit;
 
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
+import org.windy.xingtubot.common.api.QqOpenApiClient;
+import org.windy.xingtubot.common.binding.BindingEntry;
+import org.windy.xingtubot.common.binding.BindingRepository;
+import org.windy.xingtubot.common.queue.PendingMessageQueue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -14,7 +19,8 @@ import java.util.stream.Collectors;
 
 public class CommandHandler implements CommandExecutor, TabCompleter {
 
-    private static final List<String> SUB_COMMANDS = Arrays.asList("reload", "connect", "reply");
+    private static final List<String> SUB_COMMANDS = Arrays.asList(
+            "reload", "connect", "reply", "status", "list", "debug");
 
     private final XingtuBot plugin;
 
@@ -25,48 +31,215 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
-            sender.sendMessage("§c用法: /xtb <reload|connect|reply>");
+            sender.sendMessage("§e用法: /xtb <子命令>");
+            sender.sendMessage("§7  reload     - 重新加载配置");
+            sender.sendMessage("§7  connect    - 通信模式说明");
+            sender.sendMessage("§7  reply      - 回复最后一条群消息");
+            sender.sendMessage("§7  status     - 运行状态");
+            sender.sendMessage("§7  list       - 绑定列表");
+            sender.sendMessage("§7  debug      - 切换调试模式");
+            sender.sendMessage("§7  proactive <群id> [消息] - 测试主动消息");
+            sender.sendMessage("§7  status  - 查看运行状态");
+            sender.sendMessage("§7  list    - 查看绑定列表");
+            sender.sendMessage("§7  debug   - 切换调试模式");
             return true;
         }
 
         switch (args[0].toLowerCase()) {
             case "reload":
-                plugin.reloadConfig();
-                sender.sendMessage("§a配置已重新加载。");
+                handleReload(sender);
                 return true;
 
             case "connect":
-                if (plugin.getBotBridge() == null) {
-                    sender.sendMessage("§c机器人未初始化。");
-                    return true;
-                }
-                try {
-                    plugin.getBotBridge().reconnect();
-                    sender.sendMessage("§a已尝试重新连接 WebSocket。");
-                } catch (Exception e) {
-                    sender.sendMessage("§c连接失败: " + e.getMessage());
-                }
+                handleConnect(sender);
                 return true;
 
             case "reply":
-                if (args.length < 2) {
-                    sender.sendMessage("§c用法: /xtb reply <消息>");
-                    return true;
-                }
-                String content = String.join(" ", args).substring(args[0].length() + 1);
-                GuildMessageEvent lastEvent = plugin.getLastEvent();
-                if (lastEvent == null) {
-                    sender.sendMessage("§c当前没有可以回复的事件。");
-                    return true;
-                }
-                lastEvent.reply(content);
-                sender.sendMessage("§a已发送回复: " + content);
+                handleReply(sender, args);
+                return true;
+
+            case "status":
+                handleStatus(sender);
+                return true;
+
+            case "list":
+                handleList(sender);
+                return true;
+
+            case "debug":
+                handleDebug(sender);
+                return true;
+
+            case "proactive":
+                handleProactive(sender, args);
                 return true;
 
             default:
-                sender.sendMessage("§c未知子命令: " + args[0]);
+                sender.sendMessage("§c未知子命令: " + args[0] + "，使用 /xtb 查看帮助");
+                sender.sendMessage("§c未知子命令: " + args[0] + "，使用 /xtb 查看帮助");
                 return true;
         }
+    }
+
+    private void handleReload(CommandSender sender) {
+        plugin.reloadConfig();
+
+        // 热重载各模块的可变配置
+        List<String> reloaded = new ArrayList<>();
+
+        // 白名单/绑定由 xt-auth 附属插件管理，其配置热重载在 xt-auth 自身（本命令只重载主插件 config）。
+
+        // 附属扩展插件（xt-chatlink 等）各自管理独立配置，/xtb reload 不影响它们。
+        // 如需重载附属配置，请重启服务器或使用附属自身的命令。
+
+        sender.sendMessage("§a主插件配置已重新加载，已刷新: §f" + String.join(", ", reloaded));
+        sender.sendMessage("§7附属扩展插件（xt-*）各自独立配置，重启服务器生效");
+        sender.sendMessage("§7以下配置需重启服务器才生效: openapi-app-id, server-role 等");
+    }
+
+    private void handleConnect(CommandSender sender) {
+        sender.sendMessage("§e是否跑 bot 由 config.yml 的 server-role 控制（off=不跑），修改后需重启服务器。");
+        sender.sendMessage("§7当前 server-role: " + plugin.getConfig().getString("server-role", "auto"));
+    }
+
+    private void handleReply(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage("§c用法: /xtb reply <消息>");
+            return;
+        }
+        String content = String.join(" ", args).substring(args[0].length() + 1);
+        GuildMessageEvent lastEvent = plugin.getLastEvent();
+        if (lastEvent == null) {
+            sender.sendMessage("§c当前没有可以回复的事件。");
+            return;
+        }
+        lastEvent.reply(content);
+        sender.sendMessage("§a已发送回复: " + content);
+    }
+
+    private void handleStatus(CommandSender sender) {
+        sender.sendMessage("§e╔══════════════════════════╗");
+        sender.sendMessage("§e║   §6昕途机器人运行状态   §e║");
+        sender.sendMessage("§e╠══════════════════════════╣");
+
+        // 通信状态
+        String mode = plugin.getConfig().getString("server-role", "auto");
+        String connStatus;
+        if ("off".equalsIgnoreCase(mode) || "none".equalsIgnoreCase(mode)) {
+            connStatus = "§c已关闭";
+        } else {
+            // 仅 gateway 一种真实通信方式（QQ 官方 WebSocket 网关）；webhook/websocket 为旧值兼容，均走 gateway。
+            connStatus = "§aGateway 模式";
+        }
+        sender.sendMessage("§e║ §7通信模式: §f" + mode + " " + connStatus);
+
+        // 在线人数
+        sender.sendMessage("§e║ §7在线玩家: §f" + Bukkit.getOnlinePlayers().size()
+                + "/" + Bukkit.getMaxPlayers());
+
+        // 绑定数据
+        BindingRepository store = getBindingStore();
+        if (store != null) {
+            try {
+                int boundCount = store.all().size();
+                sender.sendMessage("§e║ §7已绑定: §f" + boundCount + " 人");
+            } catch (Exception e) {
+                sender.sendMessage("§e║ §7已绑定: §f无法获取");
+            }
+        }
+
+        // 部署角色（本服 bot 由谁跑：local/slave/auto，与白名单无关；白名单状态见 XingtuBot-Auth）
+        String role = plugin.getConfig().getString("server-role",
+                plugin.getConfig().getString("whitelist-role", "auto"));
+        sender.sendMessage("§e║ §7部署角色: §f" + role);
+
+        // Bot 名称（QQ 官方昵称，连接后自动获取）
+        sender.sendMessage("§e║ §7机器人名: §f" + org.windy.xingtubot.common.BotIdentity.getName());
+
+        sender.sendMessage("§e╚══════════════════════════╝");
+    }
+
+    private void handleList(CommandSender sender) {
+        BindingRepository store = getBindingStore();
+        if (store == null) {
+            sender.sendMessage("§c绑定数据不可用（白名单未启用或为 slave 模式）。");
+            return;
+        }
+        try {
+            List<BindingEntry> all = store.all();
+            if (all.isEmpty()) {
+                sender.sendMessage("§7暂无绑定记录。");
+                return;
+            }
+            sender.sendMessage("§e绑定列表（" + all.size() + " 人）:");
+            int i = 0;
+            for (BindingEntry entry : all) {
+                i++;
+                boolean online = Bukkit.getPlayerExact(entry.player) != null;
+                String status = online ? "§a●" : "§7○";
+                sender.sendMessage(status + " §f" + entry.player + " §7- " + entry.openid);
+                if (i >= 50) {
+                    sender.sendMessage("§7... 仅显示前 50 条");
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            sender.sendMessage("§c获取绑定列表失败: " + e.getMessage());
+        }
+    }
+
+    private void handleDebug(CommandSender sender) {
+        boolean current = plugin.getConfig().getBoolean("debug", false);
+        plugin.getConfig().set("debug", !current);
+        plugin.saveConfig();
+        sender.sendMessage("§a调试模式已" + (!current ? "§c开启" : "§a关闭") + "§a。");
+    }
+
+    private void handleProactive(CommandSender sender, String[] args) {
+        if (args.length < 2) {
+            sender.sendMessage("§e用法: /xtb proactive <群openid> [消息内容]");
+            sender.sendMessage("§7测试主动消息推送（不依赖被动回复窗口）");
+            return;
+        }
+        String groupOpenid = args[1];
+        String content = args.length > 2
+                ? String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length))
+                : "这是一条主动消息测试";
+
+        String appId = plugin.getConfig().getString("openapi-app-id", "").trim();
+        String secret = plugin.getConfig().getString("openapi-client-secret", "").trim();
+        if (appId.isEmpty() || secret.isEmpty()) {
+            sender.sendMessage("§c未配置 openapi-app-id / openapi-client-secret");
+            return;
+        }
+        boolean sandbox = plugin.getConfig().getBoolean("openapi-sandbox", false);
+        QqOpenApiClient api =
+                new QqOpenApiClient(appId, secret,
+                        sandbox ? QqOpenApiClient.API_SANDBOX
+                                : QqOpenApiClient.API_PROD, null);
+
+        final String msg = "🔔 [主动消息] " + content;
+        sender.sendMessage("§e正在发送主动消息到群 " + groupOpenid + "...");
+
+        org.bukkit.Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            try {
+                api.sendProactiveGroupMessage(groupOpenid, msg);
+                sender.sendMessage("§a✅ 主动消息发送成功！");
+            } catch (Exception e) {
+                // 主动消息失败 → 回退到被动队列
+                PendingMessageQueue.getInstance()
+                        .offer(groupOpenid, msg);
+                sender.sendMessage("§e⚠️ 主动消息失败（无权限），已回退到被动队列: " + e.getMessage());
+                sender.sendMessage("§7下次群里有人 @机器人 时会一起发出");
+            }
+        });
+    }
+
+    private BindingRepository getBindingStore() {
+        // 绑定库由 xt-auth 注册到服务总线（XingtuBotHost），从那取，不再依赖主插件内的白名单类。
+        org.windy.xingtubot.common.module.XingtuBotHost host =
+                Bukkit.getServicesManager().load(org.windy.xingtubot.common.module.XingtuBotHost.class);
+        return host != null ? host.getService(BindingRepository.class) : null;
     }
 
     @Override

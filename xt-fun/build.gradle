@@ -1,0 +1,25 @@
+// 附属扩展插件：群娱乐（天气/运势/随机图/文字生图/富消息 demo）
+// 二合一 jar。common-core 走 compileOnly。
+
+dependencies {
+    compileOnly project(':common-core')
+
+    compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
+
+    compileOnly 'net.md-5:bungeecord-api:1.20-R0.2-SNAPSHOT'
+    compileOnly 'com.velocitypowered:velocity-api:3.1.1'
+    annotationProcessor 'com.velocitypowered:velocity-api:3.1.1'
+}
+
+base {
+    archivesName = 'XingtuBot-Fun'
+}
+
+processResources {
+    def props = [version: version]
+    inputs.properties props
+    filteringCharset 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}

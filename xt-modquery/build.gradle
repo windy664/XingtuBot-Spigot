@@ -1,0 +1,49 @@
+// 附属扩展插件：模组查询+翻译（Modrinth 搜索 / MCMOD 直查 / 百度翻译）
+// 二合一 jar。common-core 走 compileOnly；gson 由平台(Spigot/Velocity)运行期提供。
+// Jsoup（解析 mcmod HTML）平台不提供，必须 shadow 进本 jar 并重定位。
+// loadPriority=10（提供 Translator 服务，需先于 xt-modwatch/xt-github 加载）
+
+plugins {
+    id 'com.github.johnrengelman.shadow'
+}
+
+dependencies {
+    compileOnly project(':common-core')
+
+    compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
+
+    compileOnly 'net.md-5:bungeecord-api:1.20-R0.2-SNAPSHOT'
+    compileOnly 'com.velocitypowered:velocity-api:3.1.1'
+    annotationProcessor 'com.velocitypowered:velocity-api:3.1.1'
+
+    // gson 由平台运行期提供（Spigot/Velocity 自带 com.google.gson）
+    compileOnly 'com.google.code.gson:gson:2.10.1'
+
+    // ─── 本插件自有依赖（shadow 打包进 jar）───
+    // 解析 mcmod 返回的 HTML 网页（搜索结果 / 模组详情）
+    implementation 'org.jsoup:jsoup:1.17.2'
+}
+
+base {
+    archivesName = 'XingtuBot-Modquery'
+}
+
+shadowJar {
+    archiveBaseName.set('XingtuBot-Modquery')
+    archiveClassifier.set('')
+
+    relocate 'org.jsoup', 'org.lib.jsoup'
+
+    mergeServiceFiles()
+}
+
+build.dependsOn shadowJar
+
+processResources {
+    def props = [version: version]
+    inputs.properties props
+    filteringCharset 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}

@@ -1,0 +1,29 @@
+// 附属扩展插件：群功能（迎送词 + 自定义回复 + 自定义指令）
+// 二合一 jar。common-core 走 compileOnly。
+
+dependencies {
+    compileOnly project(':common-core')
+
+    compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
+
+    compileOnly 'net.md-5:bungeecord-api:1.20-R0.2-SNAPSHOT'
+    compileOnly 'com.velocitypowered:velocity-api:3.1.1'
+    annotationProcessor 'com.velocitypowered:velocity-api:3.1.1'
+
+    // 自定义回复/命令解析
+    implementation 'org.yaml:snakeyaml:1.33'
+    implementation 'com.google.code.gson:gson:2.10.1'
+}
+
+base {
+    archivesName = 'XingtuBot-Group'
+}
+
+processResources {
+    def props = [version: version]
+    inputs.properties props
+    filteringCharset 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}

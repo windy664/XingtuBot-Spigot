@@ -1,0 +1,20 @@
+# XingtuBot-Github: GitHub / Gitee 项目追踪配置
+
+# 功能开关
+github-watch-enable: true
+
+# 轮询间隔（秒）
+# 建议保持 300 秒（5分钟）。由于全面走公共镜像源，过低的频率极易触发镜像站点的 IP 频控导致断流。
+github-poll-interval-seconds: 300
+
+# 推送目标群（群 openid 列表，"*" = 推送到全部已知群）
+allowed-groups:
+  - "*"
+
+# GitHub API 国内加速镜像源（国内服务器必备）
+# 【机制说明】针对 GitHub 仓库，插件将彻底跳过直连，按顺序依次尝试以下镜像源。
+# 如果第一个失效，会瞬间自动切换到下一个。Gitee 仓库则不受此影响，默认直连。
+# 格式：镜像地址前缀（必须支持代理 GitHub API 路径）
+github-mirrors:
+  - "https://gh-proxy.com/"
+  - "https://mirror.ghproxy.com/"

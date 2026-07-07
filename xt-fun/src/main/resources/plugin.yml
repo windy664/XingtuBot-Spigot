@@ -1,0 +1,6 @@
+name: XingtuBot-Fun
+version: '${version}'
+main: org.windy.xingtubot.ext.xtfun.FunBukkitPlugin
+authors: [ 风吟 ]
+depend:
+  - XingtuBot

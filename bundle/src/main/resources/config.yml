@@ -1,0 +1,109 @@
+# 调试模式：输出原始 JSON 事件到控制台（排查 openid / group_openid 时打开）
+debug: false
+
+####################################
+# QQ 开放平台凭据（运行 bot 必需）
+# 是否运行 bot 由下方 server-role 决定（off=不运行）；旧的 bot-mode 键已废弃删除。
+####################################
+openapi-app-id: ""
+openapi-client-secret: ""
+# 沙箱环境（true=sandbox，false=正式）
+openapi-sandbox: false
+
+####################################
+# 机器人超级管理员（按 openid 识别，QQ 自带不可伪造）
+# openid 可在 debug 日志「收到事件」里的 author.member_openid 看到
+####################################
+admin-openids:
+  - ""
+
+####################################
+# 群聊白名单（机器人只响应这些群的消息）
+#   ["*"] 或 []          = 全部群允许（默认）
+#   ["群openid1", ...]   = 只允许这些群
+# 单聊（C2C）不受此限制。群 openid 获取：开 debug → 群里 @机器人 → 看 group_openid。
+####################################
+allowed-groups:
+  - "*"
+
+####################################
+# 群消息监听模式
+#   mention = 只响应 @机器人 的消息（默认）
+#   all     = 响应所有群消息（无需@；需在 QQ 开放平台开启「接收所有群消息」权限才会真正收到）
+# 注：白名单/登录等关键流程无论哪种模式都接收非@消息（玩家直接发「绑定」/「登录」即可）。
+####################################
+listen-mode: mention
+
+####################################
+# 回复形态（所有文本回复统一走 Markdown 渲染——产品特性，需机器人具备原生 Markdown 权限）
+#   text       = 只发文字（默认）
+#   voice      = 只发语音（需安装语音合成器，否则自动退回纯文字）
+#   text+voice = 先文字后语音（同上）
+# 说明：核心<不内置> TTS 合成。reply-mode 含 voice 时，会用 ServiceLoader 发现一个
+#       VoiceSynthesizer 实现把回复文字合成音频；没装就只发文字（不报错）。
+#       若你已有现成音频，直接调 BotMessageEvent.replyVoice(url)/replyVoiceData(bytes) 即可。
+####################################
+reply-mode: text
+# 语音音色提示（仅供 VoiceSynthesizer 实现自行读取；核心不使用此值）
+tts-voice: ""
+
+# 注：「机器人消息回显到游戏」(echo-bot-to-game / echo-format) 属群服互联范畴，
+#     已迁至 xt-chatlink 扩展的 config.yml，本核心配置不再持有。
+
+####################################
+# /qq 命令（游戏内向 QQ 群发消息）的权限节点（默认仅 OP；可用 LuckPerms 分配）
+####################################
+qq-send-permission: "xingtubot.qq.send"
+
+####################################
+# 部署角色（大脑/手脚拓扑的【唯一】判定来源——本服由谁跑 bot，以及附属插件如何接入）
+#   auto             = 自动探测：Bukkit 挂代理(读 spigot.yml/paper-global.yml 的转发开关)→手脚，
+#                      独立 Bukkit→本地大脑；Velocity/BungeeCord 代理端→大脑。
+#   local/standalone = 强制本机跑 bot（单机 Bukkit，即本地大脑）
+#   slave            = 强制手脚模式（挂代理的 Bukkit 子服，本机 bot 禁用，由代理大脑统一接管跨服）
+#   off / none       = 不跑 bot（代理端=不当大脑、不建 Bridge；单机=只装插件不连 QQ）
+# 说明：
+#   1. 本键是机器人框架级判定，结果经 host.isBrain() 暴露给附属插件统一遵循；
+#      XingtuBot-Auth(白名单)不再有独立的 whitelist-role，会自动跟随本键，无需重复配置。
+#   2. 白名单总开关 whitelist-enable 仍在 XingtuBot-Auth 附属插件的 config。
+#   3. 三端通用：Bukkit 子服用 auto/local/slave/off；代理端默认即大脑，只有填 off 才不当大脑。
+#      （旧的 bot-mode 键已废弃删除，其"off"语义并入本键；旧配置的 bot-mode: off 仍兼容生效。）
+####################################
+server-role: auto
+
+####################################
+# 跨服信道（通用基础设施：PAPI / 远程控制台 / 群服互联 / 白名单 都经它在代理大脑与 Bukkit 子服间通信）
+# 仅在「代理大脑 + Bukkit 子服」部署下有意义；单机本地大脑用不到。
+#   plugin-message = 原生插件消息（默认，零依赖）。靠玩家连接转发：子服发包需该子服有在线玩家当“载体”，
+#                    控制台下发到“空子服”会失败。
+#   redis          = Redis 发布订阅（推荐 Velocity/BungeeCord 主导用）。无需在线玩家即可双向通信，
+#                    控制台也能下发到没人的子服；需一台 Redis。
+#   both           = 等同 redis（有 Redis 时一律优先走 Redis），同时保留 PluginMessage 监听做兜底（过渡期）。
+#
+# ⚠️ 全网一致：代理大脑与所有 Bukkit 子服必须填【相同】的 cross-server-channel，且连同一台 Redis。
+cross-server-channel: redis
+
+# 本服在跨服通信中的名称（用于区分来源 / 控制台定向）。多子服请各自取不同的名字。
+server-name: "server"
+
+# Redis 连接（仅当 cross-server-channel 为 redis / both 且 redis-host 非空时启用）。
+# 大脑与所有子服都要填同一套连接。示例：
+#   redis-host: "127.0.0.1"
+redis-host: "127.0.0.1"
+redis-port: 6379
+redis-password: ""
+
+####################################
+# 数据存储（核心用于 openid↔昵称缓存；绑定数据的存储同样读此项，详见 XingtuBot-Auth）
+#   json   = 单文件（默认，零配置）
+#   sqlite = 单文件 .db
+#   mysql  = MySQL（多子服共享，推荐生产）
+####################################
+storage-type: json
+# 以下仅 storage-type: mysql 时需要
+mysql-host: "127.0.0.1"
+mysql-port: 3306
+mysql-database: "xingtubot"
+mysql-user: "root"
+mysql-password: ""
+
