@@ -34,6 +34,8 @@ public class BungeeCordBridge implements Listener {
     private final Map<String, Consumer<String>> papiCallbacks = new ConcurrentHashMap<>();
     private CrossServerChannel redisChannel;
     private Consumer<String> onUnboundJoin;
+    // packetevents 登录锁（xt-auth 注入，可选）
+    private volatile org.windy.xingtubot.common.lock.PlayerLockManager lockManager;
 
     /** xt-auth / 主插件提供 BindingService（惰性解析；可能为 null = 无白名单）。 */
     private volatile java.util.function.Supplier<BindingService> serviceProvider;
@@ -90,6 +92,11 @@ public class BungeeCordBridge implements Listener {
         });
     }
     public void setOnUnboundJoin(Consumer<String> callback) { this.onUnboundJoin = callback; }
+
+    /** 注入 packetevents 登录锁管理器（xt-auth 按 config 决定是否启用）。 */
+    public void setLockManager(org.windy.xingtubot.common.lock.PlayerLockManager lockManager) {
+        this.lockManager = lockManager;
+    }
 
     public void dispatchConsole(String targetServerName, String command, Consumer<String> onResult) {
         String requestId = UUID.randomUUID().toString();
@@ -245,6 +252,7 @@ public class BungeeCordBridge implements Listener {
         BindingService service = service();
         if (service == null) return; // 无白名单服务，跳过进服判定
         if (!service.isPlayerBound(player)) {
+            lock(player);
             sendToPlayerServer(player, BridgeCodec.encode(CrossServerProtocol.Type.NEED_QQ, player));
             auth.titlePlayer(player, "§6§l欢迎来到本服", "§f请在聊天框输入 QQ 号开始白名单绑定");
             auth.messagePlayer(player, "§e欢迎！请在聊天框输入你的 §bQQ号 §e完成白名单绑定");
@@ -252,14 +260,29 @@ public class BungeeCordBridge implements Listener {
         } else if (!service.isLoggedInSession(player)) {
             service.clearExpired();
             if (service.hasPending(player)) {
+                unlock(player);
                 auth.login(player);
                 service.clearSession(player);
                 auth.titlePlayer(player, "§a§l登录成功", "§f欢迎回来！");
             } else {
+                lock(player);
                 sendToPlayerServer(player, BridgeCodec.encode(CrossServerProtocol.Type.NEED_QQ, player));
                 auth.messagePlayer(player, "§e请在群里发送 §b@机器人 登录 §e完成白名单验证");
             }
+        } else {
+            // 已登录（跨子服切换）
+            unlock(player);
         }
+    }
+
+    private void lock(String player) {
+        org.windy.xingtubot.common.lock.PlayerLockManager lm = this.lockManager;
+        if (lm != null) lm.lock(player);
+    }
+
+    private void unlock(String player) {
+        org.windy.xingtubot.common.lock.PlayerLockManager lm = this.lockManager;
+        if (lm != null) lm.unlock(player);
     }
 
     private void sendToPlayerServer(String player, byte[] data) {

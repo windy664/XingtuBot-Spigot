@@ -55,6 +55,9 @@ public class WhitelistModule implements Listener {
 
     private static WhitelistModule instance;
 
+    // packetevents 登录锁（独立模式，无代理时使用）
+    private BukkitPlayerLock bukkitLock;
+
     public WhitelistModule(XingtuBot plugin) {
         this.plugin = plugin;
         this.spigotConfig = new SpigotConfig(plugin.getConfig());
@@ -96,16 +99,20 @@ public class WhitelistModule implements Listener {
             }
         }
 
+        // ===== packetevents 登录锁（Bukkit 端包级拦截） =====
+        if (packetEventsAvailable()) {
+            bukkitLock = new BukkitPlayerLock(plugin, service);
+            com.github.retrooper.packetevents.PacketEvents.getAPI().getEventManager()
+                    .registerListener(new BukkitPacketListener(bukkitLock));
+            plugin.getLogger().info("[白名单] packetevents 登录锁已启用（Bukkit 端包级拦截）");
+        }
+
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        // 【搁置】PlayerLockListener：Velocity 端已用 packetevents 实现包级登录锁，
-        // Bukkit 端的事件锁不再需要。代码保留，仅注释注册行。
-        // plugin.getServer().getPluginManager().registerEvents(
-        //         new PlayerLockListener(plugin, lockState, awaitingQQ), plugin);
 
         // 定时提醒：每隔几秒给锁定玩家发提示
         startReminderTask(plugin);
 
-        plugin.getLogger().info("[白名单] 本地模式监听器已注册（绑定+定时提醒）——锁已迁移到 Velocity 端 packetevents");
+        plugin.getLogger().info("[白名单] 本地模式监听器已注册（绑定+定时提醒）");
     }
 
     public static WhitelistModule getInstance() {
@@ -139,17 +146,27 @@ public class WhitelistModule implements Listener {
 
     // ==================== 游戏内事件 ====================
 
+    private void lock(String player) {
+        if (bukkitLock != null) bukkitLock.lock(player);
+        else lockState.lock(player);
+    }
+
+    private void unlock(String player) {
+        if (bukkitLock != null) bukkitLock.unlock(player);
+        else lockState.unlock(player);
+    }
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         String name = player.getName();
         plugin.getLogger().info("[白名单] onPlayerJoin 触发: " + name + "，已锁定");
-        lockState.lock(name); // 进服一律先锁
+        lock(name); // 进服一律先锁
         if (service.isPlayerBound(name)) {
             // 同设备信任期内免密自动登录（对标 Velocity）：同 IP 且未过期 → 直接解锁，不打扰群。
             if (autoLoginAllowed(name, playerIp(player))) {
                 service.markLoggedInSession(name);
-                lockState.unlock(name);
+                unlock(name);
                 JoinQrMap.cleanup(player);
                 player.sendTitle("§a§l欢迎回来", "§f同设备信任期内已自动登录", 10, 60, 15);
                 player.sendMessage("§a✅ 同设备信任期内，已为你自动登录，祝游戏愉快！");
@@ -168,7 +185,8 @@ public class WhitelistModule implements Listener {
             JoinQrMap.sendWithQr(plugin, player, "§e你已登记QQ，请在群里发送「§e§l" + bindWord
                     + "§e」完成绑定（5 分钟内有效）");
         } else {
-            awaitingQQ.add(name);
+            if (bukkitLock != null) bukkitLock.lock(name);
+            else awaitingQQ.add(name);
             player.sendTitle("§6§l欢迎来到本服", "§f请在聊天框输入 QQ 号开始白名单绑定", 10, 60, 15);
             // 输入 QQ 号阶段【不发】加群二维码：此时玩家还不需要进群，二维码会误导。
             // 二维码改在登记成功后（onPlayerChat 成功）才出现——那时才需要去群里发「绑定」。
@@ -180,6 +198,10 @@ public class WhitelistModule implements Listener {
     public void onPlayerChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
         String name = player.getName();
+
+        // packetevents 模式下，聊天由 BukkitPacketListener 处理，这里跳过
+        if (bukkitLock != null) return;
+
         if (!awaitingQQ.contains(name)) return;
 
         event.setCancelled(true);
@@ -203,6 +225,7 @@ public class WhitelistModule implements Listener {
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player p = event.getPlayer();
         String name = p.getName();
+        if (bukkitLock != null) bukkitLock.onDisconnect(name);
         awaitingQQ.remove(name);
         lockState.clear(name);
         // 退出前若本会话已登录，按当前 IP 武装自动登录信任期（对标 VelocityBridge.onDisconnect）：
@@ -250,6 +273,12 @@ public class WhitelistModule implements Listener {
 
     private void startReminderTask(Plugin plugin) {
         Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            // packetevents 模式：由 BukkitPlayerLock.tickReminder() 处理
+            if (bukkitLock != null) {
+                bukkitLock.tickReminder();
+                return;
+            }
+            // 旧模式：由 lockState + awaitingQQ 处理
             for (Player player : Bukkit.getOnlinePlayers()) {
                 String name = player.getName();
                 if (!lockState.isLocked(name)) continue;
@@ -272,6 +301,17 @@ public class WhitelistModule implements Listener {
                 }
             }
         }, REMINDER_INTERVAL, REMINDER_INTERVAL);
+    }
+
+    // ==================== 工具方法 ====================
+
+    private static boolean packetEventsAvailable() {
+        try {
+            Class.forName("com.github.retrooper.packetevents.PacketEvents");
+            return com.github.retrooper.packetevents.PacketEvents.getAPI() != null;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     // ==================== 自动登录信任期（对标 VelocityBridge）====================
