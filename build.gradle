@@ -29,6 +29,8 @@ subprojects {
             name = 'dmulloy2'
             url = 'https://repo.dmulloy2.net/repository/public/'
         }
+        maven { url = 'https://repo.codemc.io/repository/maven-releases/' }
+        maven { url = 'https://repo.codemc.io/repository/maven-snapshots/' }
     }
 
     def targetJavaVersion = 8

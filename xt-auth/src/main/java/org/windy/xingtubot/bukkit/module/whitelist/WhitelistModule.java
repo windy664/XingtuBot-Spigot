@@ -97,13 +97,15 @@ public class WhitelistModule implements Listener {
         }
 
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        plugin.getServer().getPluginManager().registerEvents(
-                new PlayerLockListener(plugin, lockState, awaitingQQ), plugin);
+        // 【搁置】PlayerLockListener：Velocity 端已用 packetevents 实现包级登录锁，
+        // Bukkit 端的事件锁不再需要。代码保留，仅注释注册行。
+        // plugin.getServer().getPluginManager().registerEvents(
+        //         new PlayerLockListener(plugin, lockState, awaitingQQ), plugin);
 
         // 定时提醒：每隔几秒给锁定玩家发提示
         startReminderTask(plugin);
 
-        plugin.getLogger().info("[白名单] 本地模式监听器已注册（绑定+锁+定时提醒）");
+        plugin.getLogger().info("[白名单] 本地模式监听器已注册（绑定+定时提醒）——锁已迁移到 Velocity 端 packetevents");
     }
 
     public static WhitelistModule getInstance() {

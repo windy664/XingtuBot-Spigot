@@ -20,6 +20,7 @@ dependencies {
             }
         }
     }
+
     compileOnly project(':common-core')
     // 平台原生代码引用 XingtuBot/SpigotConfig 等主插件类（运行期由主插件提供）
     compileOnly project(':spigot')
@@ -32,10 +33,16 @@ dependencies {
     compileOnly 'com.velocitypowered:velocity-api:3.1.1'
     annotationProcessor 'com.velocitypowered:velocity-api:3.1.1'
 
+    // ==========================================
+    // 发包与网络底层（软依赖，运行期由外部插件提供）
+    // ==========================================
     // 加群二维码地图（ProtocolLib 纯发包，软依赖）
     compileOnly 'net.dmulloy2:ProtocolLib:5.4.0'
-    // Velocity 端地图发包（PacketEvents，软依赖）
-    compileOnly 'com.github.retrooper:packetevents-velocity:2.7.0'
+
+    // PacketEvents 核心发包依赖 (CodeMC 仓库)
+    compileOnly 'com.github.retrooper:packetevents-api:2.13.0' // 核心API，必写
+    compileOnly 'com.github.retrooper:packetevents-velocity:2.13.0' // Velocity端实现
+    compileOnly 'com.github.retrooper:packetevents-spigot:2.13.0' // Spigot端实现（如果你要在子服兜底发包）
 
     // 跨服 Redis 信道（RedisChannel/RedisManager）已收归核心：jedis 由核心 bundle 打包，
     // 本插件只经 CrossServerChannel 接口取用核心创建的实例，不再自带 jedis。

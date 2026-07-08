@@ -18,7 +18,9 @@ import org.windy.xingtubot.common.module.XingtuBotHostProvider;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.module.AuthModule;
 import org.windy.xingtubot.velocity.VelocityBridge;
+import org.windy.xingtubot.velocity.VelocityDirectAuthAdapter;
 import org.windy.xingtubot.velocity.VelocityJoinQrMap;
+import org.windy.xingtubot.velocity.VelocityPlayerLock;
 import org.windy.xingtubot.velocity.XingtuBotVelocity;
 
 import java.nio.file.Path;
@@ -42,6 +44,7 @@ public class AuthVelocityPlugin {
     private final Logger logger;
     private final Path dataDir;
     private BotModule module;
+    private VelocityPlayerLock lockManager;
 
     @Inject
     public AuthVelocityPlugin(ProxyServer proxy, Logger logger, @DataDirectory Path dataDir) {
@@ -82,6 +85,40 @@ public class AuthVelocityPlugin {
         }
         module = ExtensionBootstrap.enable(host, authModule, config, botLogger, dataDir.toFile());
 
+        // ===== packetevents 登录锁（Velocity 端包级拦截） =====
+        // 在 ExtensionBootstrap.enable() 之后初始化，因为 BindingService 此时才注册到服务总线。
+        if (bridge != null && packetEventsAvailable()) {
+            org.windy.xingtubot.common.binding.BindingService bindingService =
+                    host != null ? host.getService(org.windy.xingtubot.common.binding.BindingService.class) : null;
+            if (bindingService != null) {
+                lockManager = new VelocityPlayerLock(proxy, this, bindingService);
+
+                // 加群二维码地图提供者（TODO：以后实现地图发送，先留口子）
+                // lockManager.setQrMapProvider(player -> VelocityJoinQrMap.giveIfEnabled(proxy, config, player.getUsername()));
+
+                // QQ 登记成功后的回调（加群二维码等）
+                lockManager.setOnCodeIssued(name -> {
+                    // TODO: 加群二维码地图（以后实现）
+                    // VelocityJoinQrMap.giveIfEnabled(proxy, config, name);
+                });
+
+                // 替换 AuthAdapter：login/register 直接在 Velocity 侧解锁，不走 PluginMessage 到子服
+                VelocityDirectAuthAdapter directAuth = new VelocityDirectAuthAdapter(proxy, lockManager);
+                bridge.setLockManager(lockManager);
+                // 注意：不替换 bridge 的 authAdapter，因为 bridge 内部的 auth 引用是 final 的。
+                // 改为让 BindingService 使用新的 directAuth（通过重新注入）。
+                authModule.setAuthAdapter(directAuth);
+
+                // 注册 packetevents 包拦截器
+                com.github.retrooper.packetevents.PacketEvents.getAPI().getEventManager()
+                        .registerListener(new org.windy.xingtubot.velocity.PlayerLockPacketListener(proxy, lockManager));
+
+                logger.info("[Auth] packetevents 登录锁已启用（Velocity 端包级拦截 + 拓扑门禁）");
+            } else {
+                logger.warn("[Auth] BindingService 未就绪，packetevents 登录锁未启用。");
+            }
+        }
+
         // 注册「未绑定进服 → 加群二维码」回调（白名单 QR 完整归属 xt-auth，群号/链接读 xt-auth 自己的 config）。
         // 跨服 Redis 信道由核心创建并注入到 bridge（通用基础设施，配置在核心 config），此处不再处理。
         if (bridge != null) {
@@ -102,8 +139,8 @@ public class AuthVelocityPlugin {
                 logger.warn("[Auth] 自动登录信任期持久化初始化失败，退回内存（重启失效）: " + t.getMessage());
             }
 
-            // 登录提示持续循环：未登录玩家按阶段（输QQ/绑定/登录）常驻显示三种不同标题。
-            if (config.getBoolean("login-reminder-enable", true)) {
+            // 登录提示持续循环：lockManager 为 null 时用旧的 bridge 提醒；lockManager 非 null 时由它自己管。
+            if (lockManager == null && config.getBoolean("login-reminder-enable", true)) {
                 bridge.startLoginReminder(config.getInt("login-reminder-seconds", 3));
             }
 
@@ -195,5 +232,15 @@ public class AuthVelocityPlugin {
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
         ExtensionBootstrap.disable(module);
+    }
+
+    /** 检查 packetevents 是否可用（运行期软依赖，没装时静默降级）。 */
+    private static boolean packetEventsAvailable() {
+        try {
+            Class.forName("com.github.retrooper.packetevents.PacketEvents");
+            return com.github.retrooper.packetevents.PacketEvents.getAPI() != null;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 }

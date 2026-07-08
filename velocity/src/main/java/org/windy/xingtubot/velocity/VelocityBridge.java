@@ -42,6 +42,10 @@ public class VelocityBridge {
     // Redis 跨服信道（可选，xt-auth 按 config 注入）。非 null 时大脑经它收发，免去「需在线玩家当载体」。
     private volatile org.windy.xingtubot.common.bridge.CrossServerChannel redisChannel;
 
+    // ===== packetevents 登录锁（xt-auth 注入，可选） =====
+    // 非 null 时启用 Velocity 端包级拦截：未登录玩家的包在代理层被拦截，不到子服。
+    private volatile org.windy.xingtubot.common.lock.PlayerLockManager lockManager;
+
     public VelocityBridge(ProxyServer proxy, Object plugin, ChannelIdentifier channel,
                           AuthAdapter auth, Consumer<String> logger) {
         this(proxy, plugin, channel, auth, logger, null);
@@ -73,6 +77,11 @@ public class VelocityBridge {
     /** 设置 BindingService 供应者（惰性获取，避免编译期类型依赖）。 */
     public void setServiceProvider(java.util.function.Supplier<BindingService> provider) {
         this.serviceProvider = provider;
+    }
+
+    /** 注入 packetevents 登录锁管理器（xt-auth 按 config 决定是否启用）。 */
+    public void setLockManager(org.windy.xingtubot.common.lock.PlayerLockManager lockManager) {
+        this.lockManager = lockManager;
     }
 
     /** 获取 BindingService：优先直接注入，其次从 supplier 获取。 */
@@ -341,6 +350,19 @@ public class VelocityBridge {
                 .schedule();
     }
 
+    /**
+     * 锁定玩家不允许切换服务器（拓扑级门禁）。
+     * <p>配合 packetevents 包级拦截：锁定玩家不仅不能操作，也不能切服逃跑。
+     */
+    @Subscribe
+    public void onServerPreConnect(com.velocitypowered.api.event.player.ServerPreConnectEvent event) {
+        org.windy.xingtubot.common.lock.PlayerLockManager lm = this.lockManager;
+        if (lm == null) return;
+        if (lm.isLocked(event.getPlayer().getUsername())) {
+            event.setResult(com.velocitypowered.api.event.player.ServerPreConnectEvent.ServerResult.denied());
+        }
+    }
+
     private void evaluateOnJoin(String player) {
         if (!proxy.getPlayer(player).isPresent()) return;
         BindingService svc = getService();
@@ -348,10 +370,11 @@ public class VelocityBridge {
         if (!svc.isPlayerBound(player)) {
             if (svc.hasPending(player)) {
                 // 已声明 QQ（掉线/切服回来）：提示去群里发「绑定」，无需再输 QQ。
+                lock(player); // 锁定（lockManager 内部判 null）
                 auth.titlePlayer(player, "§6§l就差一步 · 请完成绑定", "§f在群里发送「绑定」完成验证");
                 auth.messagePlayer(player, "§e你已登记 QQ，请在群里发送「§b绑定§e」完成绑定（5 分钟内有效）");
             } else {
-                sendToPlayerServer(player, BridgeCodec.encode(CrossServerProtocol.Type.NEED_QQ, player));
+                lock(player); // 锁定
                 auth.titlePlayer(player, "§6§l欢迎 · 请绑定白名单", "§f请在聊天框输入 QQ 号开始白名单绑定");
                 auth.messagePlayer(player, "§e欢迎！请在聊天框输入你的 §bQQ号 §e完成白名单绑定");
                 Consumer<String> cb = onUnboundJoin;
@@ -360,17 +383,19 @@ public class VelocityBridge {
                 }
             }
         } else if (svc.isLoggedInSession(player)) {
-            // 本会话已登录（跨子服切换）：静默解锁新子服，不打扰群、不重复提示。
+            // 本会话已登录（跨子服切换）：静默解锁，不打扰群、不重复提示。
+            unlock(player);
             auth.login(player);
         } else if (autoLoginAllowed(player, currentIp(player))) {
             // IP 绑定的自动登录：上次登录后退出，同 IP 且在信任期内重进 → 免密自动登录。
-            // 安全：换 IP / 过期一律落到下面的按钮分支重新走 openid 验证。
+            unlock(player);
             auth.login(player);
             svc.markLoggedInSession(player);
             auth.titlePlayer(player, "§a§l欢迎回来", "§f同设备信任期内已自动登录");
             auth.messagePlayer(player, "§a✅ 同设备信任期内，已为你自动登录，祝游戏愉快！");
         } else {
-            // 已绑定但需登录：游戏内提示「等群里点登录按钮」，并触发 xt-auth 在群里发免密登录按钮卡片。
+            // 已绑定但需登录：锁定 + 提示「等群里点登录按钮」。
+            lock(player); // 锁定
             auth.titlePlayer(player, "§a§l欢迎回来", "§f请在群里点机器人发的「登录」按钮");
             auth.messagePlayer(player, "§e欢迎回来！机器人已在群里发「§a登录§e」按钮，绑定的 QQ 点一下即可登录");
             Consumer<String> cb = onNeedLogin;
@@ -378,6 +403,18 @@ public class VelocityBridge {
                 try { cb.accept(player); } catch (Exception ignored) {}
             }
         }
+    }
+
+    /** 锁定玩家（lockManager 为 null 时静默跳过——未启用 packetevents 锁）。 */
+    private void lock(String player) {
+        org.windy.xingtubot.common.lock.PlayerLockManager lm = this.lockManager;
+        if (lm != null) lm.lock(player);
+    }
+
+    /** 解锁玩家（lockManager 为 null 时静默跳过）。 */
+    private void unlock(String player) {
+        org.windy.xingtubot.common.lock.PlayerLockManager lm = this.lockManager;
+        if (lm != null) lm.unlock(player);
     }
 
     /** 当前在线玩家的远端 IP（仅主机地址，不含端口）；取不到返回 null。 */
@@ -438,6 +475,9 @@ public class VelocityBridge {
     public void onDisconnect(DisconnectEvent event) {
         Player p = event.getPlayer();
         String name = p.getUsername();
+        // 清理锁状态（lockManager 为 null 时静默跳过）
+        org.windy.xingtubot.common.lock.PlayerLockManager lm = this.lockManager;
+        if (lm != null) lm.onDisconnect(name);
         BindingService svc = getService();
         if (svc != null) {
             // 退出前若本会话已登录，按【当前 IP】武装自动登录信任期：同 IP 窗口内重进可免密自动登录。
