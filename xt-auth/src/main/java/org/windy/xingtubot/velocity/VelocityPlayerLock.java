@@ -30,8 +30,7 @@ import java.util.function.Consumer;
  *
  * <p>扩展点：
  * <ul>
- *   <li>{@link #setQrMapProvider} — 加群二维码地图提供者（TODO：以后实现）</li>
- *   <li>{@link #setOnCodeIssued} — QQ 登记成功后的回调（挂接二维码等）</li>
+ *   <li>{@link #setOnCodeIssued} — QQ 登记成功后的回调（挂接加群二维码等）</li>
  * </ul>
  */
 public class VelocityPlayerLock implements PlayerLockManager {
@@ -51,14 +50,7 @@ public class VelocityPlayerLock implements PlayerLockManager {
 
     // ===== 扩展点 =====
 
-    /**
-     * 加群二维码地图提供者（TODO：以后实现）。
-     * <p>签名：{@code void giveQrMap(Player player)}，实现者发地图包给玩家。
-     * <p>设为 null 表示不发二维码地图。
-     */
-    private volatile Consumer<Player> qrMapProvider;
-
-    /** QQ 登记成功后的回调（进入「去群里发『绑定』」阶段时触发）。 */
+    /** QQ 登记成功后的回调（进入「去群里发『绑定』」阶段时触发，用于发加群二维码等）。 */
     private volatile Consumer<String> onCodeIssued;
 
     public VelocityPlayerLock(ProxyServer proxy, Object plugin, BindingService bindingService) {
@@ -70,16 +62,6 @@ public class VelocityPlayerLock implements PlayerLockManager {
     /** 延迟注入 BindingService（enable() 之后补全）。 */
     public void setBindingService(BindingService bindingService) {
         this.bindingService = bindingService;
-    }
-
-    // ===== 扩展点 setter =====
-
-    /**
-     * 设置加群二维码地图提供者（TODO：以后实现）。
-     * <p>调用时机：玩家 QQ 登记成功、进入「去群里发『绑定』」阶段。
-     */
-    public void setQrMapProvider(Consumer<Player> provider) {
-        this.qrMapProvider = provider;
     }
 
     /** 设置 QQ 登记成功后的回调。 */
@@ -172,7 +154,7 @@ public class VelocityPlayerLock implements PlayerLockManager {
                     awaitingQQ.remove(name.toLowerCase(Locale.ROOT));
                     // 更新提醒标题为「请完成绑定」阶段
                     restartReminder(name);
-                    // 触发回调（加群二维码等 TODO）
+                    // 触发回调（加群二维码等）
                     Consumer<String> cb = onCodeIssued;
                     if (cb != null) {
                         try { cb.accept(name); } catch (Exception ignored) {}

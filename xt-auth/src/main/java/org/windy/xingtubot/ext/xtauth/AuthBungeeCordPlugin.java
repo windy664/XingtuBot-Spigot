@@ -63,6 +63,11 @@ public class AuthBungeeCordPlugin extends Plugin {
                     host != null ? host.getService(org.windy.xingtubot.common.binding.BindingService.class) : null;
             if (bindingService != null) {
                 lockManager.setBindingService(bindingService);
+
+                // QQ 登记成功后发加群二维码地图
+                lockManager.setOnCodeIssued(name ->
+                        org.windy.xingtubot.bungee.BungeeCordJoinQrMap.giveIfEnabled(getProxy(), config, name));
+
                 com.github.retrooper.packetevents.PacketEvents.getAPI().getEventManager()
                         .registerListener(new BungeeCordPacketListener(getProxy(), lockManager));
                 getLogger().info("[Auth] packetevents 登录锁已启用（BungeeCord 端包级拦截）");

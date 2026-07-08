@@ -109,14 +109,9 @@ public class AuthVelocityPlugin {
             if (bindingService != null) {
                 lockManager.setBindingService(bindingService);
 
-                // 加群二维码地图提供者（TODO：以后实现地图发送，先留口子）
-                // lockManager.setQrMapProvider(player -> VelocityJoinQrMap.giveIfEnabled(proxy, config, player.getUsername()));
-
-                // QQ 登记成功后的回调（加群二维码等）
-                lockManager.setOnCodeIssued(name -> {
-                    // TODO: 加群二维码地图（以后实现）
-                    // VelocityJoinQrMap.giveIfEnabled(proxy, config, name);
-                });
+                // QQ 登记成功后发加群二维码地图
+                lockManager.setOnCodeIssued(name ->
+                        VelocityJoinQrMap.giveIfEnabled(proxy, config, name));
 
                 // 注册 packetevents 包拦截器
                 com.github.retrooper.packetevents.PacketEvents.getAPI().getEventManager()
