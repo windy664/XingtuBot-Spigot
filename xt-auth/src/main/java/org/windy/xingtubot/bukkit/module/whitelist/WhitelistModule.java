@@ -78,13 +78,28 @@ public class WhitelistModule implements Listener {
                     + "绑定时会重取；若届时仍为空，请在 config 配置 openapi-app-id。");
         }
 
-        this.service = new BindingServiceImpl(store, new LockAuthAdapter(plugin, lockState), appIdSupplier,
+        // ===== packetevents 登录锁预初始化 =====
+        // 必须在 BindingService 创建之前，因为 BindingService 会捕获 AuthAdapter。
+        org.windy.xingtubot.common.binding.AuthAdapter authAdapter;
+        if (packetEventsAvailable()) {
+            bukkitLock = new BukkitPlayerLock(plugin, null); // BindingService 后面补全
+            authAdapter = new BukkitDirectAuthAdapter(plugin, bukkitLock);
+        } else {
+            authAdapter = new LockAuthAdapter(plugin, lockState);
+        }
+
+        this.service = new BindingServiceImpl(store, authAdapter, appIdSupplier,
                 msg -> plugin.getLogger().warning(msg));
         this.service.setBindingPrompt(plugin.getConfig().getString("binding-prompt", "绑定"));
         this.service.setMaxBindAttempts(plugin.getConfig().getInt("bind-max-attempts", 5));
         this.service.setSuccessTemplates(
                 plugin.getConfig().getString("messages.bind-success", ""),
                 plugin.getConfig().getString("messages.login-success", ""));
+
+        // 补全 lockManager 的 BindingService 引用
+        if (bukkitLock != null) {
+            bukkitLock.setBindingService(service);
+        }
 
         // 自动登录信任期（对标 Velocity 的 auto-login-window-minutes；本地 Bukkit 即大脑 isBrain=true）。
         this.autoLoginWindowMillis = Math.max(0L,
@@ -99,9 +114,8 @@ public class WhitelistModule implements Listener {
             }
         }
 
-        // ===== packetevents 登录锁（Bukkit 端包级拦截） =====
-        if (packetEventsAvailable()) {
-            bukkitLock = new BukkitPlayerLock(plugin, service);
+        // 注册 packetevents 包拦截器
+        if (bukkitLock != null) {
             com.github.retrooper.packetevents.PacketEvents.getAPI().getEventManager()
                     .registerListener(new BukkitPacketListener(bukkitLock));
             plugin.getLogger().info("[白名单] packetevents 登录锁已启用（Bukkit 端包级拦截）");
@@ -131,7 +145,14 @@ public class WhitelistModule implements Listener {
 
     /** 获取锁定状态（供 GameChatForwarder 等模块判断注册态）。 */
     public LockState getLockState() {
+        // packetevents 模式下，bukkitLock 内部有自己的 LockState
+        // 但外部模块可能还在用旧的 lockState，保持兼容
         return lockState;
+    }
+
+    /** 获取 packetevents 锁管理器（可能为 null = 未启用 packetevents）。 */
+    public BukkitPlayerLock getBukkitLock() {
+        return bukkitLock;
     }
 
     /** 热重载可变配置（/xtb reload 调用）。 */
@@ -146,27 +167,20 @@ public class WhitelistModule implements Listener {
 
     // ==================== 游戏内事件 ====================
 
-    private void lock(String player) {
-        if (bukkitLock != null) bukkitLock.lock(player);
-        else lockState.lock(player);
-    }
-
-    private void unlock(String player) {
-        if (bukkitLock != null) bukkitLock.unlock(player);
-        else lockState.unlock(player);
-    }
-
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         String name = player.getName();
         plugin.getLogger().info("[白名单] onPlayerJoin 触发: " + name + "，已锁定");
-        lock(name); // 进服一律先锁
+        if (bukkitLock != null) bukkitLock.lock(name);
+        else lockState.lock(name);
+
         if (service.isPlayerBound(name)) {
             // 同设备信任期内免密自动登录（对标 Velocity）：同 IP 且未过期 → 直接解锁，不打扰群。
             if (autoLoginAllowed(name, playerIp(player))) {
                 service.markLoggedInSession(name);
-                unlock(name);
+                if (bukkitLock != null) bukkitLock.unlock(name);
+                else lockState.unlock(name);
                 JoinQrMap.cleanup(player);
                 player.sendTitle("§a§l欢迎回来", "§f同设备信任期内已自动登录", 10, 60, 15);
                 player.sendMessage("§a✅ 同设备信任期内，已为你自动登录，祝游戏愉快！");
@@ -176,10 +190,8 @@ public class WhitelistModule implements Listener {
             String loginMsg = spigotConfig.getStringResolved("login-mssage",
                     "🔈§f请在群内发送 §b@{bot} §c登录 或 §f输入§c/login <密码> §f完成登录");
             player.sendTitle("§a§l欢迎回来", title, 10, 60, 15);
-            // 登录也附加群二维码：有些玩家 QQ 群太多一时找不到，扫码即可定位到本群发「登录」
             JoinQrMap.sendWithQr(plugin, player, "§e欢迎回来！" + loginMsg);
         } else if (service.hasPending(name)) {
-            // 之前已声明QQ（中途掉线/切服回来）：直接提示去群里发「绑定」，不必再输 QQ
             String bindWord = plugin.getConfig().getString("binding-prompt", "绑定");
             player.sendTitle("§6§l请完成绑定", "§f在群里发送「§e§l" + bindWord + "§f」", 10, 60, 15);
             JoinQrMap.sendWithQr(plugin, player, "§e你已登记QQ，请在群里发送「§e§l" + bindWord
@@ -188,20 +200,17 @@ public class WhitelistModule implements Listener {
             if (bukkitLock != null) bukkitLock.lock(name);
             else awaitingQQ.add(name);
             player.sendTitle("§6§l欢迎来到本服", "§f请在聊天框输入 QQ 号开始白名单绑定", 10, 60, 15);
-            // 输入 QQ 号阶段【不发】加群二维码：此时玩家还不需要进群，二维码会误导。
-            // 二维码改在登记成功后（onPlayerChat 成功）才出现——那时才需要去群里发「绑定」。
             player.sendMessage("§e欢迎！请在聊天框输入你的 §bQQ号 §e完成白名单绑定");
         }
     }
 
     @EventHandler
     public void onPlayerChat(AsyncPlayerChatEvent event) {
-        Player player = event.getPlayer();
-        String name = player.getName();
-
-        // packetevents 模式下，聊天由 BukkitPacketListener 处理，这里跳过
+        // packetevents 模式：聊天由 BukkitPacketListener 处理
         if (bukkitLock != null) return;
 
+        Player player = event.getPlayer();
+        String name = player.getName();
         if (!awaitingQQ.contains(name)) return;
 
         event.setCancelled(true);
@@ -213,8 +222,6 @@ public class WhitelistModule implements Listener {
                 if (p != null) p.sendMessage(r.message);
                 if (r.success) {
                     awaitingQQ.remove(name);
-                    // 进入「去群里发『绑定』」阶段，此时才发加群二维码（地图持久件；
-                    // 后续的重复提醒会自带聊天二维码，方便没进群的玩家扫码进群发「绑定」）。
                     if (p != null) JoinQrMap.giveMapIfEnabled(plugin, p);
                 }
             });
