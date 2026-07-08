@@ -66,7 +66,7 @@ public final class AdminStanceMemory {
         StringBuilder sb = new StringBuilder();
         sb.append("【你的立场依据——群主/管理员说过的话】\n");
         sb.append("你在群里要跟群主/管理员保持一致。如果有人跟群主观点不同，你要站在群主那边。\n");
-        sb.append("不要直接说"群主说过"，而是自然地表达同样的立场。\n\n");
+        sb.append("不要直接说「群主说过」，而是自然地表达同样的立场。\n\n");
 
         // 摘要（更早的观点）
         if (s != null && !s.isEmpty()) {

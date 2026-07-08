@@ -5,9 +5,10 @@ import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ModuleContext;
 import org.windy.xingtubot.module.ai.AiChatHandler;
+import org.windy.xingtubot.module.ai.StickerManager;
 
 /**
- * AI 对话模块：LLM 聊天 observer + 注册 AiService 供其他附属（如模组查询 LLM 别名）软依赖。
+ * AI 对话模块：LLM 聊天 observer + 注册 AiService 供其他附属软依赖。
  */
 public final class AiModule implements BotModule {
 
@@ -31,19 +32,25 @@ public final class AiModule implements BotModule {
             return;
         }
 
-        String baseUrl = config.getString("llm-base-url", "https://api.deepseek.com");
-        String model = config.getString("llm-model", "deepseek-chat");
+        String baseUrl = config.getString("llm-base-url", "https://token-plan-cn.xiaomimimo.com/v1");
+        String model = config.getString("llm-model", "mimo-v2.5");
 
         AiService aiService = new AiService(apiKey, baseUrl, model);
         ctx.registerService(AiService.class, aiService);
 
-        // 注册 AI 聊天 observer（旁听 + 语境回复 + 超管立场）
+        // 加载表情包
+        StickerManager stickerManager = new StickerManager(ctx.dataFolder(), ctx.logger());
+        stickerManager.load();
+
+        // 注册 AI 聊天 observer
         AiChatHandler handler = new AiChatHandler(
                 aiService, config, ctx.logger(),
                 () -> ctx.registry().getManagedPrefixes(),
-                ctx.permission());
+                ctx.permission(),
+                stickerManager);
         ctx.registry().registerObserver(handler);
 
-        ctx.logger().info("[AI] AI 对话已加载（模型: " + model + "）");
+        String omniModel = config.getString("llm-model-omni", "mimo-v2-omni");
+        ctx.logger().info("[AI] AI 对话已加载（模型: " + model + ", 多模态: " + omniModel + "）");
     }
 }

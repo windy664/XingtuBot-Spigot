@@ -5,8 +5,23 @@ llm-enable: false
 
 # LLM API 配置
 llm-api-key: ""
-llm-base-url: "https://api.deepseek.com"
-llm-model: "deepseek-chat"
+llm-base-url: "https://token-plan-cn.xiaomimimo.com/v1"
+# 纯文字模型（群聊日常对话，快）
+llm-model: "mimo-v2.5"
+# 多模态模型（有人发图片时自动切换，能看懂图片）
+llm-model-omni: "mimo-v2-omni"
+
+##########################################
+# 群聊白名单
+##########################################
+# 只有白名单里的群才会启用AI（旁听+回复）
+# 留空 = 不限制，所有群都启用
+# 填群的 openid（在群里发"菜单"可以看到群ID）
+group-whitelist: []
+# 示例：
+# group-whitelist:
+#   - "groupId_xxxxx"
+#   - "groupId_yyyyy"
 
 # AI 人格设定（核心：决定AI说话的风格）
 # 写得越具体，AI越像真人。示例：
