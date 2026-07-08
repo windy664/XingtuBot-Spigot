@@ -1,5 +1,5 @@
 name: XingtuBot-Auth
 version: '2.2.1'
 main: org.windy.xingtubot.ext.xtauth.AuthBungeeCordPlugin
-depends: [XingtuBotBungeeCord]
+depends: [XingtuBotBungeeCord, packetevents]
 author: 风吟

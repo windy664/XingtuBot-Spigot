@@ -35,7 +35,7 @@ import java.nio.file.Path;
         authors = {"风吟"},
         dependencies = {
                 @Dependency(id = "xingtubotvelocity"),
-                @Dependency(id = "packetevents", optional = true)
+                @Dependency(id = "packetevents")
         }
 )
 public class AuthVelocityPlugin {
