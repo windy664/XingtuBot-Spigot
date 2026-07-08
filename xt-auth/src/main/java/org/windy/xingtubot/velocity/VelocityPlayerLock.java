@@ -39,7 +39,7 @@ public class VelocityPlayerLock implements PlayerLockManager {
     private final ProxyServer proxy;
     private final Object plugin; // VelocityPlugin 实例，用于 scheduler
     private final LockState lockState = new LockState();
-    private final BindingService bindingService;
+    private volatile BindingService bindingService;
 
     // 锁定坐标数据
     private final Map<String, LockData> lockData = new ConcurrentHashMap<>();
@@ -64,6 +64,11 @@ public class VelocityPlayerLock implements PlayerLockManager {
     public VelocityPlayerLock(ProxyServer proxy, Object plugin, BindingService bindingService) {
         this.proxy = proxy;
         this.plugin = plugin;
+        this.bindingService = bindingService;
+    }
+
+    /** 延迟注入 BindingService（enable() 之后补全）。 */
+    public void setBindingService(BindingService bindingService) {
         this.bindingService = bindingService;
     }
 
@@ -147,6 +152,11 @@ public class VelocityPlayerLock implements PlayerLockManager {
         // 简单校验：QQ 号是 5-12 位数字
         if (!trimmed.matches("\\d{5,12}")) {
             player.sendMessage(legacy("§c请输入有效的 QQ 号（5-12 位数字）"));
+            return;
+        }
+
+        if (bindingService == null) {
+            player.sendMessage(legacy("§c绑定服务未就绪，请稍后再试"));
             return;
         }
 

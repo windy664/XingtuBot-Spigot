@@ -77,21 +77,37 @@ public class AuthVelocityPlugin {
                 .map(p -> ((XingtuBotVelocity) p).getVelocityBridge())
                 .orElse(null);
 
+        // ===== packetevents 登录锁预初始化 =====
+        // 必须在 ExtensionBootstrap.enable() 之前创建 lockManager 和 directAuth，
+        // 因为 BindingService 在 enable() 时创建，会捕获当时的 authAdapter。
+        // 如果 enable() 之后才设置，BindingService 已经用了旧的 PluginMessageAuthAdapter。
+        VelocityDirectAuthAdapter directAuth = null;
+        if (bridge != null && packetEventsAvailable()) {
+            // 先创建一个临时的 lockManager（BindingService 还没创建，先传 null）
+            // 在 enable() 拿到 BindingService 后会重新初始化完整的 lockManager
+            lockManager = new VelocityPlayerLock(proxy, this, null);
+            directAuth = new VelocityDirectAuthAdapter(proxy, lockManager);
+            bridge.setLockManager(lockManager);
+        }
+
         AuthModule authModule = new AuthModule(proxy, dataDir);
-        if (bridge != null) {
+        if (directAuth != null) {
+            // 用 packetevents 直通适配器：login/register 在 Velocity 侧直接解锁
+            authModule.setAuthAdapter(directAuth);
+        } else if (bridge != null) {
             authModule.setAuthAdapter(bridge.getAuthAdapter());
         } else {
             logger.warn("[Auth] 未找到核心 VelocityBridge（server-role=off？）：白名单解锁将不可用。");
         }
         module = ExtensionBootstrap.enable(host, authModule, config, botLogger, dataDir.toFile());
 
-        // ===== packetevents 登录锁（Velocity 端包级拦截） =====
-        // 在 ExtensionBootstrap.enable() 之后初始化，因为 BindingService 此时才注册到服务总线。
-        if (bridge != null && packetEventsAvailable()) {
+        // ===== packetevents 登录锁补全 =====
+        // enable() 后 BindingService 已注册到服务总线，补全 lockManager 的 BindingService 引用。
+        if (lockManager != null) {
             org.windy.xingtubot.common.binding.BindingService bindingService =
                     host != null ? host.getService(org.windy.xingtubot.common.binding.BindingService.class) : null;
             if (bindingService != null) {
-                lockManager = new VelocityPlayerLock(proxy, this, bindingService);
+                lockManager.setBindingService(bindingService);
 
                 // 加群二维码地图提供者（TODO：以后实现地图发送，先留口子）
                 // lockManager.setQrMapProvider(player -> VelocityJoinQrMap.giveIfEnabled(proxy, config, player.getUsername()));
@@ -101,13 +117,6 @@ public class AuthVelocityPlugin {
                     // TODO: 加群二维码地图（以后实现）
                     // VelocityJoinQrMap.giveIfEnabled(proxy, config, name);
                 });
-
-                // 替换 AuthAdapter：login/register 直接在 Velocity 侧解锁，不走 PluginMessage 到子服
-                VelocityDirectAuthAdapter directAuth = new VelocityDirectAuthAdapter(proxy, lockManager);
-                bridge.setLockManager(lockManager);
-                // 注意：不替换 bridge 的 authAdapter，因为 bridge 内部的 auth 引用是 final 的。
-                // 改为让 BindingService 使用新的 directAuth（通过重新注入）。
-                authModule.setAuthAdapter(directAuth);
 
                 // 注册 packetevents 包拦截器
                 com.github.retrooper.packetevents.PacketEvents.getAPI().getEventManager()
