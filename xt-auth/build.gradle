@@ -10,7 +10,7 @@ plugins {
 }
 
 dependencies {
-    // ProtocolLib JVM 版本门禁放行（同 spigot/build.gradle）
+    // ProtocolLib JVM 版本门禁放行
     components {
         withModule('net.dmulloy2:ProtocolLib') {
             allVariants {
@@ -33,16 +33,13 @@ dependencies {
     compileOnly 'com.velocitypowered:velocity-api:3.1.1'
     annotationProcessor 'com.velocitypowered:velocity-api:3.1.1'
 
-    // ==========================================
-    // 发包与网络底层（软依赖，运行期由外部插件提供）
-    // ==========================================
-    // 加群二维码地图（ProtocolLib 纯发包，软依赖）
-    compileOnly 'net.dmulloy2:ProtocolLib:5.4.0'
+    // PacketEvents（内置进 jar，登录锁 + 地图发包都依赖它）
+    implementation 'com.github.retrooper:packetevents-api:2.13.0'
+    implementation 'com.github.retrooper:packetevents-velocity:2.13.0'
+    implementation 'com.github.retrooper:packetevents-spigot:2.13.0'
 
-    // PacketEvents 核心发包依赖 (CodeMC 仓库)
-    compileOnly 'com.github.retrooper:packetevents-api:2.13.0' // 核心API，必写
-    compileOnly 'com.github.retrooper:packetevents-velocity:2.13.0' // Velocity端实现
-    compileOnly 'com.github.retrooper:packetevents-spigot:2.13.0' // Spigot端实现（如果你要在子服兜底发包）
+    // ProtocolLib（可选，Bukkit 端 QR 地图发包用；没装则不发地图）
+    compileOnly 'net.dmulloy2:ProtocolLib:5.4.0'
 
     // 跨服 Redis 信道（RedisChannel/RedisManager）已收归核心：jedis 由核心 bundle 打包，
     // 本插件只经 CrossServerChannel 接口取用核心创建的实例，不再自带 jedis。
