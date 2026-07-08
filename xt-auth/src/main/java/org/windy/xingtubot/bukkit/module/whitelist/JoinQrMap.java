@@ -3,20 +3,11 @@ package org.windy.xingtubot.bukkit.module.whitelist;
 import net.md_5.bungee.api.chat.ClickEvent;
 import net.md_5.bungee.api.chat.HoverEvent;
 import net.md_5.bungee.api.chat.TextComponent;
-import org.bukkit.Bukkit;
-import org.bukkit.Material;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
-import org.bukkit.map.MapCanvas;
-import org.bukkit.map.MapPalette;
-import org.bukkit.map.MapRenderer;
-import org.bukkit.map.MapView;
 import org.bukkit.plugin.Plugin;
 import org.windy.xingtubot.common.util.QrChat;
 import org.windy.xingtubot.common.util.QrMatrix;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,13 +15,8 @@ import java.util.List;
  * 加群二维码地图（纯 Bukkit / local 模式）：未绑定玩家进服时，把画着「加群二维码」的地图
  * <b>纯发包</b>给客户端（不碰真实背包），扫码即可加 QQ 群。
  *
- * <p>发包走 ProtocolLib（{@link MapPacketSender}）；没装 ProtocolLib 则<b>不发地图</b>，
- * 回退到聊天提示群号 + 链接（绝不往玩家真实背包塞物品）。Velocity 主导模式由代理端 PacketEvents
- * 发包，子服不参与（见 SpigotBridge）。群号/加群链接从子服 config 读。
- *
- * <p><b>跨版本：</b>编译期是 spigot-api 1.12.2，但常运行在更高版本（Youer/Arclight 等）。
- * 地图物品 1.12 是 {@code MAP}、1.13+ 是 {@code FILLED_MAP}，地图 ID 由 short 变 int，
- * {@code MapMeta.setMapView} 仅 1.13.2+——故物品创建走反射兼容，画布渲染用稳定 API。
+ * <p>发包走 PacketEvents（{@link BukkitMapPacketSender}），内置在 jar 中，无需额外依赖。
+ * 群号/加群链接从子服 config 读。
  */
 public final class JoinQrMap {
 
@@ -152,123 +138,10 @@ public final class JoinQrMap {
         return lore;
     }
 
-    /** 渲染地图并纯发包（ProtocolLib）；ProtocolLib 不在场返回 false。 */
+    /** 用 PacketEvents 纯发包地图（内置，无需额外依赖）。 */
     private static boolean sendMap(Plugin plugin, Player player, boolean[][] qr,
                                    String displayName, List<String> lore) {
-        if (!MapPacketSender.available()) return false;
-
-        MapView view = Bukkit.createMap(player.getWorld());
-        // 清掉默认渲染器（地形），只留二维码
-        for (MapRenderer r : new ArrayList<>(view.getRenderers())) {
-            view.removeRenderer(r);
-        }
-        view.addRenderer(new QrRenderer(qr));
-
-        ItemStack item = mapItem(view);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(displayName);
-            meta.setLore(lore);
-            item.setItemMeta(meta);
-        }
-
-        // 纯发包：物品只在客户端当前手持槽显示，服务端真实背包不动
-        int held = player.getInventory().getHeldItemSlot();
-        return MapPacketSender.sendVirtual(player, view, item, held);
+        return BukkitMapPacketSender.send(player, qr);
     }
 
-    /** 反射兼容创建地图物品：1.13+ 用 FILLED_MAP+setMapView，1.12 用 MAP+durability(mapId)。 */
-    private static ItemStack mapItem(MapView view) {
-        Material mat = mapMaterial();
-        ItemStack item = new ItemStack(mat);
-
-        // 1.13.2+：MapMeta.setMapView
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            try {
-                Method setMapView = meta.getClass().getMethod("setMapView", MapView.class);
-                setMapView.invoke(meta, view);
-                item.setItemMeta(meta);
-                return item;
-            } catch (Throwable ignored) {
-                // 老版本没有 setMapView，走 durability
-            }
-        }
-        // 1.12.2：地图 ID 写在 durability
-        item.setDurability((short) mapId(view));
-        return item;
-    }
-
-    /** FILLED_MAP（1.13+）优先，回退 MAP（1.12）。 */
-    private static Material mapMaterial() {
-        Material m = matByName("FILLED_MAP");
-        if (m == null) m = matByName("MAP");
-        return m != null ? m : Material.PAPER; // 极端兜底（理论不会到）
-    }
-
-    private static Material matByName(String name) {
-        try {
-            return Material.valueOf(name);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-    }
-
-    /** MapView.getId()：1.12 返回 short、1.13+ 返回 int，统一反射取 Number。 */
-    private static int mapId(MapView view) {
-        try {
-            Object id = MapView.class.getMethod("getId").invoke(view);
-            return ((Number) id).intValue();
-        } catch (Throwable t) {
-            return 0;
-        }
-    }
-
-    /** 把二维码矩阵画到 128×128 地图：居中放大、黑点画黑、底白。只画一次。 */
-    private static final class QrRenderer extends MapRenderer {
-        private final boolean[][] qr;
-        private boolean drawn = false;
-
-        QrRenderer(boolean[][] qr) {
-            this.qr = qr;
-        }
-
-        @Override
-        @SuppressWarnings("deprecation")
-        public void render(MapView view, MapCanvas canvas, Player player) {
-            if (drawn) return; // 静态图，画一次即可，避免每 tick 重绘
-            drawn = true;
-
-            byte white = MapPalette.matchColor(255, 255, 255);
-            byte black = MapPalette.matchColor(0, 0, 0);
-            for (int x = 0; x < 128; x++) {
-                for (int y = 0; y < 128; y++) {
-                    canvas.setPixel(x, y, white);
-                }
-            }
-
-            int n = qr.length;
-            if (n == 0) return;
-            int scale = Math.max(1, 128 / n);   // 每个二维码模块放大成 scale×scale 像素
-            int size = n * scale;
-            int off = (128 - size) / 2;          // 居中
-
-            for (int r = 0; r < n; r++) {
-                boolean[] row = qr[r];
-                for (int c = 0; c < row.length; c++) {
-                    if (!row[c]) continue;
-                    int px = off + c * scale;
-                    int py = off + r * scale;
-                    for (int dx = 0; dx < scale; dx++) {
-                        for (int dy = 0; dy < scale; dy++) {
-                            int x = px + dx, y = py + dy;
-                            if (x >= 0 && x < 128 && y >= 0 && y < 128) {
-                                canvas.setPixel(x, y, black);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
