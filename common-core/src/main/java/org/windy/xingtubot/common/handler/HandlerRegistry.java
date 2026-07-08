@@ -212,8 +212,8 @@ public class HandlerRegistry {
 
         // 观察者旁路：对每条消息并行运行（不阻断主链，也不被主链阻断）。
         // 观察者自身负责过滤（如 AI 排除已注册命令前缀），避免误响应命令消息。
-        // 门控（非@且 mention 模式）下不跑观察者：避免 AI 闲聊等对群里每条非@消息响应。
-        for (MessageHandler obs : mentionGated ? java.util.Collections.<MessageHandler>emptyList() : observers) {
+        // 观察者不受 mention 门控——它们是"旁路"，天然需要看到所有消息（如 AI 旁听群聊语境）。
+        for (MessageHandler obs : observers) {
             boolean obsHit;
             try {
                 obsHit = obs.matches(msg, dispatchEvent);

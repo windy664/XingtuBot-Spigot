@@ -35,13 +35,13 @@ public final class AiModule implements BotModule {
         String model = config.getString("llm-model", "deepseek-chat");
 
         AiService aiService = new AiService(apiKey, baseUrl, model);
-        // 注册到服务总线，供 xt-modquery 等附属 getService(AiService.class) 获取
         ctx.registerService(AiService.class, aiService);
 
-        // 注册 AI 聊天 observer（与命令/群服互联并行响应）
+        // 注册 AI 聊天 observer（旁听 + 语境回复 + 超管立场）
         AiChatHandler handler = new AiChatHandler(
                 aiService, config, ctx.logger(),
-                () -> ctx.registry().getManagedPrefixes());
+                () -> ctx.registry().getManagedPrefixes(),
+                ctx.permission());
         ctx.registry().registerObserver(handler);
 
         ctx.logger().info("[AI] AI 对话已加载（模型: " + model + "）");
