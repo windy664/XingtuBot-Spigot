@@ -5,6 +5,7 @@ plugins {
 dependencies {
     // ─── 平台 SDK（compileOnly：运行期由各平台提供）───
     compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
+    compileOnly 'me.clip:placeholderapi:2.11.6'  // Bukkit PAPI 扩展
     compileOnly 'net.md-5:bungeecord-api:1.20-R0.2-SNAPSHOT'
     compileOnly 'com.velocitypowered:velocity-api:3.1.1'
     annotationProcessor 'com.velocitypowered:velocity-api:3.1.1'

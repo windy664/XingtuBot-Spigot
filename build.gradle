@@ -31,6 +31,7 @@ subprojects {
         }
         maven { url = 'https://repo.codemc.io/repository/maven-releases/' }
         maven { url = 'https://repo.codemc.io/repository/maven-snapshots/' }
+        maven { url 'https://repo.extendedclip.com/content/repositories/placeholderapi/' }
     }
 
     def targetJavaVersion = 8

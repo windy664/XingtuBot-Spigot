@@ -9,10 +9,6 @@ plugins {
 
 dependencies {
     compileOnly project(':common-core')
-    // 平台原生代码引用 XingtuBot/SpigotConfig 等主插件类（运行期由主插件提供）
-    compileOnly project(':spigot')
-    compileOnly project(':velocity')
-    compileOnly project(':bungeecord')
 
     compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
 
