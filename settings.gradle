@@ -1,10 +1,6 @@
 rootProject.name = 'XingtuBot'
 
 include 'common-core'
-include 'spigot'
-include 'velocity'
-include 'bungeecord'
-include 'bundle'
 
 // 附属扩展插件
 include 'xt-auth'

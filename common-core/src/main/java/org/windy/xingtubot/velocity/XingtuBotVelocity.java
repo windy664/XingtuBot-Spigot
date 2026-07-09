@@ -195,8 +195,10 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
                 logger.error("[XingtuBot] 未知的 server-role，请检查配置。");
         }
 
-        // 启动配置摘要
-        printConfigSummary();
+        // 启动配置摘要（仅 debug 模式）
+        if (config.getBoolean("debug", false)) {
+            printConfigSummary();
+        }
     }
 
     /**
@@ -251,58 +253,25 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         boolean botOn = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
         String role = config.getString("server-role", "auto");
         adapter.log("");
-        adapter.log("─────────────  昕途机器人 · 启动摘要  ─────────────");
-
-        // ── 通信 ──
-        section("📡 通信");
-        kv("角色", role + (botOn ? "（大脑）" : "（off · 不跑 bot）"));
+        adapter.log("§b ██╗  ██╗██╗███╗   ██╗ ██████╗ ████████╗██╗   ██╗██████╗  ██████╗ ████████╗");
+        adapter.log("§b ╚██╗██╔╝██║████╗  ██║██╔════╝ ╚══██╔══╝██║   ██║██╔══██╗██╔═══██╗╚══██╔══╝");
+        adapter.log("§b  ╚███╔╝ ██║██╔██╗ ██║██║        ██║   ██║   ██║██████╔╝██║   ██║   ██║   ");
+        adapter.log("§b  ██╔██╗ ██║██║╚██╗██║██║        ██║   ██║   ██║██╔══██╗██║   ██║   ██║   ");
+        adapter.log("§b ██╔╝ ██╗██║██║ ╚████║╚██████╗   ██║   ╚██████╔╝██████╔╝╚██████╔╝   ██║   ");
+        adapter.log("§b ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═════╝  ╚═════╝    ╚═╝   ");
+        adapter.log("");
+        adapter.log("§b▌ §3昕途机器人 §7v" + getClass().getPackage().getImplementationVersion());
+        adapter.log("§b▌ §7角色 §f" + role + (botOn ? "（大脑）" : "（off）"));
         if (botOn) {
             String appId = config.getString("openapi-app-id", "");
-            String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "(未配置)";
-            kv("AppID", masked);
-            java.util.List<String> groups = config.getStringList("allowed-groups");
-            kv("群白名单", groups.isEmpty() || groups.contains("*") ? "全部群" : groups.toString());
+            String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "未配置";
+            adapter.log("§b▌ §7AppID §f" + masked);
         }
-        kv("监听模式", config.getString("listen-mode", "mention"));
-        kv("调试模式", onOff(config.getBoolean("debug", false)));
-
-        // ── 部署（白名单由 XingtuBot-Auth 附属提供，状态见其自身日志/config）──
-        section("🖥 部署");
-        boolean runsBridge = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
-        kv("跨服", runsBridge ? "Velocity 大脑（已建 Bridge：PAPI/控制台/群服互联/白名单）" : "未启用（server-role=off）");
-        kv("存储", config.getString("storage-type", "json"));
-
-        // ── 功能扩展（群服互联/模组/AI/迎送/娱乐等均由附属插件提供，各自独立 config）──
-        section("🧩 功能扩展");
-        String[][] exts = {
-                {"xingtubot-auth", "白名单+登录"},
-                {"xingtubot-chatlink", "群服互联"},
-                {"xingtubot-group", "迎送+自定义"},
-                {"xingtubot-fun", "娱乐"},
-                {"xingtubot-modquery", "模组工具"},
-                {"xingtubot-ai", "AI 对话"},
-                {"xingtubot-github", "项目追踪"},
-        };
-        for (String[] ext : exts) {
-            boolean installed = proxy.getPluginManager().getPlugin(ext[0]).isPresent();
-            kv(ext[1], installed ? "已装 (" + ext[0] + ")" : "未安装");
-        }
-
-        adapter.log("──────────────────────────────────────────────────");
-    }
-
-    /** 分组标题。 */
-    private void section(String title) {
-        adapter.log("  " + title);
-    }
-
-    /** 「键值对」行：键按显示宽度对齐到 14 格，再接值。 */
-    private void kv(String label, String value) {
-        adapter.log("     " + Pretty.padEnd(label, 14) + value);
-    }
-
-    private static String onOff(boolean on) {
-        return on ? "开" : "关";
+        adapter.log("§b▌ §7监听 §f" + config.getString("listen-mode", "mention"));
+        adapter.log("§b▌ §7跨服 §f" + (botOn ? "已启用" : "未启用"));
+        adapter.log("§b▌ §7存储 §f" + config.getString("storage-type", "json"));
+        adapter.log("§b▌ §a✔ 已启动 §7输入 §f/vxtb help §7查看命令");
+        adapter.log("");
     }
 
     // ==================== /vxtb 命令 ====================

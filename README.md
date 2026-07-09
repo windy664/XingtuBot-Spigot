@@ -32,10 +32,6 @@ QQ 群 ↔ Minecraft 服务器的多功能桥接机器人。
 ## 项目结构
 
 ```
-common-core/    平台无关核心
-spigot/         Bukkit 端
-velocity/       Velocity 端
-bungeecord/     BungeeCord 端
-bundle/         打包
+common-core/    核心插件（三端合一，产出 XingtuBot.jar）
 xt-*/           附属插件（按需安装）
 ```

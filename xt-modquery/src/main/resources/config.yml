@@ -21,12 +21,6 @@ mcmod-cookie: ""
 baidu-translate-appid: ""
 baidu-translate-appkey: ""
 
-# ---- LLM 辅助（可选；中文别名/智能搜索）----
-llm-enable: false
-llm-api-key: ""
-llm-base-url: "https://api.deepseek.com"
-llm-model: "deepseek-chat"
-
 # ==========================================
 # 2. 模组更新订阅（/modwatch add/remove/list）
 # ==========================================

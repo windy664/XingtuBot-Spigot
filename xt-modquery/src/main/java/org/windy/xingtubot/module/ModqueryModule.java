@@ -1,6 +1,6 @@
 package org.windy.xingtubot.module;
 
-import org.windy.xingtubot.common.ai.AiService;
+import org.windy.xingtubot.common.ai.AiService; // 软依赖 xt-ai 注册的服务
 import org.windy.xingtubot.common.command.impl.McmodCommand;
 import org.windy.xingtubot.common.command.impl.ModWatchCommand;
 import org.windy.xingtubot.common.command.impl.ModrinthCommand;
@@ -56,13 +56,10 @@ public final class ModqueryModule implements BotModule {
             modrinthApi.setTranslator(translator);
             modrinthApi.setCurseforgeApiKey(config.getString("curseforge-api-key", ""));
             modrinthApi.setAliases(config.getStringMap("mod-aliases"));
-            if (config.getBoolean("llm-enable", false)) {
-                String llmKey = config.getString("llm-api-key", "");
-                if (!llmKey.isEmpty()) {
-                    modrinthApi.setLlm(new AiService(llmKey,
-                            config.getString("llm-base-url", "https://api.deepseek.com"),
-                            config.getString("llm-model", "deepseek-chat")));
-                }
+            // LLM 辅助：从 xt-ai 的服务总线获取（软依赖，未装 xt-ai 则跳过）
+            AiService llm = ctx.getService(AiService.class);
+            if (llm != null) {
+                modrinthApi.setLlm(llm);
             }
         }
 

@@ -77,65 +77,36 @@ public final class XingtuBot extends JavaPlugin implements Listener {
             }
         }
 
-        printConfigSummary(config, slave);
+        if (config.getBoolean("debug", false)) {
+            printConfigSummary(config, slave);
+        }
     }
 
     private void printConfigSummary(FileConfiguration config, boolean slave) {
-        getLogger().info("");
-        getLogger().info("─────────────  昕途机器人 · 启动摘要  ─────────────");
-
-        // ── 通信 ──
-        section("📡 通信");
         boolean botOn = !slave && BotLauncher.resolveMode(new SpigotConfig(config)) != BotLauncher.Mode.OFF;
-        String roleDesc = slave ? "（手脚 · 不跑 bot）" : (botOn ? "（本地大脑）" : "（off · 不跑 bot）");
-        kv("角色", config.getString("server-role", "auto") + roleDesc);
+        getLogger().info("");
+        getLogger().info(" ██╗  ██╗██╗███╗   ██╗ ██████╗ ████████╗██╗   ██╗██████╗  ██████╗ ████████╗");
+        getLogger().info(" ╚██╗██╔╝██║████╗  ██║██╔════╝ ╚══██╔══╝██║   ██║██╔══██╗██╔═══██╗╚══██╔══╝");
+        getLogger().info("  ╚███╔╝ ██║██╔██╗ ██║██║        ██║   ██║   ██║██████╔╝██║   ██║   ██║   ");
+        getLogger().info("  ██╔██╗ ██║██║╚██╗██║██║        ██║   ██║   ██║██╔══██╗██║   ██║   ██║   ");
+        getLogger().info(" ██╔╝ ██╗██║██║ ╚████║╚██████╗   ██║   ╚██████╔╝██████╔╝╚██████╔╝   ██║   ");
+        getLogger().info(" ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═════╝  ╚═════╝    ╚═╝   ");
+        getLogger().info("");
+        getLogger().info("▌ 昕途机器人 v" + getDescription().getVersion());
+        String roleDesc = slave ? "（手脚）" : (botOn ? "（本地大脑）" : "（off）");
+        getLogger().info("▌ 角色     " + config.getString("server-role", "auto") + roleDesc);
         if (botOn) {
             String appId = config.getString("openapi-app-id", "");
-            String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "(未配置)";
-            kv("AppID", masked);
-            java.util.List<String> groups = config.getStringList("allowed-groups");
-            kv("群白名单", groups.isEmpty() || groups.contains("*") ? "全部群" : groups.toString());
+            String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "未配置";
+            getLogger().info("▌ AppID    " + masked);
         }
-        kv("监听模式", config.getString("listen-mode", "mention"));
-        kv("调试模式", onOff(config.getBoolean("debug", false)));
-
-        // ── 部署（白名单等功能由 XingtuBot-Auth 附属提供，状态见其自身日志/config）──
-        section("🖥 部署");
-        kv("角色", slave ? "手脚模式 slave（由代理大脑主导）" : "本地模式（本机跑 bot）");
-        kv("存储", config.getString("storage-type", "json"));
-
-        // ── 功能扩展（群服互联/模组/AI/迎送/娱乐等均由附属插件提供，各自独立 config）──
-        section("🧩 功能扩展");
-        String[][] exts = {
-                {"XingtuBot-Auth", "白名单+登录"},
-                {"XingtuBot-Chatlink", "群服互联"},
-                {"XingtuBot-Group", "迎送+自定义"},
-                {"XingtuBot-Fun", "娱乐"},
-                {"XingtuBot-Modquery", "模组工具"},
-                {"XingtuBot-AI", "AI 对话"},
-                {"XingtuBot-Github", "项目追踪"},
-        };
-        for (String[] ext : exts) {
-            boolean installed = Bukkit.getPluginManager().getPlugin(ext[0]) != null;
-            kv(ext[1], installed ? "已装 (" + ext[0] + ")" : "未安装");
-        }
-
-        getLogger().info("──────────────────────────────────────────────────");
+        getLogger().info("▌ 监听     " + config.getString("listen-mode", "mention"));
+        getLogger().info("▌ 跨服     " + (botOn ? "已启用" : "未启用"));
+        getLogger().info("▌ 存储     " + config.getString("storage-type", "json"));
+        getLogger().info("▌ ✔ 已启动  输入 /xtb help 查看命令");
+        getLogger().info("");
     }
 
-    /** 分组标题。 */
-    private void section(String title) {
-        getLogger().info("  " + title);
-    }
-
-    /** 「键值对」行：键按显示宽度对齐到 14 格，再接值。 */
-    private void kv(String label, String value) {
-        getLogger().info("     " + Pretty.padEnd(label, 14) + value);
-    }
-
-    private static String onOff(boolean on) {
-        return on ? "开" : "关";
-    }
 
     /**
      * 部署拓扑判定：本服 bot 由谁跑（与白名单无关，是「单机/手脚」的拓扑选择）。

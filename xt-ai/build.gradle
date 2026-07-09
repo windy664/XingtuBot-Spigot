@@ -3,6 +3,7 @@
 
 dependencies {
     compileOnly project(':common-core')
+    compileOnly 'com.google.code.gson:gson:2.10.1'  // AiService 编译需要（运行期由平台提供）
 
     compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
 

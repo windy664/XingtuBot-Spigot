@@ -174,7 +174,9 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
                 getLogger().severe("[XingtuBot] 未知的 server-role");
         }
 
-        printConfigSummary();
+        if (config.getBoolean("debug", false)) {
+            printConfigSummary();
+        }
     }
 
     private void registerCommands() {
@@ -276,32 +278,20 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
     }
 
     private void printConfigSummary() {
-        getLogger().info("");
-        getLogger().info("─────────────  昕途机器人 · BungeeCord  ─────────────");
         boolean botOn = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
-        section("📡 通信");
-        kv("角色", config.getString("server-role", "auto") + (botOn ? "（大脑）" : "（off）"));
-        kv("监听模式", config.getString("listen-mode", "mention"));
-        section("🖥 部署");
-        kv("跨服", botOn ? "大脑（已建 Bridge）" : "未启用（server-role=off）");
-        // ── 功能扩展（各自独立 config）──
-        section("🧩 功能扩展");
-        String[][] exts = {
-                {"XingtuBot-Auth", "白名单+登录"},
-                {"XingtuBot-Chatlink", "群服互联"},
-                {"XingtuBot-Group", "迎送+自定义"},
-                {"XingtuBot-Fun", "娱乐"},
-                {"XingtuBot-Modquery", "模组工具"},
-                {"XingtuBot-AI", "AI 对话"},
-                {"XingtuBot-Github", "项目追踪"},
-        };
-        for (String[] ext : exts) {
-            boolean installed = getProxy().getPluginManager().getPlugin(ext[0]) != null;
-            kv(ext[1], installed ? "已装" : "未安装");
-        }
-        getLogger().info("──────────────────────────────────────────────────");
+        getLogger().info("");
+        getLogger().info(" ██╗  ██╗██╗███╗   ██╗ ██████╗ ████████╗██╗   ██╗██████╗  ██████╗ ████████╗");
+        getLogger().info(" ╚██╗██╔╝██║████╗  ██║██╔════╝ ╚══██╔══╝██║   ██║██╔══██╗██╔═══██╗╚══██╔══╝");
+        getLogger().info("  ╚███╔╝ ██║██╔██╗ ██║██║        ██║   ██║   ██║██████╔╝██║   ██║   ██║   ");
+        getLogger().info("  ██╔██╗ ██║██║╚██╗██║██║        ██║   ██║   ██║██╔══██╗██║   ██║   ██║   ");
+        getLogger().info(" ██╔╝ ██╗██║██║ ╚████║╚██████╗   ██║   ╚██████╔╝██████╔╝╚██████╔╝   ██║   ");
+        getLogger().info(" ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═════╝  ╚═════╝    ╚═╝   ");
+        getLogger().info("");
+        getLogger().info("▌ 昕途机器人 · BungeeCord");
+        getLogger().info("▌ 角色     " + config.getString("server-role", "auto") + (botOn ? "（大脑）" : "（off）"));
+        getLogger().info("▌ 监听     " + config.getString("listen-mode", "mention"));
+        getLogger().info("▌ 跨服     " + (botOn ? "已启用" : "未启用"));
+        getLogger().info("▌ ✔ 已启动  输入 /bqq help 查看命令");
+        getLogger().info("");
     }
-
-    private void section(String title) { getLogger().info("  " + title); }
-    private void kv(String label, String value) { getLogger().info("     " + Pretty.padEnd(label, 14) + value); }
 }
