@@ -145,7 +145,17 @@ public class CustomReplyService {
         }
     }
 
-    /** 尝试匹配并回复。命中返回 true。 */
+    /** 纯查询：是否有匹配的 trigger（不发送消息）。 */
+    public boolean canHandle(BotMessageEvent event) {
+        String msg = event.getMessage() == null ? "" : event.getMessage().trim();
+        if (msg.isEmpty()) return false;
+        for (CustomReply r : replies) {
+            if (r.matches(msg)) return true;
+        }
+        return false;
+    }
+
+    /** 匹配并发送回复。命中返回 true。 */
     public boolean tryHandle(BotMessageEvent event) {
         String msg = event.getMessage() == null ? "" : event.getMessage().trim();
         if (msg.isEmpty()) return false;

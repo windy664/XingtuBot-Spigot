@@ -1,4 +1,4 @@
-name: Build and Package Plugin
+name: CI Compile Check
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up JDK 8
@@ -34,12 +34,5 @@ jobs:
       - name: Grant execute permission for Gradle wrapper
         run: chmod +x ./gradlew
 
-      - name: Build combined jar (Spigot + Velocity)
-        run: ./gradlew :bundle:shadowJar
-
-      - name: Upload combined jar
-        uses: actions/upload-artifact@v4
-        with:
-          name: XingtuBot
-          path: bundle/build/libs/*.jar
-          retention-days: 30
+      - name: Compile all modules
+        run: ./gradlew build -x test

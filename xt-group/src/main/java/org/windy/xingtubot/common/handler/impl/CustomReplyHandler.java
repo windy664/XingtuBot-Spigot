@@ -27,7 +27,7 @@ public class CustomReplyHandler implements MessageHandler {
 
     @Override
     public boolean matches(String message, BotMessageEvent event) {
-        return customReply != null && customReply.tryHandle(event);
+        return customReply != null && customReply.canHandle(event);
     }
 
     /**
@@ -45,6 +45,9 @@ public class CustomReplyHandler implements MessageHandler {
 
     @Override
     public void handle(String message, BotMessageEvent event) {
+        if (customReply != null) {
+            customReply.tryHandle(event);
+        }
     }
 
     public CustomReplyService getService() {

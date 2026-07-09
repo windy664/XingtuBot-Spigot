@@ -36,10 +36,10 @@ public final class GroupFeaturesModule implements BotModule {
     public void onEnable(ModuleContext ctx) {
         // ===== 迎送词 =====
         if (ctx.config().getBoolean("welcome-enable", true)) {
-            ctx.registry().register(new WelcomeHandler());
+            ctx.registry().register(new WelcomeHandler(ctx.config()));
         }
         if (ctx.config().getBoolean("leave-enable", true)) {
-            ctx.registry().register(new LeaveHandler());
+            ctx.registry().register(new LeaveHandler(ctx.config()));
         }
 
         // ===== 自定义问答（replies.yml）=====

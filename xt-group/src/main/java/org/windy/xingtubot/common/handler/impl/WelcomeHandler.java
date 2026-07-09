@@ -2,7 +2,6 @@ package org.windy.xingtubot.common.handler.impl;
 
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageEvent;
-import org.windy.xingtubot.common.handler.HandlerContext;
 import org.windy.xingtubot.common.handler.MessageHandler;
 
 /**
@@ -17,8 +16,11 @@ public class WelcomeHandler implements MessageHandler {
 
     private static final String DEFAULT_WELCOME = "欢迎新成员！我是 {bot}，有什么需要帮忙的随时 @我~";
 
-    private volatile String welcomeMessage;
-    private BotConfig config;
+    private final String welcomeMessage;
+
+    public WelcomeHandler(BotConfig config) {
+        this.welcomeMessage = config.getStringResolved("welcome-message", DEFAULT_WELCOME);
+    }
 
     @Override
     public boolean matches(String message, BotMessageEvent event) {
@@ -32,14 +34,7 @@ public class WelcomeHandler implements MessageHandler {
 
         text = text.replace("{bot}", org.windy.xingtubot.common.BotIdentity.getName());
 
-        System.out.println("[Welcome] 收到 " + event.getEventType() + "，发送欢迎消息到 " + event.getGuildId());
         event.replyMarkdown(text, null);
-    }
-
-    @Override
-    public void init(HandlerContext ctx) {
-        this.config = ctx.getConfig();
-        this.welcomeMessage = config.getStringResolved("welcome-message", DEFAULT_WELCOME);
     }
 
     @Override

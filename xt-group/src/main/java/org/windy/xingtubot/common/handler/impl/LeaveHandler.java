@@ -2,7 +2,6 @@ package org.windy.xingtubot.common.handler.impl;
 
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageEvent;
-import org.windy.xingtubot.common.handler.HandlerContext;
 import org.windy.xingtubot.common.handler.MessageHandler;
 
 /**
@@ -17,8 +16,11 @@ public class LeaveHandler implements MessageHandler {
 
     private static final String DEFAULT_LEAVE = "{user} 离开了我们";
 
-    private volatile String leaveMessage;
-    private BotConfig config;
+    private final String leaveMessage;
+
+    public LeaveHandler(BotConfig config) {
+        this.leaveMessage = config.getStringResolved("leave-message", DEFAULT_LEAVE);
+    }
 
     @Override
     public boolean matches(String message, BotMessageEvent event) {
@@ -34,12 +36,6 @@ public class LeaveHandler implements MessageHandler {
         text = text.replace("{bot}", org.windy.xingtubot.common.BotIdentity.getName()).replace("{user}", username);
 
         event.replyMarkdown(text, null);
-    }
-
-    @Override
-    public void init(HandlerContext ctx) {
-        this.config = ctx.getConfig();
-        this.leaveMessage = config.getStringResolved("leave-message", DEFAULT_LEAVE);
     }
 
     @Override
