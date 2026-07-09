@@ -3,30 +3,30 @@ package org.windy.xingtubot.velocity;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.event.ClickEvent;
-import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.util.QrChat;
 import org.windy.xingtubot.common.util.QrMatrix;
+import org.windy.xingtubot.common.whitelist.LockMessages;
+import org.windy.xingtubot.common.whitelist.QrMapSender;
 
 import java.util.Optional;
 
 /**
- * Velocity 主导下的「加群二维码地图」：代理端直接给客户端发地图包（不经子服、不碰背包）。
+ * Velocity 主导下的「加群二维码地图」：代理端直接给客户端发地图包（不经子服、不碰背包），
+ * 并强制玩家手持，让二维码直接显示在手上。
  *
- * <p>本类由「白名单」附属插件（xt-auth）拥有：在 {@code AuthVelocityPlugin} 里经核心
- * {@code VelocityBridge.setOnUnboundJoin} 注册回调；群号/链接读 xt-auth 自己的 config。
+ * <p>只走 <b>map</b>：聊天渲染不出可扫的二维码，已无意义。真正的发包走三端共享的
+ * {@link QrMapSender}（直接 import PacketEvents），经 {@code available()} 守卫懒加载。
  *
- * <p>只负责决策 + QR 生成 + 回退；真正的发包隔离在 {@link VelocityMapPacketSender}
- * （直接 import PacketEvents），通过 {@code available()} 守卫懒加载，没装 PacketEvents 时不加载。
+ * <p>玩家侧的文字引导（"手持地图扫码加群"）由登录锁 {@link VelocityPlayerLock} 的 bossbar 统一展示，
+ * 本类只负责把地图放到玩家手上。
  */
 public final class VelocityJoinQrMap {
 
     private VelocityJoinQrMap() {
     }
 
-    /** 未绑定玩家进服时调：发加群二维码地图；没装 PacketEvents 或失败则回退聊天提示。 */
+    /** 未绑定玩家登记 QQ 后调：把加群二维码作为地图物品强制放到玩家手上。 */
     public static void giveIfEnabled(ProxyServer proxy, BotConfig config, String playerName) {
         if (config == null || playerName == null) return;
         if (!config.getBoolean("group-qr-enable", true)) return;
@@ -40,44 +40,17 @@ public final class VelocityJoinQrMap {
         if (!op.isPresent()) return;
         Player player = op.get();
 
-        // 样式：chat=聊天二维码(默认,零依赖) / map=代理端发包地图(需PacketEvents) / both=都发
-        String style = config.getString("group-qr-style", "chat").trim().toLowerCase();
-        boolean wantMap = style.equals("map") || style.equals("both");
-        boolean wantChat = style.equals("chat") || style.equals("both");
-        if (!wantMap && !wantChat) wantChat = true;
-
         boolean[][] qr = QrMatrix.encode(content);
         if (qr == null) return;
 
-        boolean mapSent = false;
-        if (wantMap && VelocityMapPacketSender.available()) {
-            mapSent = VelocityMapPacketSender.send(player, qr);
+        // 只走地图物品：chat 渲染不出可扫的二维码，无意义。三端共用 QrMapSender。
+        if (QrMapSender.available() && QrMapSender.send(player, qr)) {
+            return; // 成功：地图已强制放到玩家手上，扫码引导由 bossbar 统一展示
         }
 
-        if (wantChat) {
-            sendChatQr(player, qr, group, url); // 聊天二维码：一行 + 悬停展开（自带群号）
-        } else if (mapSent) {
-            player.sendMessage(legacy("§a已发送加群二维码地图，§f手持查看并用手机 QQ 扫码加群"
-                    + (group.isEmpty() ? "" : "§7（群号 " + group + "）")));
-        } else {
-            // map 模式但没装 PacketEvents → 聊天提示群号 + 链接
-            StringBuilder sb = new StringBuilder("§e加入 QQ 群：");
-            if (!group.isEmpty()) sb.append("§b群号 ").append(group).append(" ");
-            if (!url.isEmpty()) sb.append("§f").append(url);
-            player.sendMessage(legacy(sb.toString()));
-        }
-    }
-
-    /** 聊天二维码：发一行可悬停消息，hover 展开半块字符二维码（特别小）；有链接则可点击打开。 */
-    private static void sendChatQr(Player player, boolean[][] qr, String group, String url) {
-        Component qrComp = legacy(QrChat.renderJoined(qr));
-        String header = "§a[加群二维码] §7← 悬停查看"
-                + (group.isEmpty() ? "" : " §f群号 " + group);
-        Component line = legacy(header).hoverEvent(HoverEvent.showText(qrComp));
-        if (!url.isEmpty()) {
-            line = line.clickEvent(ClickEvent.openUrl(url));
-        }
-        player.sendMessage(line);
+        // 兜底：packetevents 运行期不可用（已内置进 jar，理论上不该发生）→ 给纯文字群号/链接。
+        // 不再退回聊天二维码（渲染不出可扫的码，无意义）。
+        player.sendMessage(legacy(LockMessages.qrFallback(group, url)));
     }
 
     private static Component legacy(String s) {

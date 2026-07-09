@@ -20,7 +20,23 @@ public final class AuthBukkitPlugin extends JavaPlugin {
     private SpigotBridge spigotBridge;
 
     @Override
+    public void onLoad() {
+        // packetevents 内置进本 jar：自行初始化（不再依赖外部 packetevents 插件）。
+        // Spigot 端 load() 须在 onLoad() 完成，init() 放 onEnable()；已初始化则跳过。
+        if (com.github.retrooper.packetevents.PacketEvents.getAPI() == null) {
+            com.github.retrooper.packetevents.PacketEvents.setAPI(
+                    io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder.build(this));
+            com.github.retrooper.packetevents.PacketEvents.getAPI().load();
+        }
+    }
+
+    @Override
     public void onEnable() {
+        // packetevents 内置：使用前完成 init()（load() 已在 onLoad 执行）。
+        if (com.github.retrooper.packetevents.PacketEvents.getAPI() != null
+                && !com.github.retrooper.packetevents.PacketEvents.getAPI().isInitialized()) {
+            com.github.retrooper.packetevents.PacketEvents.getAPI().init();
+        }
         XingtuBotHost host = getServer().getServicesManager().load(XingtuBotHost.class);
 
         BotLogger logger = new BotLogger() {
@@ -29,6 +45,10 @@ public final class AuthBukkitPlugin extends JavaPlugin {
         };
 
         YamlBotConfig config = new YamlBotConfig(getDataFolder(), getClass().getClassLoader());
+
+        // 游戏内锁定文案：从独立 messages.yml 覆盖默认（首启自动释放）
+        org.windy.xingtubot.common.whitelist.LockMessages.load(
+                new YamlBotConfig(getDataFolder(), getClass().getClassLoader(), "messages.yml")::getString);
 
         // 部署模式（slave 手脚 / local 单机大脑）由框架统一判定，核心已写入 host.isBrain()。
         // 本扩展只读，不再自行用 ProxyDetector + whitelist-role 重复判定（那是机器人框架的职责）。

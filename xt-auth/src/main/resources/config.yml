@@ -127,6 +127,6 @@ group-join-url: "https://qm.qq.com/q/FEK78ZAOWY"
 # 作用：向玩家展示加群二维码的方式。
 # 可选值:
 # - "chat": 聊天框模式。发送一行可悬停的消息，鼠标放上去后展开字符组成的迷你二维码（无任何前置插件依赖）。
-# - "map" : 虚拟地图模式。纯发包将带有二维码的地图显示在玩家当前手持槽位上，不污染真实背包（注：子服需要 ProtocolLib，Velocity 端需要 PacketEvents，若未安装则自动退回到 chat 模式）。
+# - "map" : 虚拟地图模式。纯发包将带有二维码的地图显示在玩家当前手持槽位上，不污染真实背包（PacketEvents 已内置进本插件 jar，无需另装；若运行期不可用则自动退回 chat 模式）。
 # - "both": 两者都发。
-group-qr-style: "chat"
+group-qr-style: "map"

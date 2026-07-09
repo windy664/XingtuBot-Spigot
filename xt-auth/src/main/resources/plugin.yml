@@ -4,6 +4,5 @@ main: org.windy.xingtubot.ext.xtauth.AuthBukkitPlugin
 authors: [ 风吟 ]
 depend:
   - XingtuBot
-  - packetevents
 softdepend:
   - PlaceholderAPI

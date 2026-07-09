@@ -24,6 +24,7 @@ dependencies {
     implementation 'com.github.retrooper:packetevents-api:2.13.0'
     implementation 'com.github.retrooper:packetevents-velocity:2.13.0'
     implementation 'com.github.retrooper:packetevents-spigot:2.13.0'
+    implementation 'com.github.retrooper:packetevents-bungeecord:2.13.0'
 
     // 跨服 Redis 信道（RedisChannel/RedisManager）已收归核心：jedis 由核心 bundle 打包，
     // 本插件只经 CrossServerChannel 接口取用核心创建的实例，不再自带 jedis。

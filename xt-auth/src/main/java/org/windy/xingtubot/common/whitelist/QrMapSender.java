@@ -1,21 +1,29 @@
-package org.windy.xingtubot.bukkit.module.whitelist;
+package org.windy.xingtubot.common.whitelist;
 
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.protocol.component.ComponentTypes;
 import com.github.retrooper.packetevents.protocol.item.ItemStack;
 import com.github.retrooper.packetevents.protocol.item.type.ItemTypes;
 import com.github.retrooper.packetevents.protocol.nbt.NBTInt;
+import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerHeldItemChange;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerMapData;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerSetSlot;
-import org.bukkit.entity.Player;
 
+import java.util.Arrays;
 import java.util.Collections;
 
 /**
- * 用 PacketEvents 在 Bukkit 端把地图「纯发包」给客户端（不写入真实背包）。
- * <p>替代旧的 {@link MapPacketSender}（ProtocolLib 版），功能完全对等。
+ * 三端通用的「加群二维码地图」发包器：用 PacketEvents 把二维码地图直发给客户端，
+ * 并强制玩家手持，扫码即可加群。不写入真实背包、不碰子服。
+ *
+ * <p>平台无关：PacketEvents 的 {@code getPlayerManager().sendPacket(Object, wrapper)} 接受任意平台的
+ * player 对象（Bukkit {@code Player} / Velocity {@code Player} / BungeeCord {@code ProxiedPlayer}），
+ * 故 Bukkit / Velocity / BungeeCord 三端共用本类，调用方各自把自己的 player 以 {@code Object} 传入。
+ *
+ * <p>PacketEvents 已内置进本插件 jar 并在三端主类启动时自初始化；本类经 {@link #available()}
+ * 守卫懒加载，运行期不可用时返回 false 由调用方兜底。
  */
-final class BukkitMapPacketSender {
+public final class QrMapSender {
 
     /** 专用地图 id：取一个极端值避开子服真实地图（真实地图从 0 递增）。 */
     private static final int MAP_ID = 2_000_000_000;
@@ -23,11 +31,11 @@ final class BukkitMapPacketSender {
     private static final byte WHITE = 34;
     private static final byte BLACK = 119;
 
-    private BukkitMapPacketSender() {
+    private QrMapSender() {
     }
 
-    /** PacketEvents 是否在场（守卫，避免 NoClassDefFoundError）。 */
-    static boolean available() {
+    /** PacketEvents 是否在场且已初始化（守卫，避免 NoClassDefFoundError / NPE）。 */
+    public static boolean available() {
         try {
             Class.forName("com.github.retrooper.packetevents.PacketEvents");
             return PacketEvents.getAPI() != null;
@@ -36,8 +44,13 @@ final class BukkitMapPacketSender {
         }
     }
 
-    /** 发地图数据 + SetSlot（filled_map 到快捷栏第一格），让客户端显示二维码。 */
-    static boolean send(Player player, boolean[][] qr) {
+    /**
+     * 发地图数据 + SetSlot（filled_map 到快捷栏第一格）+ 强制手持，让客户端把二维码显示在手上。
+     *
+     * @param player 平台原生 player 对象（PacketEvents 按其客户端版本自动序列化）
+     * @return 是否成功发出
+     */
+    public static boolean send(Object player, boolean[][] qr) {
         try {
             byte[] data = render(qr);
 
@@ -57,8 +70,12 @@ final class BukkitMapPacketSender {
             // windowId=0 玩家自身背包，slot=36 快捷栏第一格，stateId 交给 PacketEvents
             WrapperPlayServerSetSlot slot = new WrapperPlayServerSetSlot(0, 0, 36, item);
 
+            // 强制玩家手持这把地图（切到快捷栏第 0 格），否则玩家可能选着别的格子、根本看不见二维码
+            WrapperPlayServerHeldItemChange held = new WrapperPlayServerHeldItemChange(0);
+
             PacketEvents.getAPI().getPlayerManager().sendPacket(player, map);
             PacketEvents.getAPI().getPlayerManager().sendPacket(player, slot);
+            PacketEvents.getAPI().getPlayerManager().sendPacket(player, held);
             return true;
         } catch (Throwable t) {
             return false;
@@ -68,7 +85,7 @@ final class BukkitMapPacketSender {
     /** 二维码矩阵 → 128×128 地图色字节：底白、黑点画黑、居中放大。 */
     private static byte[] render(boolean[][] qr) {
         byte[] data = new byte[128 * 128];
-        java.util.Arrays.fill(data, WHITE);
+        Arrays.fill(data, WHITE);
         if (qr == null || qr.length == 0) return data;
 
         int n = qr.length;

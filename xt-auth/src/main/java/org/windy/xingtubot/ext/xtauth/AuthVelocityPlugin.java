@@ -35,7 +35,6 @@ import java.nio.file.Path;
         authors = {"风吟"},
         dependencies = {
                 @Dependency(id = "xingtubotvelocity"),
-                @Dependency(id = "packetevents")
         }
 )
 public class AuthVelocityPlugin {
@@ -43,18 +42,32 @@ public class AuthVelocityPlugin {
     private final ProxyServer proxy;
     private final Logger logger;
     private final Path dataDir;
+    private final PluginContainer pluginContainer;
     private BotModule module;
     private VelocityPlayerLock lockManager;
 
     @Inject
-    public AuthVelocityPlugin(ProxyServer proxy, Logger logger, @DataDirectory Path dataDir) {
+    public AuthVelocityPlugin(ProxyServer proxy, Logger logger, @DataDirectory Path dataDir,
+                              PluginContainer pluginContainer) {
         this.proxy = proxy;
         this.logger = logger;
         this.dataDir = dataDir;
+        this.pluginContainer = pluginContainer;
     }
 
     @Subscribe
     public void onProxyInit(ProxyInitializeEvent event) {
+        // packetevents 内置进本 jar：自行初始化（不再依赖外部 packetevents 插件）。
+        // 依 packetevents 官方 Velocity 生命周期：setAPI + load + init 均在 ProxyInitializeEvent。
+        if (com.github.retrooper.packetevents.PacketEvents.getAPI() == null) {
+            com.github.retrooper.packetevents.PacketEvents.setAPI(
+                    io.github.retrooper.packetevents.velocity.factory.VelocityPacketEventsBuilder.build(
+                            proxy, pluginContainer, logger, dataDir));
+            com.github.retrooper.packetevents.PacketEvents.getAPI().load();
+        }
+        if (!com.github.retrooper.packetevents.PacketEvents.getAPI().isInitialized()) {
+            com.github.retrooper.packetevents.PacketEvents.getAPI().init();
+        }
         XingtuBotHost host = proxy.getPluginManager().getPlugin("xingtubotvelocity")
                 .flatMap(PluginContainer::getInstance)
                 .filter(p -> p instanceof XingtuBotHostProvider)
@@ -67,6 +80,10 @@ public class AuthVelocityPlugin {
         };
 
         YamlBotConfig config = new YamlBotConfig(dataDir.toFile(), getClass().getClassLoader());
+
+        // 游戏内锁定文案：从独立 messages.yml 覆盖默认（首启自动释放）
+        org.windy.xingtubot.common.whitelist.LockMessages.load(
+                new YamlBotConfig(dataDir.toFile(), getClass().getClassLoader(), "messages.yml")::getString);
 
         // 取核心 VelocityBridge：它持有认证适配器（DO_LOGIN/DO_REGISTER 下发通道），
         // 须在 enable 之前拿到并注入 AuthModule，否则大脑侧 BindingService 的 auth 为 null，
@@ -115,7 +132,7 @@ public class AuthVelocityPlugin {
 
                 // 注册 packetevents 包拦截器
                 com.github.retrooper.packetevents.PacketEvents.getAPI().getEventManager()
-                        .registerListener(new org.windy.xingtubot.velocity.PlayerLockPacketListener(proxy, lockManager));
+                        .registerListener(new org.windy.xingtubot.common.whitelist.LockPacketListener(lockManager));
 
                 logger.info("[Auth] packetevents 登录锁已启用（Velocity 端包级拦截 + 拓扑门禁）");
             } else {

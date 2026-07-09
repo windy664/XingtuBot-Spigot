@@ -2,9 +2,10 @@ package org.windy.xingtubot.ext.xtauth;
 
 import net.md_5.bungee.api.plugin.Plugin;
 import org.windy.xingtubot.bungee.BungeeCordDirectAuthAdapter;
-import org.windy.xingtubot.bungee.BungeeCordPacketListener;
 import org.windy.xingtubot.bungee.BungeeCordPlayerLock;
 import org.windy.xingtubot.common.config.YamlBotConfig;
+import org.windy.xingtubot.common.whitelist.LockMessages;
+import org.windy.xingtubot.common.whitelist.LockPacketListener;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ExtensionBootstrap;
 import org.windy.xingtubot.common.module.XingtuBotHost;
@@ -21,7 +22,22 @@ public class AuthBungeeCordPlugin extends Plugin {
     private BungeeCordPlayerLock lockManager;
 
     @Override
+    public void onLoad() {
+        // packetevents 内置进本 jar：自行初始化（不再依赖外部 packetevents 插件）；已初始化则跳过。
+        if (com.github.retrooper.packetevents.PacketEvents.getAPI() == null) {
+            com.github.retrooper.packetevents.PacketEvents.setAPI(
+                    io.github.retrooper.packetevents.bungee.factory.BungeePacketEventsBuilder.build(this));
+            com.github.retrooper.packetevents.PacketEvents.getAPI().load();
+        }
+    }
+
+    @Override
     public void onEnable() {
+        // packetevents 内置：使用前完成 init()（load() 已在 onLoad 执行）。
+        if (com.github.retrooper.packetevents.PacketEvents.getAPI() != null
+                && !com.github.retrooper.packetevents.PacketEvents.getAPI().isInitialized()) {
+            com.github.retrooper.packetevents.PacketEvents.getAPI().init();
+        }
         XingtuBotHost host = findHost();
         if (host == null) { getLogger().severe("[Auth] 找不到主插件 XingtuBotBungeeCord"); return; }
 
@@ -31,6 +47,9 @@ public class AuthBungeeCordPlugin extends Plugin {
         };
 
         YamlBotConfig config = new YamlBotConfig(getDataFolder(), getClass().getClassLoader());
+
+        // 游戏内锁定文案：从独立 messages.yml 覆盖默认（首启自动释放）
+        LockMessages.load(new YamlBotConfig(getDataFolder(), getClass().getClassLoader(), "messages.yml")::getString);
 
         // 取核心 BungeeCordBridge
         net.md_5.bungee.api.plugin.Plugin main = getProxy().getPluginManager().getPlugin("XingtuBotBungeeCord");
@@ -69,7 +88,7 @@ public class AuthBungeeCordPlugin extends Plugin {
                         org.windy.xingtubot.bungee.BungeeCordJoinQrMap.giveIfEnabled(getProxy(), config, name));
 
                 com.github.retrooper.packetevents.PacketEvents.getAPI().getEventManager()
-                        .registerListener(new BungeeCordPacketListener(getProxy(), lockManager));
+                        .registerListener(new LockPacketListener(lockManager));
                 getLogger().info("[Auth] packetevents 登录锁已启用（BungeeCord 端包级拦截）");
             } else {
                 getLogger().warning("[Auth] BindingService 未就绪，packetevents 登录锁未启用。");

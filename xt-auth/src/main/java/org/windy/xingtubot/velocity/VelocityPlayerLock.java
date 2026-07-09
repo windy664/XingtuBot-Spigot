@@ -4,12 +4,15 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import net.kyori.adventure.title.Title;
 import org.windy.xingtubot.common.binding.BindingService;
 import org.windy.xingtubot.common.lock.LockState;
 import org.windy.xingtubot.common.lock.PlayerLockManager;
+import org.windy.xingtubot.common.whitelist.LockBossBar;
+import org.windy.xingtubot.common.whitelist.LockMessages;
+import org.windy.xingtubot.common.whitelist.LockPosition;
+import org.windy.xingtubot.common.whitelist.LockPrompt;
+import org.windy.xingtubot.common.whitelist.LockTarget;
 
-import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -17,38 +20,22 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
- * Velocity 端玩家登录锁管理器（packetevents 包级拦截 + Velocity 事件层门禁）。
- *
- * <p>职责：
- * <ul>
- *   <li>锁定/解锁状态（{@link LockState}）</li>
- *   <li>锁定坐标（从首个 Position 包捕获）</li>
- *   <li>awaitingQQ 状态（未绑定玩家等输入 QQ 号）</li>
- *   <li>定时登录提醒（title + message，Velocity 直发）</li>
- *   <li>QQ 号输入处理（替代 Bukkit WhitelistModule 的聊天监听）</li>
- * </ul>
- *
- * <p>扩展点：
- * <ul>
- *   <li>{@link #setOnCodeIssued} — QQ 登记成功后的回调（挂接加群二维码等）</li>
- * </ul>
+ * Velocity 端玩家登录锁管理器。锁定状态 + 坐标 + awaitingQQ + bossbar 提醒 + QQ 输入处理。
+ * <p>实现 {@link LockTarget}，由三端共享的 {@code LockPacketListener} 驱动。
  */
-public class VelocityPlayerLock implements PlayerLockManager {
+public class VelocityPlayerLock implements PlayerLockManager, LockTarget {
 
     private final ProxyServer proxy;
     private final Object plugin; // VelocityPlugin 实例，用于 scheduler
     private final LockState lockState = new LockState();
     private volatile BindingService bindingService;
 
-    // 锁定坐标数据
-    private final Map<String, LockData> lockData = new ConcurrentHashMap<>();
-    // 正在等待输入 QQ 号的玩家
+    private final Map<String, LockPosition> lockData = new ConcurrentHashMap<>();
     private final Set<String> awaitingQQ = ConcurrentHashMap.newKeySet();
-    // 定时提醒任务句柄（按玩家名）
     private final Map<String, com.velocitypowered.api.scheduler.ScheduledTask> reminderTasks
             = new ConcurrentHashMap<>();
-
-    // ===== 扩展点 =====
+    // 常驻 bossbar（三端共用 packetevents 实现）——取代闪烁的 title 作为锁定期引导
+    private final LockBossBar bossBar = new LockBossBar();
 
     /** QQ 登记成功后的回调（进入「去群里发『绑定』」阶段时触发，用于发加群二维码等）。 */
     private volatile Consumer<String> onCodeIssued;
@@ -75,7 +62,7 @@ public class VelocityPlayerLock implements PlayerLockManager {
     public void lock(String player) {
         String key = player.toLowerCase(Locale.ROOT);
         lockState.lock(key);
-        lockData.put(key, new LockData());
+        lockData.put(key, new LockPosition());
         awaitingQQ.add(key);
         startReminder(player);
     }
@@ -87,6 +74,7 @@ public class VelocityPlayerLock implements PlayerLockManager {
         lockData.remove(key);
         awaitingQQ.remove(key);
         stopReminder(player);
+        bossBar.clear(proxy.getPlayer(player).orElse(null), player);
     }
 
     @Override
@@ -94,6 +82,7 @@ public class VelocityPlayerLock implements PlayerLockManager {
         return lockState.isLocked(player);
     }
 
+    @Override
     public boolean isAwaitingQQ(String player) {
         return awaitingQQ.contains(player.toLowerCase(Locale.ROOT));
     }
@@ -104,57 +93,48 @@ public class VelocityPlayerLock implements PlayerLockManager {
 
     // ===== 锁定坐标（从首个 Position 包捕获） =====
 
-    /**
-     * 从首个 Position 包捕获锁定坐标（只取一次）。
-     *
-     * @return true 如果坐标是首次捕获（调用者应发一次 Position 包拉回）
-     */
+    @Override
     public boolean capturePosition(String player, double x, double y, double z,
                                    float yaw, float pitch) {
-        LockData data = lockData.get(player.toLowerCase(Locale.ROOT));
+        LockPosition data = lockData.get(player.toLowerCase(Locale.ROOT));
         if (data == null || data.hasPosition()) return false;
         data.setPosition(x, y, z, yaw, pitch);
         return true;
     }
 
-    /** 获取锁定坐标并构造 Position 包数据。返回 null 如果还没有坐标。 */
-    public LockData getLockData(String player) {
+    @Override
+    public LockPosition getLockData(String player) {
         return lockData.get(player.toLowerCase(Locale.ROOT));
     }
 
-    // ===== QQ 号输入处理（替代 Bukkit WhitelistModule 的聊天监听） =====
+    // ===== QQ 号输入处理 =====
 
-    /**
-     * 处理未绑定玩家在聊天框输入的内容（尝试解析为 QQ 号）。
-     * <p>在 packetevents 的 onPacketReceive 中调用（已在异步线程）。
-     */
-    public void handleChatInput(Player player, String name, String message) {
+    @Override
+    public void handleChatInput(String name, String message) {
+        Player player = proxy.getPlayer(name).orElse(null);
+        if (player == null) return;
         String trimmed = message.trim();
 
         // 简单校验：QQ 号是 5-12 位数字
         if (!trimmed.matches("\\d{5,12}")) {
-            player.sendMessage(legacy("§c请输入有效的 QQ 号（5-12 位数字）"));
+            player.sendMessage(legacy(LockMessages.qqInvalid()));
             return;
         }
-
         if (bindingService == null) {
-            player.sendMessage(legacy("§c绑定服务未就绪，请稍后再试"));
+            player.sendMessage(legacy(LockMessages.notReady()));
             return;
         }
 
         // 异步调用 BindingService.declareQQ（会下载头像）
         proxy.getScheduler().buildTask(plugin, () -> {
             BindingService.Result r = bindingService.declareQQ(name, trimmed);
-            // 回主线程发消息
             proxy.getScheduler().buildTask(plugin, () -> {
                 Player p = proxy.getPlayer(name).orElse(null);
                 if (p == null) return;
                 p.sendMessage(legacy(r.message));
                 if (r.success) {
                     awaitingQQ.remove(name.toLowerCase(Locale.ROOT));
-                    // 更新提醒标题为「请完成绑定」阶段
                     restartReminder(name);
-                    // 触发回调（加群二维码等）
                     Consumer<String> cb = onCodeIssued;
                     if (cb != null) {
                         try { cb.accept(name); } catch (Exception ignored) {}
@@ -168,7 +148,6 @@ public class VelocityPlayerLock implements PlayerLockManager {
 
     private void startReminder(String player) {
         stopReminder(player); // 避免重复
-        // 3 秒间隔
         com.velocitypowered.api.scheduler.ScheduledTask task = proxy.getScheduler()
                 .buildTask(plugin, () -> tickReminder(player))
                 .delay(3, java.util.concurrent.TimeUnit.SECONDS)
@@ -191,35 +170,17 @@ public class VelocityPlayerLock implements PlayerLockManager {
     private void tickReminder(String player) {
         Player p = proxy.getPlayer(player).orElse(null);
         if (p == null || !p.isActive()) {
+            bossBar.clear(p, player);
             stopReminder(player);
             return;
         }
         if (!isLocked(player)) {
+            bossBar.clear(p, player);
             stopReminder(player);
             return;
         }
-
-        int stay = 80; // 4 秒停留（tick）
-
-        if (isBound(player)) {
-            // 已绑定 → 等群里发「登录」
-            p.showTitle(Title.title(
-                    legacy("§a§l欢迎回来 · 请登录"),
-                    legacy("§f在群里点机器人发的「§a登录§f」按钮"),
-                    Title.Times.of(Duration.ZERO, Duration.ofMillis(stay * 50L), Duration.ofMillis(500))));
-        } else if (!isAwaitingQQ(player)) {
-            // 已声明 QQ → 等群里发「绑定」
-            p.showTitle(Title.title(
-                    legacy("§6§l就差一步 · 请完成绑定"),
-                    legacy("§f在群里发送「§b绑定§f」完成头像验证"),
-                    Title.Times.of(Duration.ZERO, Duration.ofMillis(stay * 50L), Duration.ofMillis(500))));
-        } else {
-            // 还没输 QQ 号
-            p.showTitle(Title.title(
-                    legacy("§6§l欢迎 · 请绑定白名单"),
-                    legacy("§f在聊天框输入你的 §bQQ号"),
-                    Title.Times.of(Duration.ZERO, Duration.ofMillis(stay * 50L), Duration.ofMillis(500))));
-        }
+        boolean bound = isBound(player);
+        bossBar.set(p, player, LockPrompt.text(bound, isAwaitingQQ(player)), bound);
     }
 
     /** 清理玩家离线时的所有状态。 */
@@ -230,35 +191,12 @@ public class VelocityPlayerLock implements PlayerLockManager {
         lockData.remove(key);
         lockState.clear(key);
         stopReminder(player);
+        bossBar.clear(proxy.getPlayer(player).orElse(null), player);
     }
 
     // ===== 工具方法 =====
 
     static Component legacy(String s) {
         return LegacyComponentSerializer.legacySection().deserialize(s == null ? "" : s);
-    }
-
-    // ===== 锁定坐标数据 =====
-
-    public static class LockData {
-        private volatile double x, y, z;
-        private volatile float yaw, pitch;
-        private volatile boolean hasPosition;
-
-        void setPosition(double x, double y, double z, float yaw, float pitch) {
-            this.x = x;
-            this.y = y;
-            this.z = z;
-            this.yaw = yaw;
-            this.pitch = pitch;
-            this.hasPosition = true;
-        }
-
-        public boolean hasPosition() { return hasPosition; }
-        public double getX() { return x; }
-        public double getY() { return y; }
-        public double getZ() { return z; }
-        public float getYaw() { return yaw; }
-        public float getPitch() { return pitch; }
     }
 }

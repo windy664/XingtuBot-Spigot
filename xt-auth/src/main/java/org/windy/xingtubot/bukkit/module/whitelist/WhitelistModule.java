@@ -85,6 +85,12 @@ public class WhitelistModule implements Listener {
         // 补全 lockManager 的 BindingService 引用
         bukkitLock.setBindingService(service);
 
+        // QQ 登记成功后（进入「去群里发绑定」阶段）→ 把加群二维码地图强制放到玩家手上
+        bukkitLock.setOnCodeIssued(name -> {
+            Player p = Bukkit.getPlayerExact(name);
+            if (p != null) JoinQrMap.giveMap(plugin, p);
+        });
+
         // 自动登录信任期
         this.autoLoginWindowMillis = Math.max(0L,
                 plugin.getConfig().getInt("auto-login-window-minutes", 720) * 60_000L);
@@ -98,9 +104,9 @@ public class WhitelistModule implements Listener {
             }
         }
 
-        // 注册 packetevents 包拦截器
+        // 注册 packetevents 包拦截器（三端共享 LockPacketListener）
         com.github.retrooper.packetevents.PacketEvents.getAPI().getEventManager()
-                .registerListener(new BukkitPacketListener(bukkitLock));
+                .registerListener(new org.windy.xingtubot.common.whitelist.LockPacketListener(bukkitLock));
 
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
         startReminderTask(plugin);
@@ -152,15 +158,12 @@ public class WhitelistModule implements Listener {
                 return;
             }
             String title = spigotConfig.getStringResolved("title-code", "@{bot} /验证");
-            String loginMsg = spigotConfig.getStringResolved("login-mssage",
-                    "🔈§f请在群内发送 §b@{bot} §c登录 或 §f输入§c/login <密码> §f完成登录");
             player.sendTitle("§a§l欢迎回来", title, 10, 60, 15);
-            JoinQrMap.sendWithQr(plugin, player, "§e欢迎回来！" + loginMsg);
+            JoinQrMap.giveMap(plugin, player); // 加群二维码地图（强制手持）
         } else if (service.hasPending(name)) {
             String bindWord = plugin.getConfig().getString("binding-prompt", "绑定");
             player.sendTitle("§6§l请完成绑定", "§f在群里发送「§e§l" + bindWord + "§f」", 10, 60, 15);
-            JoinQrMap.sendWithQr(plugin, player, "§e你已登记QQ，请在群里发送「§e§l" + bindWord
-                    + "§e」完成绑定（5 分钟内有效）");
+            JoinQrMap.giveMap(plugin, player); // 加群二维码地图（强制手持）
         } else {
             bukkitLock.lock(name);
             player.sendTitle("§6§l欢迎来到本服", "§f请在聊天框输入 QQ 号开始白名单绑定", 10, 60, 15);
@@ -168,7 +171,7 @@ public class WhitelistModule implements Listener {
         }
     }
 
-    // onPlayerChat 不再需要——聊天由 BukkitPacketListener 处理
+    // onPlayerChat 不再需要——聊天由共享 LockPacketListener 处理
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
