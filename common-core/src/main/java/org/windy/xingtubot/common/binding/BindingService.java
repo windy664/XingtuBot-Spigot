@@ -27,6 +27,9 @@ public interface BindingService {
     /** 单 openid 失败匹配尝试上限（config: {@code bind-max-attempts}）。 */
     void setMaxBindAttempts(int maxBindAttempts);
 
+    /** 设置 QQ 群号（config: {@code qq-group}），用于「已记录QQ」提示文案。 */
+    void setGroupNumber(String groupNumber);
+
     /** 绑定仓库（跨模块只读消费方经此查 openid↔玩家）。 */
     BindingRepository getStore();
 

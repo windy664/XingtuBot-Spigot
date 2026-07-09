@@ -16,6 +16,7 @@ import org.windy.xingtubot.common.module.ExtensionBootstrap;
 import org.windy.xingtubot.common.module.XingtuBotHost;
 import org.windy.xingtubot.common.module.XingtuBotHostProvider;
 import org.windy.xingtubot.common.platform.BotLogger;
+import org.windy.xingtubot.common.whitelist.LockMessages;
 import org.windy.xingtubot.module.AuthModule;
 import org.windy.xingtubot.velocity.VelocityBridge;
 import org.windy.xingtubot.velocity.VelocityDirectAuthAdapter;
@@ -226,10 +227,9 @@ public class AuthVelocityPlugin {
      */
     private static String buildLoginCard(String player, String region, String loginWord) {
         StringBuilder sb = new StringBuilder();
-        sb.append("## 🔐 登录请求\n");
-        sb.append("👤 **玩家**　").append(player).append("\n");
-        sb.append("\n> Tips: 在群里回复「**").append(loginWord)
-          .append("**」亦可可登录 ✅\n");
+        sb.append(LockMessages.get("group-login-card-title"));
+        sb.append(LockMessages.get("group-login-card-player")).append(player).append("\n");
+        sb.append(LockMessages.format("group-login-card-tip", "{login}", loginWord));
         return sb.toString();
     }
 

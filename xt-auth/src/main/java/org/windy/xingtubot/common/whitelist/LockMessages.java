@@ -38,6 +38,79 @@ public final class LockMessages {
         DEFAULTS.put("welcome-need-bind", "§6§l请完成绑定 · §f在群里发送「{bind}」");
         DEFAULTS.put("welcome-await-qq", "§6§l欢迎来到本服 · §f请在聊天框输入 QQ 号开始白名单绑定");
         DEFAULTS.put("await-qq-msg", "§e欢迎！请在聊天框输入你的 §bQQ号 §e完成白名单绑定");
+        // —— 绑定/登录反馈（BindingServiceImpl）——
+        DEFAULTS.put("qq-format", "§cQQ号格式不正确，请输入 5~15 位数字");
+        DEFAULTS.put("already-bound", "§e你已绑定过白名单，无需重复绑定");
+        DEFAULTS.put("qq-avatar-fail", "§c取不到该QQ号的头像，请确认QQ号填写正确、且该QQ已设置头像后重试");
+        DEFAULTS.put("qq-avatar-unusable", "§c该QQ头像是默认/纯色或无法识别，无法用于绑定。请先在QQ设置一张清晰头像后再绑定");
+        DEFAULTS.put("qq-recorded", "§a已记录QQ §f{qq}§a。\n§a请在 QQ群 §e{group} §a内发送「§e§l{prompt}§a」完成白名单绑定（5分钟内有效）");
+        DEFAULTS.put("bind-title", "§a§l✅ 绑定成功");
+        DEFAULTS.put("bind-subtitle", "§f欢迎加入，祝游戏愉快");
+        DEFAULTS.put("bind-msg", "§a✅ 绑定成功！已为你注册，可以正常游玩了");
+        DEFAULTS.put("login-title", "§a§l✅ 登录成功");
+        DEFAULTS.put("login-subtitle", "§f祝你游戏愉快");
+        DEFAULTS.put("login-msg", "§a✅ 你已通过QQ群登录，祝游戏愉快！");
+        DEFAULTS.put("command-blocked", "§c请先完成绑定/登录后再使用命令");
+        // —— 群聊侧·绑定/登录错误回复 ——
+        DEFAULTS.put("group-already-bound", "⚠️ 您的QQ已绑定过白名单");
+        DEFAULTS.put("group-too-many-attempts", "⚠️ 尝试次数过多，请稍后再试");
+        DEFAULTS.put("group-no-pending", "⚠️ 当前没有待绑定的记录，请先在游戏内输入你的 QQ 号");
+        DEFAULTS.put("group-appid-empty", "⚠️ 绑定服务尚未就绪（openapi-app-id 为空），请稍候重试或联系管理员");
+        DEFAULTS.put("group-avatar-fetch-fail", "⚠️ 取不到你的QQ头像，暂时无法绑定，请稍后再试");
+        DEFAULTS.put("group-avatar-placeholder", "⚠️ 绑定服务未正确配置（管理员请检查 openapi-app-id 是否与机器人一致），暂时无法绑定");
+        DEFAULTS.put("group-avatar-low-info", "⚠️ 你的QQ头像是默认/纯色头像，无法用于绑定，请先在QQ设置一张清晰头像后重试");
+        DEFAULTS.put("group-no-match", "⚠️ 没找到与你头像匹配的待绑定记录。请确认：游戏内输入的是【你本人】的QQ号，且与你现在的QQ头像一致");
+        DEFAULTS.put("group-avatar-ambiguous", "⚠️ 有多条待绑定记录头像过于相似，无法自动确认，请联系管理员手动绑定");
+        DEFAULTS.put("group-not-bound", "⚠️ 您未绑定白名单，请先完成绑定");
+        DEFAULTS.put("group-auth-unavailable", "⚠️ 登录服务暂不可用，请稍后再试或联系管理员");
+        DEFAULTS.put("group-player-offline", "⚠️ 玩家 {player} 当前不在线，请先进入服务器再登录");
+        DEFAULTS.put("group-already-logged-in", "ℹ️ 你已经登录过了，无需重复登录");
+        DEFAULTS.put("group-bind-offline", "\n> ⏳ 你当前不在线，请重新进服后在群里发送「登录」开始游玩");
+        // —— 群聊侧·管理命令（BindingAdminHandler）——
+        DEFAULTS.put("admin-service-unavailable", "白名单未启用，或绑定库尚未就绪");
+        DEFAULTS.put("admin-list-empty", "当前还没有任何白名单绑定");
+        DEFAULTS.put("admin-list-truncated", "仅显示前 {limit} 条，共 {total} 条。用「查绑定 <玩家/QQ>」精确查询");
+        DEFAULTS.put("admin-list-hint", "查单个：查绑定 <玩家/QQ>　·　解绑：解绑 <玩家>");
+        DEFAULTS.put("admin-query-usage", "用法：查绑定 <玩家名 或 QQ号>");
+        DEFAULTS.put("admin-query-not-found", "没找到该玩家名 / QQ 号的绑定");
+        DEFAULTS.put("admin-unbind-usage", "用法：解绑 <玩家名>");
+        DEFAULTS.put("admin-unbind-not-found", "该玩家没有绑定记录，无需解绑");
+        DEFAULTS.put("admin-unbind-done", "该玩家下次进服需重新绑定白名单");
+        DEFAULTS.put("admin-unbind-error", "删除记录时出错，请查看后台日志");
+        // —— 群聊侧·登录卡片（AuthVelocityPlugin）——
+        DEFAULTS.put("group-login-card-title", "## 🔐 登录请求\n");
+        DEFAULTS.put("group-login-card-tip", "\n> Tips: 在群里回复「**{login}**」亦可登录 ✅\n");
+        DEFAULTS.put("group-login-card-player", "👤 **玩家**　");
+        // —— 群聊侧·管理命令卡片标题/字段标签 ——
+        DEFAULTS.put("admin-card-title-unavailable", "绑定服务不可用");
+        DEFAULTS.put("admin-card-title-list", "绑定列表");
+        DEFAULTS.put("admin-card-title-query", "查绑定");
+        DEFAULTS.put("admin-card-title-info", "绑定信息");
+        DEFAULTS.put("admin-card-title-unbind", "解绑");
+        DEFAULTS.put("admin-card-title-unbound", "已解绑");
+        DEFAULTS.put("admin-card-title-unbind-fail", "解绑失败");
+        DEFAULTS.put("admin-field-keyword", "关键词");
+        DEFAULTS.put("admin-field-player", "玩家");
+        DEFAULTS.put("admin-field-qq", "QQ");
+        DEFAULTS.put("admin-field-openid", "openid");
+        DEFAULTS.put("admin-field-bound-at", "绑定于");
+        DEFAULTS.put("admin-field-original-qq", "原 QQ");
+        DEFAULTS.put("admin-category", "👑 管理");
+        DEFAULTS.put("admin-usage", "绑定列表 / 查绑定 <玩家|QQ> / 解绑 <玩家>");
+        DEFAULTS.put("admin-desc", "白名单绑定管理（列表/查询/解绑）");
+        DEFAULTS.put("admin-trigger-list", "绑定列表");
+        DEFAULTS.put("admin-trigger-query", "查绑定");
+        DEFAULTS.put("admin-trigger-unbind", "解绑");
+        // —— 群聊侧·成功卡片默认模板（config 可覆盖）——
+        DEFAULTS.put("card-bind-success",
+                "## 🎉 绑定成功 · 欢迎加入！\n"
+                + "👤 **玩家**　{player}\n"
+                + "🐧 **QQ**　　{qq}\n"
+                + "\n> 🌟 白名单已开通，进服开启你的冒险吧~");
+        DEFAULTS.put("card-login-success",
+                "## ✅ 登录成功 · 欢迎回来！\n"
+                + "👤 **玩家**　{player}\n"
+                + "\n> 🎮 一切就绪，祝你玩得开心！");
     }
 
     private static volatile Map<String, String> values = new HashMap<>(DEFAULTS);
@@ -88,4 +161,30 @@ public final class LockMessages {
     public static String qrFallback(String group, String url) {
         return format("qr-fallback", "{group}", group, "{url}", url);
     }
+
+    /** 已记录QQ，请群里发绑定（{qq}=QQ号, {prompt}=绑定关键词, {group}=群号）。 */
+    public static String qqRecorded(String qq, String prompt, String group) {
+        return format("qq-recorded", "{qq}", qq, "{prompt}", prompt, "{group}", group);
+    }
+
+    /** 玩家不在线（{player}=玩家名）。 */
+    public static String groupPlayerOffline(String player) {
+        return format("group-player-offline", "{player}", player);
+    }
+
+    /** 列表截断提示（{limit}/{total}）。 */
+    public static String adminListTruncated(int limit, int total) {
+        return format("admin-list-truncated", "{limit}", String.valueOf(limit), "{total}", String.valueOf(total));
+    }
+
+    /** 管理命令触发词列表（[列表, 查绑定, 解绑]）。 */
+    public static java.util.List<String> adminTriggers() {
+        return java.util.Arrays.asList(get("admin-trigger-list"), get("admin-trigger-query"), get("admin-trigger-unbind"));
+    }
+
+    /** 成功卡片默认模板（绑定）。 */
+    public static String cardBindSuccessDefault() { return get("card-bind-success"); }
+
+    /** 成功卡片默认模板（登录）。 */
+    public static String cardLoginSuccessDefault() { return get("card-login-success"); }
 }

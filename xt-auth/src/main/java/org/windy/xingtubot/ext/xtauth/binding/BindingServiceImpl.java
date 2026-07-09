@@ -5,6 +5,7 @@ import org.windy.xingtubot.common.binding.BindingEntry;
 import org.windy.xingtubot.common.binding.BindingRepository;
 import org.windy.xingtubot.common.binding.BindingService;
 import org.windy.xingtubot.common.binding.BindingService.Result;
+import org.windy.xingtubot.common.whitelist.LockMessages;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -52,6 +53,8 @@ public class BindingServiceImpl implements BindingService {
 
     // 单个 openid 在限流窗口内允许的最大失败匹配次数。
     private volatile int maxBindAttempts = 5;
+    // QQ 群号（用于 qq-recorded 提示文案）
+    private volatile String groupNumber = "";
     private static final long ATTEMPT_WINDOW_MILLIS = 10 * 60 * 1000L;
     // 群里完成绑定的关键词（来自 config: binding-prompt），仅用于拼提示文案。
     private volatile String bindingPrompt = "绑定";
@@ -89,18 +92,11 @@ public class BindingServiceImpl implements BindingService {
     private volatile String bindSuccessTpl = DEFAULT_BIND_SUCCESS;
     private volatile String loginSuccessTpl = DEFAULT_LOGIN_SUCCESS;
 
-    /** 默认绑定成功卡片：热情一点，给玩家好心情。 */
-    private static final String DEFAULT_BIND_SUCCESS =
-            "## 🎉 绑定成功 · 欢迎加入！\n"
-            + "👤 **玩家**　{player}\n"
-            + "🐧 **QQ**　　{qq}\n"
-            + "\n> 🌟 白名单已开通，进服开启你的冒险吧~";
+    /** 默认绑定成功卡片（从 LockMessages 取，config 可覆盖）。 */
+    private static final String DEFAULT_BIND_SUCCESS = LockMessages.cardBindSuccessDefault();
 
-    /** 默认登录成功卡片。 */
-    private static final String DEFAULT_LOGIN_SUCCESS =
-            "## ✅ 登录成功 · 欢迎回来！\n"
-            + "👤 **玩家**　{player}\n"
-            + "\n> 🎮 一切就绪，祝你玩得开心！";
+    /** 默认登录成功卡片（从 LockMessages 取，config 可覆盖）。 */
+    private static final String DEFAULT_LOGIN_SUCCESS = LockMessages.cardLoginSuccessDefault();
 
     @Override
     public void setSuccessTemplates(String bindSuccess, String loginSuccess) {
@@ -122,6 +118,11 @@ public class BindingServiceImpl implements BindingService {
     @Override
     public void setMaxBindAttempts(int maxBindAttempts) {
         if (maxBindAttempts > 0) this.maxBindAttempts = maxBindAttempts;
+    }
+
+    /** 设置 QQ 群号（config: {@code qq-group}），用于「已记录QQ」提示文案。 */
+    public void setGroupNumber(String groupNumber) {
+        if (groupNumber != null) this.groupNumber = groupNumber.trim();
     }
 
     @Override
@@ -162,10 +163,10 @@ public class BindingServiceImpl implements BindingService {
     @Override
     public Result declareQQ(String player, String qq) {
         if (!QQ_PATTERN.matcher(qq).matches()) {
-            return Result.fail("§cQQ号格式不正确，请输入 5~15 位数字", "QQ_FORMAT");
+            return Result.fail(LockMessages.get("qq-format"), "QQ_FORMAT");
         }
         if (store.isPlayerBound(player)) {
-            return Result.fail("§e你已绑定过白名单，无需重复绑定", "ALREADY_BOUND");
+            return Result.fail(LockMessages.get("already-bound"), "ALREADY_BOUND");
         }
 
         AvatarMatcher.Fingerprint fp;
@@ -173,17 +174,16 @@ public class BindingServiceImpl implements BindingService {
             fp = AvatarMatcher.fingerprintFromUrl(qqAvatarUrl(qq));
         } catch (Exception e) {
             log("[QQ_FETCH_FAIL] qq=" + qq + ": " + e.getMessage());
-            return Result.fail("§c取不到该QQ号的头像，请确认QQ号填写正确、且该QQ已设置头像后重试", "QQ_AVATAR_FAIL");
+            return Result.fail(LockMessages.get("qq-avatar-fail"), "QQ_AVATAR_FAIL");
         }
         if (!fp.isUsable()) {
             log("[QQ_AVATAR_UNUSABLE] qq=" + qq + " size=" + fp.srcWidth + "x" + fp.srcHeight
                     + " variance=" + (long) fp.variance);
-            return Result.fail("§c该QQ头像是默认/纯色或无法识别，无法用于绑定。请先在QQ设置一张清晰头像后再绑定", "QQ_AVATAR_UNUSABLE");
+            return Result.fail(LockMessages.get("qq-avatar-unusable"), "QQ_AVATAR_UNUSABLE");
         }
 
         pending.put(player.toLowerCase(), new PendingBinding(player, qq, fp.hash));
-        return Result.ok("§a已记录QQ §f" + qq + "§a。\n§a请在群里发送「§e§l" + bindingPrompt
-                + "§a」完成白名单绑定（5分钟内有效）");
+        return Result.ok(LockMessages.qqRecorded(qq, bindingPrompt, groupNumber));
     }
 
     @Override
@@ -191,20 +191,20 @@ public class BindingServiceImpl implements BindingService {
         clearExpired();
 
         if (store.findByOpenid(openid) != null) {
-            return Result.fail("⚠️ 您的QQ已绑定过白名单", "ALREADY_BOUND");
+            return Result.fail(LockMessages.get("group-already-bound"), "ALREADY_BOUND");
         }
         if (isThrottled(openid)) {
-            return Result.fail("⚠️ 尝试次数过多，请稍后再试", "TOO_MANY_ATTEMPTS");
+            return Result.fail(LockMessages.get("group-too-many-attempts"), "TOO_MANY_ATTEMPTS");
         }
         if (pending.isEmpty()) {
-            return Result.fail("⚠️ 当前没有待绑定的记录，请先在游戏内输入你的 QQ 号", "NO_PENDING");
+            return Result.fail(LockMessages.get("group-no-pending"), "NO_PENDING");
         }
 
         // appId 现取（惰性）：为空说明核心 bot 还没起好或没配 openapi-app-id；直接给配置错而非去拉企鹅。
         String appId = appId();
         if (appId.isEmpty()) {
             log("[APPID_EMPTY] openid=" + openid + " —— 取到的 openapi-app-id 为空（核心 bot 未就绪或未配置），无法构造 openid 头像 URL");
-            return Result.fail("⚠️ 绑定服务尚未就绪（openapi-app-id 为空），请稍候重试或联系管理员", "APPID_EMPTY");
+            return Result.fail(LockMessages.get("group-appid-empty"), "APPID_EMPTY");
         }
 
         AvatarMatcher.Fingerprint fp;
@@ -212,16 +212,16 @@ public class BindingServiceImpl implements BindingService {
             fp = AvatarMatcher.fingerprintFromUrl(openidAvatarUrl(openid));
         } catch (Exception e) {
             log("[OPENID_FETCH_FAIL] openid=" + openid + ": " + e.getMessage());
-            return Result.fail("⚠️ 取不到你的QQ头像，暂时无法绑定，请稍后再试", "AVATAR_FETCH_FAIL");
+            return Result.fail(LockMessages.get("group-avatar-fetch-fail"), "AVATAR_FETCH_FAIL");
         }
         if (fp.isTooSmall()) {
             // appId 非空但仍回落成 40×40 企鹅占位图 → appId 配错（与机器人实际 AppID 不符）。
             log("[OPENID_PLACEHOLDER] openid=" + openid + " size=" + fp.srcWidth + "x" + fp.srcHeight
                     + " —— openid 头像回落成占位图，appId 可能配错（当前 appId=" + appId + "）");
-            return Result.fail("⚠️ 绑定服务未正确配置（管理员请检查 openapi-app-id 是否与机器人一致），暂时无法绑定", "AVATAR_PLACEHOLDER");
+            return Result.fail(LockMessages.get("group-avatar-placeholder"), "AVATAR_PLACEHOLDER");
         }
         if (fp.isLowInfo()) {
-            return Result.fail("⚠️ 你的QQ头像是默认/纯色头像，无法用于绑定，请先在QQ设置一张清晰头像后重试", "AVATAR_LOW_INFO");
+            return Result.fail(LockMessages.get("group-avatar-low-info"), "AVATAR_LOW_INFO");
         }
 
         // 在所有待验证记录里找头像最接近的（同时记录次优，用于歧义保护）。
@@ -241,14 +241,13 @@ public class BindingServiceImpl implements BindingService {
         if (best == null || bestDist > avatarThreshold) {
             recordAttempt(openid);
             log("[NO_AVATAR_MATCH] openid=" + openid + " bestDist=" + bestDist + " pending=" + pending.size());
-            return Result.fail("⚠️ 没找到与你头像匹配的待绑定记录。请确认：游戏内输入的是【你本人】的QQ号，"
-                    + "且与你现在的QQ头像一致", "NO_MATCH");
+            return Result.fail(LockMessages.get("group-no-match"), "NO_MATCH");
         }
         // 歧义保护：次优也落在阈值内且与最优过近 → 无法确认是哪条，拒绝以防误绑。
         if (secondDist <= avatarThreshold && (secondDist - bestDist) < AMBIGUITY_MARGIN) {
             recordAttempt(openid);
             log("[AVATAR_AMBIGUOUS] openid=" + openid + " best=" + bestDist + " second=" + secondDist);
-            return Result.fail("⚠️ 有多条待绑定记录头像过于相似，无法自动确认，请联系管理员手动绑定", "AVATAR_AMBIGUOUS");
+            return Result.fail(LockMessages.get("group-avatar-ambiguous"), "AVATAR_AMBIGUOUS");
         }
 
         PendingBinding p = best;
@@ -263,38 +262,38 @@ public class BindingServiceImpl implements BindingService {
             // 绑定成功即视为本会话已登录：退出时才会被武装自动登录信任期（同设备重进免密）。
             // 否则首次绑定后退出再进还要再发一次「登录」——标记会话让绑定直接衔接免密体验。
             loggedIn.add(p.player.toLowerCase());
-            auth.titlePlayer(p.player, "§a§l✅ 绑定成功", "§f欢迎加入，祝游戏愉快");
-            auth.messagePlayer(p.player, "§a✅ 绑定成功！已为你注册，可以正常游玩了");
+            auth.titlePlayer(p.player, LockMessages.get("bind-title"), LockMessages.get("bind-subtitle"));
+            auth.messagePlayer(p.player, LockMessages.get("bind-msg"));
             return Result.okMarkdown(render(bindSuccessTpl, p.player, p.qq));
         }
         // 玩家此刻不在线（绑定前掉线/切服）：绑定已写入持久化，待其重新进服后发「登录」解锁。
         log("[BIND_OFFLINE] player=" + p.player + " openid=" + openid + " 已绑定，待重新进服登录");
         return Result.okMarkdown(render(bindSuccessTpl, p.player, p.qq)
-                + "\n> ⏳ 你当前不在线，请重新进服后在群里发送「登录」开始游玩");
+                + LockMessages.get("group-bind-offline"));
     }
 
     @Override
     public Result loginByGroup(String openid) {
         BindingEntry e = store.findByOpenid(openid);
         if (e == null) {
-            return Result.fail("⚠️ 您未绑定白名单，请先完成绑定", "NOT_BOUND");
+            return Result.fail(LockMessages.get("group-not-bound"), "NOT_BOUND");
         }
         if (auth == null) {
             // 仅注册了绑定库、未接认证适配器的部署（如大脑只存数据不驱动登录）。
             log("[AUTH_UNAVAILABLE] loginByGroup 无 AuthAdapter，无法驱动登录 player=" + e.player);
-            return Result.fail("⚠️ 登录服务暂不可用，请稍后再试或联系管理员", "AUTH_UNAVAILABLE");
+            return Result.fail(LockMessages.get("group-auth-unavailable"), "AUTH_UNAVAILABLE");
         }
         if (!auth.isOnline(e.player)) {
-            return Result.fail("⚠️ 玩家 " + e.player + " 当前不在线，请先进入服务器再登录", "PLAYER_OFFLINE");
+            return Result.fail(LockMessages.groupPlayerOffline(e.player), "PLAYER_OFFLINE");
         }
         // 原子去重：Set.add 仅首次返回 true。并发/重复点登录时只有第一次真正登录+反馈，
         // 其余返回 ALREADY_LOGGED_IN（按钮路径据此静默，不刷屏）。退出代理 clearSession 后可再次登录。
         if (!loggedIn.add(e.player.toLowerCase())) {
-            return Result.fail("ℹ️ 你已经登录过了，无需重复登录", "ALREADY_LOGGED_IN");
+            return Result.fail(LockMessages.get("group-already-logged-in"), "ALREADY_LOGGED_IN");
         }
         auth.login(e.player);
-        auth.titlePlayer(e.player, "§a§l✅ 登录成功", "§f祝你游戏愉快");
-        auth.messagePlayer(e.player, "§a✅ 你已通过QQ群登录，祝游戏愉快！");
+        auth.titlePlayer(e.player, LockMessages.get("login-title"), LockMessages.get("login-subtitle"));
+        auth.messagePlayer(e.player, LockMessages.get("login-msg"));
         return Result.okMarkdown(render(loginSuccessTpl, e.player, null));
     }
 

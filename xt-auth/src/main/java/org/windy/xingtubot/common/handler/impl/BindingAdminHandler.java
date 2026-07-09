@@ -5,6 +5,7 @@ import org.windy.xingtubot.common.binding.BindingRepository;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.handler.MessageHandler;
 import org.windy.xingtubot.common.util.Md;
+import org.windy.xingtubot.common.whitelist.LockMessages;
 
 import java.util.Arrays;
 import java.util.List;
@@ -37,96 +38,102 @@ public class BindingAdminHandler implements MessageHandler {
     @Override
     public boolean matches(String message, BotMessageEvent event) {
         String m = message.trim();
-        return m.equals("绑定列表") || m.startsWith("查绑定") || m.startsWith("解绑");
+        String list = LockMessages.get("admin-trigger-list");
+        String query = LockMessages.get("admin-trigger-query");
+        String unbind = LockMessages.get("admin-trigger-unbind");
+        return m.equals(list) || m.startsWith(query) || m.startsWith(unbind);
     }
 
     @Override
     public void handle(String message, BotMessageEvent event) {
         String m = message.trim();
+        String list = LockMessages.get("admin-trigger-list");
+        String query = LockMessages.get("admin-trigger-query");
+        String unbind = LockMessages.get("admin-trigger-unbind");
         CompletableFuture.runAsync(() -> {
             BindingRepository store = repo.get();
             if (store == null) {
-                event.replyMarkdown(Md.card("⚠️", "绑定服务不可用")
-                        .quote("白名单未启用，或绑定库尚未就绪").build(), null);
+                event.replyMarkdown(Md.card("⚠️", LockMessages.get("admin-card-title-unavailable"))
+                        .quote(LockMessages.get("admin-service-unavailable")).build(), null);
                 return;
             }
-            if (m.equals("绑定列表")) {
+            if (m.equals(list)) {
                 listAll(store, event);
-            } else if (m.startsWith("查绑定")) {
-                query(store, event, m.substring("查绑定".length()).trim());
+            } else if (m.startsWith(query)) {
+                query(store, event, m.substring(query.length()).trim());
             } else { // 解绑
-                unbind(store, event, m.substring("解绑".length()).trim());
+                unbind(store, event, m.substring(unbind.length()).trim());
             }
         });
     }
 
     private void listAll(BindingRepository store, BotMessageEvent event) {
         List<BindingEntry> all = store.all();
+        String title = LockMessages.get("admin-card-title-list");
         if (all == null || all.isEmpty()) {
-            event.replyMarkdown(Md.card("👑", "绑定列表")
-                    .quote("当前还没有任何白名单绑定").build(), null);
+            event.replyMarkdown(Md.card("👑", title)
+                    .quote(LockMessages.get("admin-list-empty")).build(), null);
             return;
         }
-        Md card = Md.card("👑", "绑定列表（" + all.size() + "）");
+        Md card = Md.card("👑", title + "（" + all.size() + "）");
         int shown = Math.min(all.size(), LIST_LIMIT);
         for (int i = 0; i < shown; i++) {
             BindingEntry e = all.get(i);
             card.line((i + 1) + ". **" + safe(e.player) + "**　🐧 " + safe(e.qq));
         }
         if (all.size() > LIST_LIMIT) {
-            card.quote("仅显示前 " + LIST_LIMIT + " 条，共 " + all.size()
-                    + " 条。用「查绑定 <玩家/QQ>」精确查询");
+            card.quote(LockMessages.adminListTruncated(LIST_LIMIT, all.size()));
         } else {
-            card.quote("查单个：查绑定 <玩家/QQ>　·　解绑：解绑 <玩家>");
+            card.quote(LockMessages.get("admin-list-hint"));
         }
         event.replyMarkdown(card.build(), null);
     }
 
     private void query(BindingRepository store, BotMessageEvent event, String arg) {
         if (arg.isEmpty()) {
-            event.replyMarkdown(Md.card("🔎", "查绑定")
-                    .quote("用法：查绑定 <玩家名 或 QQ号>").build(), null);
+            event.replyMarkdown(Md.card("🔎", LockMessages.get("admin-card-title-query"))
+                    .quote(LockMessages.get("admin-query-usage")).build(), null);
             return;
         }
         BindingEntry e = store.findByPlayer(arg);
         if (e == null) e = findByQq(store, arg); // 玩家名查不到再按 QQ 号找
         if (e == null) {
-            event.replyMarkdown(Md.card("🔎", "查绑定")
-                    .field("🔍", "关键词", arg)
-                    .quote("没找到该玩家名 / QQ 号的绑定").build(), null);
+            event.replyMarkdown(Md.card("🔎", LockMessages.get("admin-card-title-query"))
+                    .field("🔍", LockMessages.get("admin-field-keyword"), arg)
+                    .quote(LockMessages.get("admin-query-not-found")).build(), null);
             return;
         }
-        event.replyMarkdown(Md.card("🔎", "绑定信息")
-                .field("👤", "玩家", e.player)
-                .field("🐧", "QQ", e.qq)
-                .field("🆔", "openid", shortId(e.openid))
-                .field("🕒", "绑定于", e.time)
+        event.replyMarkdown(Md.card("🔎", LockMessages.get("admin-card-title-info"))
+                .field("👤", LockMessages.get("admin-field-player"), e.player)
+                .field("🐧", LockMessages.get("admin-field-qq"), e.qq)
+                .field("🆔", LockMessages.get("admin-field-openid"), shortId(e.openid))
+                .field("🕒", LockMessages.get("admin-field-bound-at"), e.time)
                 .build(), null);
     }
 
     private void unbind(BindingRepository store, BotMessageEvent event, String player) {
         if (player.isEmpty()) {
-            event.replyMarkdown(Md.card("🔓", "解绑")
-                    .quote("用法：解绑 <玩家名>").build(), null);
+            event.replyMarkdown(Md.card("🔓", LockMessages.get("admin-card-title-unbind"))
+                    .quote(LockMessages.get("admin-unbind-usage")).build(), null);
             return;
         }
         BindingEntry e = store.findByPlayer(player);
         if (e == null) {
-            event.replyMarkdown(Md.card("🔓", "解绑")
-                    .field("👤", "玩家", player)
-                    .quote("该玩家没有绑定记录，无需解绑").build(), null);
+            event.replyMarkdown(Md.card("🔓", LockMessages.get("admin-card-title-unbind"))
+                    .field("👤", LockMessages.get("admin-field-player"), player)
+                    .quote(LockMessages.get("admin-unbind-not-found")).build(), null);
             return;
         }
         boolean removed = store.removeByPlayer(player);
         if (removed) {
-            event.replyMarkdown(Md.card("✅", "已解绑")
-                    .field("👤", "玩家", e.player)
-                    .field("🐧", "原 QQ", e.qq)
-                    .quote("该玩家下次进服需重新绑定白名单").build(), null);
+            event.replyMarkdown(Md.card("✅", LockMessages.get("admin-card-title-unbound"))
+                    .field("👤", LockMessages.get("admin-field-player"), e.player)
+                    .field("🐧", LockMessages.get("admin-field-original-qq"), e.qq)
+                    .quote(LockMessages.get("admin-unbind-done")).build(), null);
         } else {
-            event.replyMarkdown(Md.card("⚠️", "解绑失败")
-                    .field("👤", "玩家", player)
-                    .quote("删除记录时出错，请查看后台日志").build(), null);
+            event.replyMarkdown(Md.card("⚠️", LockMessages.get("admin-card-title-unbind-fail"))
+                    .field("👤", LockMessages.get("admin-field-player"), player)
+                    .quote(LockMessages.get("admin-unbind-error")).build(), null);
         }
     }
 
@@ -165,21 +172,21 @@ public class BindingAdminHandler implements MessageHandler {
 
     @Override
     public List<String> triggers() {
-        return Arrays.asList("绑定列表", "查绑定", "解绑");
+        return LockMessages.adminTriggers();
     }
 
     @Override
     public String usage() {
-        return "绑定列表 / 查绑定 <玩家|QQ> / 解绑 <玩家>";
+        return LockMessages.get("admin-usage");
     }
 
     @Override
     public String description() {
-        return "白名单绑定管理（列表/查询/解绑）";
+        return LockMessages.get("admin-desc");
     }
 
     @Override
     public String category() {
-        return "👑 管理";
+        return LockMessages.get("admin-category");
     }
 }

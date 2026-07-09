@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.windy.xingtubot.common.binding.AuthAdapter;
+import org.windy.xingtubot.common.whitelist.LockMessages;
 
 /**
  * Bukkit 端直通 {@link AuthAdapter}：unlock 直接调 {@link BukkitPlayerLock}。
@@ -31,7 +32,8 @@ public class BukkitDirectAuthAdapter implements AuthAdapter {
         Bukkit.getScheduler().runTask(plugin, () -> {
             Player p = Bukkit.getPlayerExact(player);
             if (p != null && p.isOnline()) {
-                p.sendMessage("§a✅ 已绑定，祝游戏愉快！");
+                JoinQrMap.cleanup(p);
+                p.sendMessage(LockMessages.get("bound"));
             }
         });
     }
@@ -42,7 +44,8 @@ public class BukkitDirectAuthAdapter implements AuthAdapter {
         Bukkit.getScheduler().runTask(plugin, () -> {
             Player p = Bukkit.getPlayerExact(player);
             if (p != null && p.isOnline()) {
-                p.sendMessage("§a✅ 已登录，祝游戏愉快！");
+                JoinQrMap.cleanup(p);
+                p.sendMessage(LockMessages.unlocked());
             }
         });
     }

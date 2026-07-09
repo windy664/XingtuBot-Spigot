@@ -108,6 +108,7 @@ public final class AuthModule implements BotModule {
             BindingService bindingService = new BindingServiceImpl(store, authAdapter, appIdSupplier, logger::warn);
             bindingService.setBindingPrompt(config.getString("binding-prompt", "绑定"));
             bindingService.setMaxBindAttempts(config.getInt("bind-max-attempts", 5));
+            bindingService.setGroupNumber(config.getString("qq-group", ""));
             // 「IP 绑定的自动登录」信任期由代理大脑(VelocityBridge)持有（它才有玩家 IP），
             // 见 AuthVelocityPlugin.setAutoLoginWindowMillis；本模块不再处理。
             bindingService.setSuccessTemplates(

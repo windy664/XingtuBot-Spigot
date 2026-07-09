@@ -65,13 +65,11 @@ public class BukkitPlayerLock implements PlayerLockManager, LockTarget {
         lockState.unlock(key);
         lockData.remove(key);
         awaitingQQ.remove(key);
-        // 发解锁消息
         Bukkit.getScheduler().runTask(plugin, () -> {
             Player p = Bukkit.getPlayerExact(player);
             bossBar.clear(p, player);
-            if (p != null && p.isOnline()) {
-                p.sendMessage(LockMessages.unlocked());
-            }
+            // 不在此处发消息——由调用方（AuthAdapter / WhitelistModule）按上下文发
+            // （login → unlocked，register → bound，auto-login → auto-login-msg）
         });
     }
 

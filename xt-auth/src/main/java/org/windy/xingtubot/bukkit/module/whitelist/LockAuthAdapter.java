@@ -5,6 +5,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.windy.xingtubot.common.binding.AuthAdapter;
 import org.windy.xingtubot.common.lock.LockState;
+import org.windy.xingtubot.common.whitelist.LockMessages;
 
 /**
  * 自研登录的 {@link AuthAdapter} 实现，取代 AuthMe。
@@ -30,21 +31,24 @@ public class LockAuthAdapter implements AuthAdapter {
 
     @Override
     public void register(String player) {
-        unlock(player); // 绑定成功即解锁
-    }
-
-    @Override
-    public void login(String player) {
-        unlock(player);
-    }
-
-    private void unlock(String player) {
         lockState.unlock(player);
         Bukkit.getScheduler().runTask(plugin, () -> {
             Player p = Bukkit.getPlayerExact(player);
             if (p != null && p.isOnline()) {
-                JoinQrMap.cleanup(p); // 清掉加群二维码地图（绑定成功后不再需要）
-                p.sendMessage("§a✅ 已登录，祝游戏愉快！");
+                JoinQrMap.cleanup(p);
+                p.sendMessage(LockMessages.get("bound"));
+            }
+        });
+    }
+
+    @Override
+    public void login(String player) {
+        lockState.unlock(player);
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            Player p = Bukkit.getPlayerExact(player);
+            if (p != null && p.isOnline()) {
+                JoinQrMap.cleanup(p);
+                p.sendMessage(LockMessages.unlocked());
             }
         });
     }

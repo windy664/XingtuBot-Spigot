@@ -1,10 +1,10 @@
 package org.windy.xingtubot.bungee;
 
-import net.md_5.bungee.api.ChatMessageType;
 import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import org.windy.xingtubot.common.binding.AuthAdapter;
+import org.windy.xingtubot.common.whitelist.LockMessages;
 
 /**
  * BungeeCord 端直通 {@link AuthAdapter}：unlock / message / title 全在代理侧完成。
@@ -31,7 +31,7 @@ public class BungeeCordDirectAuthAdapter implements AuthAdapter {
         lock.unlock(player);
         ProxiedPlayer p = proxy.getPlayer(player);
         if (p != null && p.isConnected()) {
-            p.sendMessage("§a✅ 已绑定，祝游戏愉快！");
+            p.sendMessage(new TextComponent(LockMessages.get("bound")));
         }
     }
 
@@ -40,7 +40,7 @@ public class BungeeCordDirectAuthAdapter implements AuthAdapter {
         lock.unlock(player);
         ProxiedPlayer p = proxy.getPlayer(player);
         if (p != null && p.isConnected()) {
-            p.sendMessage("§a✅ 已登录，祝游戏愉快！");
+            p.sendMessage(new TextComponent(LockMessages.unlocked()));
         }
     }
 

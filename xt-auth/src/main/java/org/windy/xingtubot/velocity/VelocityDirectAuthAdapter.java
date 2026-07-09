@@ -5,6 +5,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import net.kyori.adventure.title.Title;
 import org.windy.xingtubot.common.binding.AuthAdapter;
+import org.windy.xingtubot.common.whitelist.LockMessages;
 
 import java.time.Duration;
 
@@ -37,20 +38,18 @@ public class VelocityDirectAuthAdapter implements AuthAdapter {
     @Override
     public void register(String player) {
         lock.unlock(player);
-        // 解锁后发一条确认消息
         Player p = proxy.getPlayer(player).orElse(null);
         if (p != null && p.isActive()) {
-            p.sendMessage(VelocityPlayerLock.legacy("§a✅ 已绑定，祝游戏愉快！"));
+            p.sendMessage(VelocityPlayerLock.legacy(LockMessages.get("bound")));
         }
     }
 
     @Override
     public void login(String player) {
         lock.unlock(player);
-        // 解锁后发一条确认消息
         Player p = proxy.getPlayer(player).orElse(null);
         if (p != null && p.isActive()) {
-            p.sendMessage(VelocityPlayerLock.legacy("§a✅ 已登录，祝游戏愉快！"));
+            p.sendMessage(VelocityPlayerLock.legacy(LockMessages.unlocked()));
         }
     }
 

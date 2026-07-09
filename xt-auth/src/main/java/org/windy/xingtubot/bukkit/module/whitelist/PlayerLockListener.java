@@ -22,6 +22,7 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerSwapHandItemsEvent;
 import org.bukkit.plugin.Plugin;
 import org.windy.xingtubot.common.lock.LockState;
+import org.windy.xingtubot.common.whitelist.LockMessages;
 
 import java.util.Arrays;
 import java.util.List;
@@ -158,7 +159,7 @@ public class PlayerLockListener implements Listener {
             if (msg.startsWith(allowed)) return;
         }
         e.setCancelled(true);
-        e.getPlayer().sendMessage("§c请先完成绑定/登录后再使用命令");
+        e.getPlayer().sendMessage(LockMessages.get("command-blocked"));
     }
 
     @EventHandler

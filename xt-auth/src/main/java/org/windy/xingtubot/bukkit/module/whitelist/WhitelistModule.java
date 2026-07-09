@@ -80,6 +80,7 @@ public class WhitelistModule implements Listener {
                 msg -> plugin.getLogger().warning(msg));
         this.service.setBindingPrompt(plugin.getConfig().getString("binding-prompt", "绑定"));
         this.service.setMaxBindAttempts(plugin.getConfig().getInt("bind-max-attempts", 5));
+        this.service.setGroupNumber(plugin.getConfig().getString("qq-group", ""));
         this.service.setSuccessTemplates(
                 plugin.getConfig().getString("messages.bind-success", ""),
                 plugin.getConfig().getString("messages.login-success", ""));

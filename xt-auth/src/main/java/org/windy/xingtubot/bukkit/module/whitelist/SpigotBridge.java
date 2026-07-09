@@ -15,6 +15,7 @@ import org.windy.xingtubot.common.bridge.BridgeCodec;
 import org.windy.xingtubot.common.bridge.CrossServerChannel;
 import org.windy.xingtubot.common.bridge.CrossServerProtocol;
 import org.windy.xingtubot.common.lock.LockState;
+import org.windy.xingtubot.common.whitelist.LockMessages;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -141,15 +142,25 @@ public class SpigotBridge implements Listener, PluginMessageListener {
                 if (msg.field(0) != null) awaitingQQ.remove(msg.field(0));
                 break;
             case DO_REGISTER:
+                if (msg.field(0) != null) {
+                    lockState.unlock(msg.field(0));
+                    final String regName = msg.field(0);
+                    Bukkit.getScheduler().runTask(plugin, () -> {
+                        Player p = Bukkit.getPlayerExact(regName);
+                        if (p != null) JoinQrMap.cleanup(p);
+                    });
+                    msgPlayer(msg.field(0), LockMessages.get("bound"));
+                }
+                break;
             case DO_LOGIN:
                 if (msg.field(0) != null) {
                     lockState.unlock(msg.field(0));
-                    final String unlockName = msg.field(0);
+                    final String loginName = msg.field(0);
                     Bukkit.getScheduler().runTask(plugin, () -> {
-                        Player p = Bukkit.getPlayerExact(unlockName);
+                        Player p = Bukkit.getPlayerExact(loginName);
                         if (p != null) JoinQrMap.cleanup(p);
                     });
-                    msgPlayer(msg.field(0), "§a✅ 已登录，祝游戏愉快！");
+                    msgPlayer(msg.field(0), LockMessages.unlocked());
                 }
                 break;
             case MSG_PLAYER:
