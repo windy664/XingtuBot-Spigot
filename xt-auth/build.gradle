@@ -16,6 +16,10 @@ dependencies {
     compileOnly 'com.velocitypowered:velocity-api:3.1.1'
     annotationProcessor 'com.velocitypowered:velocity-api:3.1.1'
 
+    // 数据库驱动（编译期可见，运行期由核心 jar 提供）
+    compileOnly 'org.xerial:sqlite-jdbc:3.45.1.0'
+    compileOnly 'com.mysql:mysql-connector-j:8.3.0'
+
     // PacketEvents（内置进 jar，登录锁 + 地图发包都依赖它）
     implementation 'com.github.retrooper:packetevents-api:2.13.0'
     implementation 'com.github.retrooper:packetevents-velocity:2.13.0'

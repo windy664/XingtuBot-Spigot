@@ -5,7 +5,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.windy.xingtubot.bukkit.module.chatreply.listener.GameChatForwarder;
 import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.lock.LockState;
+import org.windy.xingtubot.common.lock.PlayerLockManager;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.service.SensitiveFilter;
 
@@ -24,7 +24,7 @@ public class ChatreplyModule implements Listener {
     private final GameChatForwarder gameChatForwarder;
     private final ReplyCommand replyCommand;
 
-    public ChatreplyModule(JavaPlugin plugin, BotConfig config, BotLogger logger, LockState lockState) {
+    public ChatreplyModule(JavaPlugin plugin, BotConfig config, BotLogger logger, PlayerLockManager lockState) {
         this.plugin = plugin;
         this.config = config;
         this.logger = logger;

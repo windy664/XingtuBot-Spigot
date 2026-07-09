@@ -17,7 +17,6 @@ import org.windy.xingtubot.common.binding.BindingRepository;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.binding.BindingService;
 import org.windy.xingtubot.common.util.Pretty;
-import org.windy.xingtubot.common.binding.BindingStorageFactory;
 import org.windy.xingtubot.common.bot.BotLauncher;
 import org.windy.xingtubot.common.bridge.CrossServerProtocol;
 import org.windy.xingtubot.common.event.BotMessageEvent;
@@ -225,27 +224,9 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
     }
 
     private void initOpenidNameCache() {
-        String storageType = config.getString("storage-type", "json").trim().toLowerCase();
-        org.windy.xingtubot.common.poll.OpenidNameRepository repo;
-
-        switch (storageType) {
-            case "mysql":
-                repo = org.windy.xingtubot.common.poll.JdbcOpenidNameRepository.mysql(
-                        config.getString("mysql-host", "127.0.0.1"),
-                        config.getInt("mysql-port", 3306),
-                        config.getString("mysql-database", "xingtubot"),
-                        config.getString("mysql-user", "root"),
-                        config.getString("mysql-password", ""),
-                        logger::info);
-                break;
-            case "sqlite":
-            default:
-                repo = org.windy.xingtubot.common.poll.JdbcOpenidNameRepository.sqlite(
-                        dataDir.resolve("openid_names.db").toFile().getAbsolutePath(),
-                        logger::info);
-                break;
-        }
-
+        org.windy.xingtubot.common.poll.OpenidNameRepository repo =
+                new org.windy.xingtubot.common.poll.JsonOpenidNameRepository(
+                        dataDir.resolve("openid_names.json").toFile(), logger::info);
         org.windy.xingtubot.common.poll.OpenidNameCache.getInstance().init(repo);
     }
 

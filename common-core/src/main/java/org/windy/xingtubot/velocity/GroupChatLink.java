@@ -102,7 +102,7 @@ public class GroupChatLink {
     /** 调试日志：有 logger 且 DebugFlag 开启才输出（实时跟随 /xtb debug）。 */
     private void debug(String msg) {
         BotLogger l = this.logger;
-        if (l != null && org.windy.xingtubot.common.DebugFlag.isOn()) l.info(msg);
+        if (l != null && org.windy.xingtubot.common.api.DebugFlag.isOn()) l.info(msg);
     }
 
     /** 群服互联文本过滤：有 filter 才过，否则原样。 */

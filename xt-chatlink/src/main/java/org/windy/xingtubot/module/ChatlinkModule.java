@@ -1,6 +1,6 @@
 package org.windy.xingtubot.module;
 
-import org.windy.xingtubot.common.BotIdentity;
+import org.windy.xingtubot.common.api.BotIdentity;
 import org.windy.xingtubot.common.handler.impl.GroupChatHandler;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ModuleContext;

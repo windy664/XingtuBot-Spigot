@@ -6,7 +6,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 import org.windy.xingtubot.bukkit.module.chatreply.ChatreplyModule;
-import org.windy.xingtubot.common.lock.LockState;
+import org.windy.xingtubot.common.lock.PlayerLockManager;
 import org.windy.xingtubot.common.module.capability.ProactiveSender;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 import org.windy.xingtubot.common.service.SensitiveFilter;
@@ -26,11 +26,11 @@ import java.util.concurrent.CompletableFuture;
  * allowed-groups 为 {@code *} 或留空（没有具体群）时，game→QQ 不主动推送。
  *
  * <p>每个目标群：尽力先走 {@link QqOpenApiClient} 主动消息，失败回退被动队列。
- * 注册态（{@link LockState} 锁定）的玩家消息<b>不会</b>转发。
+ * 注册态（{@link PlayerLockManager} 锁定）的玩家消息<b>不会</b>转发。
  */
 public class GameChatForwarder implements Listener {
 
-    private final LockState lockState;
+    private final PlayerLockManager lockState;
     // 主动消息发送器：存「取 sender 的供给器」而非 sender 本身，每次发送时现取。
     // 避免在本插件 onEnable 那一刻核心还没 registerService(ProactiveSender) → 缓存了 null 且永不自愈。
     private volatile java.util.function.Supplier<ProactiveSender> senderSupplier;
@@ -39,7 +39,7 @@ public class GameChatForwarder implements Listener {
     // game→QQ 聊天行 markdown 模板（占位符 {player}/{message}）。
     private volatile String gameFormat = org.windy.xingtubot.common.util.ChatlinkFormat.DEFAULT;
 
-    public GameChatForwarder(LockState lockState) {
+    public GameChatForwarder(PlayerLockManager lockState) {
         this.lockState = lockState;
     }
 

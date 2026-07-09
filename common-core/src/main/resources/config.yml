@@ -74,17 +74,3 @@ redis-host: "127.0.0.1"
 redis-port: 6379
 redis-password: ""
 
-####################################
-# 数据存储（核心用于 openid↔昵称缓存；绑定数据的存储同样读此项，详见 XingtuBot-Auth）
-#   json   = 单文件（默认，零配置）
-#   sqlite = 单文件 .db
-#   mysql  = MySQL（多子服共享，推荐生产）
-####################################
-storage-type: sqlite
-# 以下仅 storage-type: mysql 时需要
-mysql-host: "127.0.0.1"
-mysql-port: 3306
-mysql-database: "xingtubot"
-mysql-user: "root"
-mysql-password: ""
-

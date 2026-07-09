@@ -599,7 +599,7 @@ public class McmodApiService {
 
     /** 调试日志：仅当框架调试模式（核心 config 的 debug）开启时输出，跟随框架开关。 */
     private void debug(String msg) {
-        if (logger != null && org.windy.xingtubot.common.DebugFlag.isOn()) {
+        if (logger != null && org.windy.xingtubot.common.api.DebugFlag.isOn()) {
             logger.info("[MCMOD][debug] " + msg);
         }
     }

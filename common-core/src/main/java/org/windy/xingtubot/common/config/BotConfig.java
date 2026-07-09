@@ -32,11 +32,11 @@ public interface BotConfig {
     }
 
     /**
-     * 读取配置字符串并替换 {bot} 占位符为机器人昵称（取自 {@link org.windy.xingtubot.common.BotIdentity}）。
+     * 读取配置字符串并替换 {bot} 占位符为机器人昵称（取自 {@link org.windy.xingtubot.common.api.BotIdentity}）。
      * 用于提示词等需要引用机器人名字的配置项。
      */
     default String getStringResolved(String path, String def) {
         String val = getString(path, def);
-        return val.replace("{bot}", org.windy.xingtubot.common.BotIdentity.getName());
+        return val.replace("{bot}", org.windy.xingtubot.common.api.BotIdentity.getName());
     }
 }

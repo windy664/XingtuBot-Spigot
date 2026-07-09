@@ -1,4 +1,4 @@
-package org.windy.xingtubot.common;
+package org.windy.xingtubot.common.api;
 
 /**
  * 机器人身份（昵称）的单一来源。

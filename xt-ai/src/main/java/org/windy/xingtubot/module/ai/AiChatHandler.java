@@ -336,7 +336,7 @@ public final class AiChatHandler implements MessageHandler {
             }
         }
 
-        String botName = org.windy.xingtubot.common.BotIdentity.getName();
+        String botName = org.windy.xingtubot.common.api.BotIdentity.getName();
         groupContext.record(guildId, botName, out);
         if (isDirectAt) {
             List<Map<String, String>> history = replyMemory.getMessages(memKey);

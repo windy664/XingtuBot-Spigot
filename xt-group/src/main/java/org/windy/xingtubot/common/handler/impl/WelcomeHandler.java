@@ -36,7 +36,7 @@ public class WelcomeHandler implements MessageHandler {
     public void handle(String message, BotMessageEvent event) {
         String text = welcomeMessage;
         if (text == null || text.isEmpty()) return;
-        text = text.replace("{bot}", org.windy.xingtubot.common.BotIdentity.getName());
+        text = text.replace("{bot}", org.windy.xingtubot.common.api.BotIdentity.getName());
         event.replyMarkdown(text, null);
     }
 

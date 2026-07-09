@@ -1,4 +1,4 @@
-package org.windy.xingtubot.common;
+package org.windy.xingtubot.common.api;
 
 import java.util.function.BooleanSupplier;
 

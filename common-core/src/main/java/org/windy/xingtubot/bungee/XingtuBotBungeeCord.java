@@ -17,7 +17,6 @@ import org.windy.xingtubot.common.module.XingtuBotHostProvider;
 import org.windy.xingtubot.common.poll.QQGatewayClient;
 import org.windy.xingtubot.common.poll.QqBot;
 import org.windy.xingtubot.common.poll.OpenidNameCache;
-import org.windy.xingtubot.common.poll.JdbcOpenidNameRepository;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 import org.windy.xingtubot.common.util.Pretty;
 
@@ -255,25 +254,9 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
     }
 
     private void initOpenidNameCache() {
-        String storageType = config.getString("storage-type", "json").trim().toLowerCase();
-        org.windy.xingtubot.common.poll.OpenidNameRepository repo;
-        switch (storageType) {
-            case "mysql":
-                repo = JdbcOpenidNameRepository.mysql(
-                        config.getString("mysql-host", "127.0.0.1"),
-                        config.getInt("mysql-port", 3306),
-                        config.getString("mysql-database", "xingtubot"),
-                        config.getString("mysql-user", "root"),
-                        config.getString("mysql-password", ""),
-                        getLogger()::info);
-                break;
-            case "sqlite":
-            default:
-                repo = JdbcOpenidNameRepository.sqlite(
-                        new File(getDataFolder(), "openid_names.db").getAbsolutePath(),
-                        getLogger()::info);
-                break;
-        }
+        org.windy.xingtubot.common.poll.OpenidNameRepository repo =
+                new org.windy.xingtubot.common.poll.JsonOpenidNameRepository(
+                        new File(getDataFolder(), "openid_names.json"), getLogger()::info);
         OpenidNameCache.getInstance().init(repo);
     }
 

@@ -281,19 +281,19 @@ public class HandlerRegistry {
 
     /**
      * 生成帮助菜单。自动收集所有声明了 usage 的 handler。
-     * 标题昵称取自 {@link org.windy.xingtubot.common.BotIdentity}。
+     * 标题昵称取自 {@link org.windy.xingtubot.common.api.BotIdentity}。
      */
     public String buildMenu(boolean isAdmin) {
-        return buildMenu(isAdmin, org.windy.xingtubot.common.BotIdentity.getName());
+        return buildMenu(isAdmin, org.windy.xingtubot.common.api.BotIdentity.getName());
     }
 
     /**
      * 生成帮助菜单。
-     * @deprecated botName 参数已忽略，标题统一走 {@link org.windy.xingtubot.common.BotIdentity}；请用 {@link #buildMenu(boolean)}。
+     * @deprecated botName 参数已忽略，标题统一走 {@link org.windy.xingtubot.common.api.BotIdentity}；请用 {@link #buildMenu(boolean)}。
      */
     @Deprecated
     public String buildMenu(boolean isAdmin, String ignoredBotName) {
-        String botName = org.windy.xingtubot.common.BotIdentity.getName();
+        String botName = org.windy.xingtubot.common.api.BotIdentity.getName();
         // 按分类收集条目：category → entries
         java.util.Map<String, StringBuilder> categories = new java.util.LinkedHashMap<>();
         StringBuilder admin = new StringBuilder();
@@ -485,7 +485,7 @@ public class HandlerRegistry {
      */
     public boolean isHandledByCommand(String message, BotMessageEvent event) {
         if (message == null || message.trim().isEmpty()) return false;
-        final String nonce = " wa_probe_" + Long.toHexString(System.nanoTime());
+        final String nonce = "wa_probe_" + Long.toHexString(System.nanoTime());
         for (MessageHandler h : handlers) {
             boolean hit;
             try {

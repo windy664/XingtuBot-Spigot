@@ -4,7 +4,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.windy.xingtubot.bukkit.module.chatreply.ChatreplyModule;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.config.YamlBotConfig;
-import org.windy.xingtubot.common.lock.LockState;
+import org.windy.xingtubot.common.lock.PlayerLockManager;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ExtensionBootstrap;
 import org.windy.xingtubot.common.module.XingtuBotHost;
@@ -66,7 +66,7 @@ public final class ChatlinkBukkitPlugin extends JavaPlugin {
 
         // 游戏→QQ：ChatreplyModule（GameChatForwarder + /messagereply + 敏感词）
         if (config.getBoolean("chatreply-enable", true)) {
-            LockState lockState = host.getService(LockState.class);
+            PlayerLockManager lockState = host.getService(PlayerLockManager.class);
             chatreplyModule = new ChatreplyModule(this, config, logger, lockState);
 
             // 注入目标群 + 主动发送器（否则 game→QQ 永远不转发：默认 allowedGroups={"*"} 无具体群）

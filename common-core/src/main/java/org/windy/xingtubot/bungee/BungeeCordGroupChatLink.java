@@ -74,7 +74,7 @@ public class BungeeCordGroupChatLink implements Listener {
     /** 调试日志：有 logger 且 DebugFlag 开启才输出（实时跟随 /xtb debug）。 */
     private void debug(String msg) {
         org.windy.xingtubot.common.platform.BotLogger l = this.logger;
-        if (l != null && org.windy.xingtubot.common.DebugFlag.isOn()) l.info(msg);
+        if (l != null && org.windy.xingtubot.common.api.DebugFlag.isOn()) l.info(msg);
     }
 
     public void setAllowedGroups(List<String> groups) {

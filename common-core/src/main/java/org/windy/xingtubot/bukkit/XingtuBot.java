@@ -10,7 +10,7 @@ import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.bot.BotLauncher;
 import org.windy.xingtubot.common.bot.QQOnboard;
 import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.poll.JdbcOpenidNameRepository;
+import org.windy.xingtubot.common.poll.JsonOpenidNameRepository;
 import org.windy.xingtubot.common.poll.OpenidNameCache;
 import org.windy.xingtubot.common.poll.OpenidNameRepository;
 import org.windy.xingtubot.common.poll.QQGatewayClient;
@@ -102,7 +102,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         }
         getLogger().info("▌ 监听     " + config.getString("listen-mode", "mention"));
         getLogger().info("▌ 跨服     " + (botOn ? "已启用" : "未启用"));
-        getLogger().info("▌ 存储     " + config.getString("storage-type", "json"));
+        getLogger().info("▌ 存储     JSON");
         getLogger().info("▌ ✔ 已启动  输入 /xtb help 查看命令");
         getLogger().info("");
     }
@@ -122,31 +122,12 @@ public final class XingtuBot extends JavaPlugin implements Listener {
     }
 
     /**
-     * 初始化 OpenID 昵称缓存：L1 内存 + L2 DB（复用 binding 的存储类型配置）。
+     * 初始化 OpenID 昵称缓存：L1 内存 + L2 JSON 文件。
      */
     private void initOpenidNameCache() {
-        FileConfiguration config = getConfig();
-        String storageType = config.getString("storage-type", "json").trim().toLowerCase();
-        OpenidNameRepository repo;
-
-        switch (storageType) {
-            case "mysql":
-                repo = JdbcOpenidNameRepository.mysql(
-                        config.getString("mysql-host", "127.0.0.1"),
-                        config.getInt("mysql-port", 3306),
-                        config.getString("mysql-database", "xingtubot"),
-                        config.getString("mysql-user", "root"),
-                        config.getString("mysql-password", ""),
-                        msg -> getLogger().info(msg));
-                break;
-            case "sqlite":
-            default:
-                repo = JdbcOpenidNameRepository.sqlite(
-                        new java.io.File(getDataFolder(), "openid_names.db").getAbsolutePath(),
-                        msg -> getLogger().info(msg));
-                break;
-        }
-
+        OpenidNameRepository repo = new JsonOpenidNameRepository(
+                new java.io.File(getDataFolder(), "openid_names.json"),
+                msg -> getLogger().info(msg));
         OpenidNameCache.getInstance().init(repo);
     }
 

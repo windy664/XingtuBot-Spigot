@@ -158,7 +158,7 @@ public class WhitelistModule implements Listener {
                 return;
             }
             String title = LockMessages.get("need-login-title")
-                    .replace("{bot}", org.windy.xingtubot.common.BotIdentity.getName());
+                    .replace("{bot}", org.windy.xingtubot.common.api.BotIdentity.getName());
             sendWelcomeTitle(player, LockMessages.format("welcome-need-login", "{title}", title));
             JoinQrMap.giveMap(plugin, player); // 加群二维码地图（强制手持）
         } else if (service.hasPending(name)) {

@@ -165,7 +165,7 @@ public class SpigotPlaceholders implements PlaceholderResolver {
                     return "";
                 }
                 case "bot_name":
-                    return org.windy.xingtubot.common.BotIdentity.getName();
+                    return org.windy.xingtubot.common.api.BotIdentity.getName();
                 default:
                     return null;
             }

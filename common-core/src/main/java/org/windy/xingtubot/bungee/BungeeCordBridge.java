@@ -80,7 +80,7 @@ public class BungeeCordBridge implements Listener {
         return sp != null ? sp.get() : null;
     }
 
-    /** @deprecated 昵称统一走 {@link org.windy.xingtubot.common.BotIdentity}，不再生效。 */
+    /** @deprecated 昵称统一走 {@link org.windy.xingtubot.common.api.BotIdentity}，不再生效。 */
     @Deprecated
     public void setBotName(String botName) { /* no-op */ }
     public void setRedisChannel(CrossServerChannel redisChannel) {

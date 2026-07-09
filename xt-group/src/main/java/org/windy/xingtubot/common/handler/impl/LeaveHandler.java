@@ -37,7 +37,7 @@ public class LeaveHandler implements MessageHandler {
         String text = leaveMessage;
         if (text == null || text.isEmpty()) return;
         String username = event.getUsername() != null ? event.getUsername() : "群成员";
-        text = text.replace("{bot}", org.windy.xingtubot.common.BotIdentity.getName())
+        text = text.replace("{bot}", org.windy.xingtubot.common.api.BotIdentity.getName())
                    .replace("{user}", username);
         event.replyMarkdown(text, null);
     }

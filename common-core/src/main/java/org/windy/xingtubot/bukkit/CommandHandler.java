@@ -154,7 +154,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         sender.sendMessage("§e║ §7部署角色: §f" + role);
 
         // Bot 名称（QQ 官方昵称，连接后自动获取）
-        sender.sendMessage("§e║ §7机器人名: §f" + org.windy.xingtubot.common.BotIdentity.getName());
+        sender.sendMessage("§e║ §7机器人名: §f" + org.windy.xingtubot.common.api.BotIdentity.getName());
 
         sender.sendMessage("§e╚══════════════════════════╝");
     }

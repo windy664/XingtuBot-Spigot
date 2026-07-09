@@ -96,7 +96,7 @@ public class VelocityBridge {
         return s;
     }
 
-    /** @deprecated 昵称统一走 {@link org.windy.xingtubot.common.BotIdentity}，本方法不再生效。 */
+    /** @deprecated 昵称统一走 {@link org.windy.xingtubot.common.api.BotIdentity}，本方法不再生效。 */
     @Deprecated
     public void setBotName(String botName) {
         // no-op
