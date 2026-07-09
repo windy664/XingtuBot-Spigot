@@ -94,7 +94,6 @@ public final class ChatlinkModule implements BotModule {
     private void wireGameEcho(ModuleContext ctx) {
         Consumer<String> bc = this.gameBroadcaster;
         if (bc == null) return; // 平台未提供广播器（如该平台不支持）
-        if (!ctx.config().getBoolean("echo-bot-to-game", true)) return;
 
         final String fmt = ctx.config().getString("echo-format", "§b[{bot}] §f");
         Consumer<String> echo = text -> {

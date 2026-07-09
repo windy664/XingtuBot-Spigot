@@ -6,7 +6,6 @@ import org.windy.xingtubot.common.api.QqOpenApiClient;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.event.BotReplier;
 import org.windy.xingtubot.common.platform.PlatformAdapter;
-import org.windy.xingtubot.common.tts.VoiceSynthesizer;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -35,13 +34,8 @@ import java.util.function.Consumer;
  */
 public class QqBot {
 
-    /** 文本回复的输出形态。 */
-    public enum ReplyMode { TEXT, VOICE, TEXT_VOICE }
-
     private final PlatformAdapter adapter;
     private final QqOpenApiClient api;
-    private final ReplyMode replyMode;
-    private final VoiceSynthesizer tts;       // 可为 null（未安装语音合成器，语音模式退回纯文字）
     private final Set<String> allowedGroups; // 允许响应的群 openid 集合，空/含"*"=全部
     private final List<Consumer<BotMessageEvent>> listeners = new CopyOnWriteArrayList<>();
     // 同一条消息多次回复需要 msg_seq 自增；这里用全局自增即可（QQ 仅要求同 msg_id 下递增）
@@ -64,12 +58,9 @@ public class QqBot {
         return !recentEventIds.add(eventKey);
     }
 
-    public QqBot(PlatformAdapter adapter, QqOpenApiClient api, ReplyMode replyMode,
-                        VoiceSynthesizer tts, Set<String> allowedGroups) {
+    public QqBot(PlatformAdapter adapter, QqOpenApiClient api, Set<String> allowedGroups) {
         this.adapter = adapter;
         this.api = api;
-        this.replyMode = replyMode == null ? ReplyMode.TEXT : replyMode;
-        this.tts = tts;
         this.allowedGroups = allowedGroups;
     }
 
@@ -219,7 +210,7 @@ public class QqBot {
 
             // 全能回复器：文本/图片/Markdown/Ark 都走 OpenAPI 被动回复（群/单聊各走对应接口）
             // 用命名静态内部类代替匿名内部类，避免 NeoForge shadow jar relocate 导致 NoClassDefFoundError
-            BotReplier replier = new OpenApiBotReplier(api, adapter, replyMode, tts, seq,
+            BotReplier replier = new OpenApiBotReplier(api, adapter, seq,
                     fGroup, fUser, fMsgId, fEventId, isGroup);
 
             // 复用现有事件模型：guildId 放会话标识（群/用户 openid），formId 放发送者

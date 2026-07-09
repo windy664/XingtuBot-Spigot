@@ -23,8 +23,6 @@ public class BungeeCordGroupChatLink implements Listener {
 
     private final ProxyServer proxy;
     private final String chatFormat;
-    private final String groupPrefix;       // 旧；仅兼容保留，现走 gameFormat 模板
-    private final boolean replyButton;
     // game→QQ 聊天行 markdown 模板（占位符 {player}/{message}）。
     private volatile String gameFormat = org.windy.xingtubot.common.util.ChatlinkFormat.DEFAULT;
     // 主动消息能力：存「取 sender 的供给器」而非 sender 本身，每次发送时现取。
@@ -45,12 +43,9 @@ public class BungeeCordGroupChatLink implements Listener {
         }
     }
 
-    public BungeeCordGroupChatLink(ProxyServer proxy, net.md_5.bungee.api.plugin.Plugin plugin, String chatFormat,
-                                   String groupPrefix, boolean replyButton) {
+    public BungeeCordGroupChatLink(ProxyServer proxy, net.md_5.bungee.api.plugin.Plugin plugin, String chatFormat) {
         this.proxy = proxy;
         this.chatFormat = chatFormat == null ? "§b[QQ群] §f" : chatFormat;
-        this.groupPrefix = groupPrefix == null ? "[游戏]" : groupPrefix;
-        this.replyButton = replyButton;
         proxy.getPluginManager().registerListener(plugin, this);
     }
 
@@ -133,9 +128,7 @@ public class BungeeCordGroupChatLink implements Listener {
         if (event.getGuildId() != null && !event.getGuildId().isEmpty()) {
             lastGroupOpenid = event.getGuildId();
         }
-        if (replyButton) {
-            lastGroupMsg.set(new Holder(event));
-        }
+        lastGroupMsg.set(new Holder(event));
         String line = chatFormat + sender + "：" + content;
         TextComponent component = new TextComponent(line);
         for (ProxiedPlayer p : proxy.getPlayers()) {

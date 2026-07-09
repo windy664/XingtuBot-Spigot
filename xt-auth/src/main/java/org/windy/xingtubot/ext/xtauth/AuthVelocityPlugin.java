@@ -162,13 +162,12 @@ public class AuthVelocityPlugin {
             }
 
             // 登录提示持续循环：lockManager 为 null 时用旧的 bridge 提醒；lockManager 非 null 时由它自己管。
-            if (lockManager == null && config.getBoolean("login-reminder-enable", true)) {
-                bridge.startLoginReminder(config.getInt("login-reminder-seconds", 3));
+            if (lockManager == null) {
+                bridge.startLoginReminder(3);
             }
 
-            // 已绑定但需登录的玩家进服 → 在群里发「免密登录」按钮卡片（含玩家名 + 省级地区）。
-            // 绑定的 QQ 点按钮即触发「登录」走 WhitelistHandler；免密信任期内的玩家不会走到这（已自动登录）。
-            if (host != null && config.getBoolean("login-button-announce", true)) {
+            // 已绑定但需登录的玩家进服 → 在群里发「免密登录」按钮卡片
+            if (host != null) {
                 bridge.setOnNeedLogin(name -> announceLoginButton(host, config, name));
             }
         }
@@ -184,7 +183,7 @@ public class AuthVelocityPlugin {
         if (groups.isEmpty()) return;
 
         final String loginWord = config.getString("login-prompt", "登录");
-        final String btnLabel = config.getString("login-button-label", "✅ 同意登录");
+        final String btnLabel = org.windy.xingtubot.common.whitelist.LockMessages.get("login-button-label");
         final boolean showRegion = config.getBoolean("login-announce-region", true);
         // 仅取 IP 字符串用于省级定位，不留存；地区查询发网络请求，放异步线程。
         final String ip = proxy.getPlayer(playerName)

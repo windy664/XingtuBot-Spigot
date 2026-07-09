@@ -111,9 +111,6 @@ public final class AuthModule implements BotModule {
             bindingService.setGroupNumber(config.getString("qq-group", ""));
             // 「IP 绑定的自动登录」信任期由代理大脑(VelocityBridge)持有（它才有玩家 IP），
             // 见 AuthVelocityPlugin.setAutoLoginWindowMillis；本模块不再处理。
-            bindingService.setSuccessTemplates(
-                    config.getString("messages.bind-success", ""),
-                    config.getString("messages.login-success", ""));
 
             ctx.registerService(BindingRepository.class, store);
             ctx.registerService(BindingService.class, bindingService);

@@ -260,11 +260,6 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
             String appId = config.getString("openapi-app-id", "");
             String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "(未配置)";
             kv("AppID", masked);
-            kv("回复形态", config.getString("reply-mode", "text"));
-            String ttsVoice = config.getString("tts-voice", "").trim();
-            if (!ttsVoice.isEmpty()) {
-                kv("TTS 语音", ttsVoice);
-            }
             java.util.List<String> groups = config.getStringList("allowed-groups");
             kv("群白名单", groups.isEmpty() || groups.contains("*") ? "全部群" : groups.toString());
         }
@@ -470,7 +465,7 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         private final String permission;
 
         QQCommand(BotConfig config) {
-            this.permission = config.getString("qq-send-permission", "xingtubot.qq.send");
+            this.permission = "xingtubot.qq.send";
         }
 
         @Override

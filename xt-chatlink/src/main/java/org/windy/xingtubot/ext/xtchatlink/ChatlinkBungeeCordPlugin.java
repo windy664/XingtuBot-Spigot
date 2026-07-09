@@ -44,9 +44,7 @@ public class ChatlinkBungeeCordPlugin extends Plugin {
         // 游戏→QQ
         if (config.getBoolean("chatreply-enable", true)) {
             groupChatLink = new BungeeCordGroupChatLink(getProxy(), this,
-                    config.getString("chat-format", "§b[QQ群] §f"),
-                    config.getString("group-prefix", "[游戏]"),
-                    config.getBoolean("chat-reply-button", false));
+                    config.getString("chat-format", "§b[QQ群] §f"));
 
             List<String> allowedGroups = config.getStringList("allowed-groups");
             groupChatLink.setAllowedGroups(allowedGroups);

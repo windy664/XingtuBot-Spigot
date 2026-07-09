@@ -34,6 +34,8 @@ public final class LockMessages {
         // —— 进服欢迎（Bukkit 本地模式；title 用首个 " · " 拆主/副标题）——
         DEFAULTS.put("welcome-auto-login", "§a§l欢迎回来 · §f同设备信任期内已自动登录");
         DEFAULTS.put("auto-login-msg", "§a✅ 同设备信任期内，已为你自动登录，祝游戏愉快！");
+        DEFAULTS.put("need-login-title", "@{bot} 登录");
+        DEFAULTS.put("login-button-label", "✅ 同意登录");
         DEFAULTS.put("welcome-need-login", "§a§l欢迎回来 · {title}");
         DEFAULTS.put("welcome-need-bind", "§6§l请完成绑定 · §f在群里发送「{bind}」");
         DEFAULTS.put("welcome-await-qq", "§6§l欢迎来到本服 · §f请在聊天框输入 QQ 号开始白名单绑定");

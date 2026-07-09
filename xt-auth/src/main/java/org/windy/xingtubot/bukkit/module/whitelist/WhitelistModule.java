@@ -81,9 +81,6 @@ public class WhitelistModule implements Listener {
         this.service.setBindingPrompt(plugin.getConfig().getString("binding-prompt", "绑定"));
         this.service.setMaxBindAttempts(plugin.getConfig().getInt("bind-max-attempts", 5));
         this.service.setGroupNumber(plugin.getConfig().getString("qq-group", ""));
-        this.service.setSuccessTemplates(
-                plugin.getConfig().getString("messages.bind-success", ""),
-                plugin.getConfig().getString("messages.login-success", ""));
 
         // 补全 lockManager 的 BindingService 引用
         bukkitLock.setBindingService(service);
@@ -160,7 +157,8 @@ public class WhitelistModule implements Listener {
                 player.sendMessage(LockMessages.get("auto-login-msg"));
                 return;
             }
-            String title = spigotConfig.getStringResolved("title-code", "@{bot} /验证");
+            String title = LockMessages.get("need-login-title")
+                    .replace("{bot}", org.windy.xingtubot.common.BotIdentity.getName());
             sendWelcomeTitle(player, LockMessages.format("welcome-need-login", "{title}", title));
             JoinQrMap.giveMap(plugin, player); // 加群二维码地图（强制手持）
         } else if (service.hasPending(name)) {

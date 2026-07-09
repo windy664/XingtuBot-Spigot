@@ -80,9 +80,7 @@ public class ChatlinkVelocityPlugin {
         // 游戏→QQ：创建 GroupChatLink 并注册为服务
         if (config.getBoolean("chatreply-enable", true) && host != null) {
             groupChatLink = new GroupChatLink(proxy, this,
-                    config.getString("chat-format", "§b[QQ群] §f"),
-                    config.getString("group-prefix", "[游戏]"),
-                    config.getBoolean("chat-reply-button", false));
+                    config.getString("chat-format", "§b[QQ群] §f"));
             // 注入调试日志器：DebugFlag 开启时在群服互联两条链路入口/兜底打点
             groupChatLink.setLogger(botLogger);
             // game→QQ 聊天行 markdown 模板（{player}/{message}）

@@ -4,7 +4,6 @@ import com.google.gson.JsonObject;
 import org.windy.xingtubot.common.api.QqOpenApiClient;
 import org.windy.xingtubot.common.event.BotReplier;
 import org.windy.xingtubot.common.platform.PlatformAdapter;
-import org.windy.xingtubot.common.tts.VoiceSynthesizer;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -21,8 +20,6 @@ public class OpenApiBotReplier implements BotReplier {
 
     private final QqOpenApiClient api;
     private final PlatformAdapter adapter;
-    private final QqBot.ReplyMode replyMode;
-    private final VoiceSynthesizer tts;       // 可为 null（未安装语音合成器）
     private final AtomicInteger seq;
     private final String fGroup;
     private final String fUser;
@@ -31,13 +28,11 @@ public class OpenApiBotReplier implements BotReplier {
     private final boolean isGroup;
 
     public OpenApiBotReplier(QqOpenApiClient api, PlatformAdapter adapter,
-                             QqBot.ReplyMode replyMode, VoiceSynthesizer tts, AtomicInteger seq,
+                             AtomicInteger seq,
                              String fGroup, String fUser, String fMsgId, String fEventId,
                              boolean isGroup) {
         this.api = api;
         this.adapter = adapter;
-        this.replyMode = replyMode;
-        this.tts = tts;
         this.seq = seq;
         this.fGroup = fGroup;
         this.fUser = fUser;
@@ -48,36 +43,17 @@ public class OpenApiBotReplier implements BotReplier {
 
     @Override
     public void replyText(String text) {
-        if (replyMode != QqBot.ReplyMode.VOICE) {
-            // markdown-only：纯文本统一包成 markdown 走 markdown 通道（产品定位要求 bot 具备 markdown 权限）。
-            String md = org.windy.xingtubot.common.util.Md.plain(text);
-            send(s -> {
-                if (fMsgId != null) {
-                    if (isGroup) api.sendGroupMarkdown(fGroup, md, null, fMsgId, s);
-                    else api.sendC2CMarkdown(fUser, md, null, fMsgId, s);
-                } else {
-                    if (isGroup) api.sendGroupMarkdownByEvent(fGroup, md, fEventId, s);
-                    else api.sendC2CMarkdownByEvent(fUser, md, fEventId, s);
-                }
-            });
-        }
-        // 语音模式且装了合成器：文字 → 音频字节 → 直发语音。未装合成器时静默跳过（已发文字）。
-        if (replyMode != QqBot.ReplyMode.TEXT && tts != null) {
-            adapter.runAsync(() -> {
-                try {
-                    adapter.log("[Voice] 合成: " + text.substring(0, Math.min(text.length(), 30)) + "...");
-                    byte[] data = tts.synthesize(text);
-                    if (data == null || data.length == 0) {
-                        adapter.log("[Voice] 合成器返回空音频，跳过语音。");
-                        return;
-                    }
-                    sendVoiceBytes(data);
-                    adapter.log("[Voice] ✅ 语音发送成功 (" + data.length + " bytes)");
-                } catch (Exception e) {
-                    adapter.log("[Voice] ❌ 语音发送失败: " + e.getMessage());
-                }
-            });
-        }
+        // markdown-only：纯文本统一包成 markdown 走 markdown 通道（产品定位要求 bot 具备 markdown 权限）。
+        String md = org.windy.xingtubot.common.util.Md.plain(text);
+        send(s -> {
+            if (fMsgId != null) {
+                if (isGroup) api.sendGroupMarkdown(fGroup, md, null, fMsgId, s);
+                else api.sendC2CMarkdown(fUser, md, null, fMsgId, s);
+            } else {
+                if (isGroup) api.sendGroupMarkdownByEvent(fGroup, md, fEventId, s);
+                else api.sendC2CMarkdownByEvent(fUser, md, fEventId, s);
+            }
+        });
     }
 
     /** 直发音频字节（供 TTS 合成结果与 {@link #replyVoiceData} 共用）。 */

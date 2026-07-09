@@ -93,11 +93,6 @@ public final class XingtuBot extends JavaPlugin implements Listener {
             String appId = config.getString("openapi-app-id", "");
             String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "(未配置)";
             kv("AppID", masked);
-            kv("回复形态", config.getString("reply-mode", "text"));
-            String ttsVoice = config.getString("tts-voice", "").trim();
-            if (!ttsVoice.isEmpty()) {
-                kv("TTS 语音", ttsVoice);
-            }
             java.util.List<String> groups = config.getStringList("allowed-groups");
             kv("群白名单", groups.isEmpty() || groups.contains("*") ? "全部群" : groups.toString());
         }
@@ -266,8 +261,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         getCommand("xtb").setExecutor(handler);
         getCommand("xtb").setTabCompleter(handler);
 
-        String qqPerm = getConfig().getString("qq-send-permission", "xingtubot.qq.send");
-        qqSendCommand = new QQSendCommand(qqPerm);
+        qqSendCommand = new QQSendCommand("xingtubot.qq.send");
         getCommand("qq").setExecutor(qqSendCommand);
         getCommand("qq").setTabCompleter(qqSendCommand);
     }

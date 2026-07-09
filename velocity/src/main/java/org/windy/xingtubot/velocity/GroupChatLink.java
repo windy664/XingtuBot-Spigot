@@ -38,8 +38,6 @@ public class GroupChatLink {
 
     private final ProxyServer proxy;
     private final String chatFormat;        // 群消息在游戏内的前缀
-    private final String groupPrefix;       // 玩家消息发到群的前缀（旧；仅兼容保留，现走 gameFormat 模板）
-    private final boolean replyButton;      // 群消息后是否追加可点击的 [回复] 按钮
     // game→QQ 聊天行 markdown 模板（占位符 {player}/{message}）。
     private volatile String gameFormat = org.windy.xingtubot.common.util.ChatlinkFormat.DEFAULT;
     // 主动消息能力：存「取 sender 的供给器」而非 sender 本身，每次发送时现取。
@@ -65,12 +63,9 @@ public class GroupChatLink {
         }
     }
 
-    public GroupChatLink(ProxyServer proxy, Object plugin, String chatFormat, String groupPrefix,
-                         boolean replyButton) {
+    public GroupChatLink(ProxyServer proxy, Object plugin, String chatFormat) {
         this.proxy = proxy;
         this.chatFormat = chatFormat == null ? "§b[QQ群] §f" : chatFormat;
-        this.groupPrefix = groupPrefix == null ? "[游戏]" : groupPrefix;
-        this.replyButton = replyButton;
         proxy.getEventManager().register(plugin, this);
     }
 
@@ -182,18 +177,8 @@ public class GroupChatLink {
         if (event.getGuildId() != null && !event.getGuildId().isEmpty()) {
             lastGroupOpenid = event.getGuildId();
         }
-        // replyButton 开启时才存被动句柄（用于挂靠回复额度）
-        if (replyButton) {
-            lastGroupMsg.set(new Holder(event));
-        }
+        lastGroupMsg.set(new Holder(event));
         Component line = Component.text(chatFormat + sender + "：" + content);
-        if (replyButton) {
-            Component button = Component.text(" [回复]")
-                    .color(NamedTextColor.GREEN)
-                    .clickEvent(ClickEvent.suggestCommand("/vxtb reply "))
-                    .hoverEvent(HoverEvent.showText(Component.text("点击快捷回复到 QQ 群")));
-            line = line.append(button);
-        }
         for (Player p : proxy.getAllPlayers()) {
             p.sendMessage(line);
         }

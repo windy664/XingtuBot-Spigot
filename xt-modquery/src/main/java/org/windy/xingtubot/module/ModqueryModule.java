@@ -84,8 +84,7 @@ public final class ModqueryModule implements BotModule {
         if (modrinthApi != null) {
             ModrinthCommand modrinthCmd = new ModrinthCommand(modrinthApi);
             // markdown 开关只对 Modrinth 有效（mcmod 恒 markdown）。新键 modrinth-markdown，兼容读旧键 mcmod-markdown。
-            modrinthCmd.setMarkdownEnabled(
-                    config.getBoolean("modrinth-markdown", config.getBoolean("mcmod-markdown", false)));
+            modrinthCmd.setMarkdownEnabled(true);
             ctx.registry().register(modrinthCmd);
         }
 

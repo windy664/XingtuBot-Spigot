@@ -7,7 +7,6 @@ import org.windy.xingtubot.common.platform.PlatformAdapter;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.poll.QQGatewayClient;
 import org.windy.xingtubot.common.poll.QqBot;
-import org.windy.xingtubot.common.tts.VoiceSynthesizer;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -83,31 +82,15 @@ public final class BotLauncher {
         QqOpenApiClient api = new QqOpenApiClient(appId, secret,
                 sandbox ? QqOpenApiClient.API_SANDBOX : QqOpenApiClient.API_PROD, null);
 
-        QqBot.ReplyMode replyMode = resolveReplyMode(config.getString("reply-mode", "text"));
-
         // 群白名单：["*"] 或空 = 全部允许，否则只响应列表中的群
         List<String> allowedList = config.getStringList("allowed-groups");
         Set<String> allowedGroups = allowedList.isEmpty()
                 ? Collections.singleton("*") : new HashSet<>(allowedList);
 
-        // 语音：voice/text+voice 模式下，从 ServiceLoader 发现一个语音合成器（核心不内置实现）。
-        // 没装合成器则 tts=null，语音模式自动退回纯文字（不报错）。
-        VoiceSynthesizer tts = null;
-        if (replyMode != QqBot.ReplyMode.TEXT) {
-            java.util.Iterator<VoiceSynthesizer> it = java.util.ServiceLoader
-                    .load(VoiceSynthesizer.class, BotLauncher.class.getClassLoader()).iterator();
-            if (it.hasNext()) {
-                tts = it.next();
-                adapter.log("[Voice] 已加载语音合成器: " + tts.getClass().getName());
-            } else {
-                adapter.log("[Voice] reply-mode 含语音，但未安装语音合成器(VoiceSynthesizer)，将只发文字。");
-            }
-        }
-
         // markdown-only：所有回复统一走 markdown 通道（产品定位，要求 bot 具备 markdown 权限）。
 
         // 构建 bot（事件由 gatewayClient 注入）
-        QqBot bot = new QqBot(adapter, api, replyMode, tts, allowedGroups);
+        QqBot bot = new QqBot(adapter, api, allowedGroups);
         bot.addMessageListener(listener);
 
         // 框架级调试开关单一来源：绑定后各附属插件（如 MCMOD 爬取）经 DebugFlag.isOn() 实时跟随。
@@ -118,19 +101,5 @@ public final class BotLauncher {
                 bot::handleExternalEvent, logger, () -> config.getBoolean("debug", false));
 
         return new GatewayResult(bot, gwClient);
-    }
-
-    private static QqBot.ReplyMode resolveReplyMode(String v) {
-        String s = v == null ? "" : v.trim().toLowerCase();
-        switch (s) {
-            case "voice":
-                return QqBot.ReplyMode.VOICE;
-            case "text+voice":
-            case "text_voice":
-            case "both":
-                return QqBot.ReplyMode.TEXT_VOICE;
-            default:
-                return QqBot.ReplyMode.TEXT;
-        }
     }
 }

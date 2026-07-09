@@ -13,7 +13,7 @@ import java.util.List;
 
 /**
  * 游戏内向 QQ 群发消息：/qq <消息>
- * 需要权限节点 xingtubot.qq.send（config.yml 可配）。
+ * 需要权限节点 xingtubot.qq.send。
  *
  * <p>有 apiClient 时走主动消息（即时推送），否则回退到被动队列。
  */

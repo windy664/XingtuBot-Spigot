@@ -35,39 +35,20 @@ allowed-groups:
 listen-mode: mention
 
 ####################################
-# 回复形态（所有文本回复统一走 Markdown 渲染——产品特性，需机器人具备原生 Markdown 权限）
-#   text       = 只发文字（默认）
-#   voice      = 只发语音（需安装语音合成器，否则自动退回纯文字）
-#   text+voice = 先文字后语音（同上）
-# 说明：核心<不内置> TTS 合成。reply-mode 含 voice 时，会用 ServiceLoader 发现一个
-#       VoiceSynthesizer 实现把回复文字合成音频；没装就只发文字（不报错）。
-#       若你已有现成音频，直接调 BotMessageEvent.replyVoice(url)/replyVoiceData(bytes) 即可。
-####################################
-reply-mode: text
-# 语音音色提示（仅供 VoiceSynthesizer 实现自行读取；核心不使用此值）
-tts-voice: ""
-
-# 注：「机器人消息回显到游戏」(echo-bot-to-game / echo-format) 属群服互联范畴，
-#     已迁至 xt-chatlink 扩展的 config.yml，本核心配置不再持有。
-
-####################################
-# /qq 命令（游戏内向 QQ 群发消息）的权限节点（默认仅 OP；可用 LuckPerms 分配）
-####################################
-qq-send-permission: "xingtubot.qq.send"
-
-####################################
-# 部署角色（大脑/手脚拓扑的【唯一】判定来源——本服由谁跑 bot，以及附属插件如何接入）
-#   auto             = 自动探测：Bukkit 挂代理(读 spigot.yml/paper-global.yml 的转发开关)→手脚，
-#                      独立 Bukkit→本地大脑；Velocity/BungeeCord 代理端→大脑。
-#   local/standalone = 强制本机跑 bot（单机 Bukkit，即本地大脑）
-#   slave            = 强制手脚模式（挂代理的 Bukkit 子服，本机 bot 禁用，由代理大脑统一接管跨服）
-#   off / none       = 不跑 bot（代理端=不当大脑、不建 Bridge；单机=只装插件不连 QQ）
-# 说明：
-#   1. 本键是机器人框架级判定，结果经 host.isBrain() 暴露给附属插件统一遵循；
-#      XingtuBot-Auth(白名单)不再有独立的 whitelist-role，会自动跟随本键，无需重复配置。
-#   2. 白名单总开关 whitelist-enable 仍在 XingtuBot-Auth 附属插件的 config。
-#   3. 三端通用：Bukkit 子服用 auto/local/slave/off；代理端默认即大脑，只有填 off 才不当大脑。
-#      （旧的 bot-mode 键已废弃删除，其"off"语义并入本键；旧配置的 bot-mode: off 仍兼容生效。）
+# 部署角色——决定本服是否跑 QQ bot、以什么身份跑。
+#
+# 代理端（Velocity / BungeeCord）：
+#   auto / local / (留空) = 跑 bot，充当中枢大脑（管理 QQ 连接、跨服通信、白名单等）
+#   off / none            = 不跑 bot（不做大脑、不建跨服桥接）
+#
+# Bukkit 子服 / 独立服：
+#   auto             = 自动探测：检测到代理端→手脚模式（不跑 bot，由代理接管）；
+#                      未检测到→本地大脑（自己跑 bot）
+#   local/standalone = 强制本地大脑（不管有没有代理，本机跑 bot）
+#   slave            = 强制手脚模式（本机不跑 bot，一切由代理大脑接管）
+#   off / none       = 不跑 bot（只装插件，不连 QQ）
+#
+# 注：白名单总开关 whitelist-enable 在 xt-auth 附属的 config 里，不在此处。
 ####################################
 server-role: auto
 
@@ -81,7 +62,7 @@ server-role: auto
 #   both           = 等同 redis（有 Redis 时一律优先走 Redis），同时保留 PluginMessage 监听做兜底（过渡期）。
 #
 # ⚠️ 全网一致：代理大脑与所有 Bukkit 子服必须填【相同】的 cross-server-channel，且连同一台 Redis。
-cross-server-channel: redis
+cross-server-channel: both
 
 # 本服在跨服通信中的名称（用于区分来源 / 控制台定向）。多子服请各自取不同的名字。
 server-name: "server"
@@ -99,7 +80,7 @@ redis-password: ""
 #   sqlite = 单文件 .db
 #   mysql  = MySQL（多子服共享，推荐生产）
 ####################################
-storage-type: json
+storage-type: sqlite
 # 以下仅 storage-type: mysql 时需要
 mysql-host: "127.0.0.1"
 mysql-port: 3306

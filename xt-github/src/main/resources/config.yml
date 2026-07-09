@@ -27,6 +27,5 @@ github-mirrors:
 
 # seen state 持久化方式（追踪哪些 issue/PR/release/commit 已推送过）
 # yaml   → 文件 github-state.yml（默认，重启可能丢少量状态）
-# sqlite → 本地数据库（推荐，复用 mysql-host/port/database/user/password 配置）
-# mysql  → 远程数据库（多实例共享状态）
+# sqlite → 本地数据库
 github-storage-type: yaml
