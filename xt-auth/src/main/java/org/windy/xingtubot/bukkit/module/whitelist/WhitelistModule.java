@@ -17,6 +17,8 @@ import org.windy.xingtubot.ext.xtauth.binding.BindingServiceImpl;
 import org.windy.xingtubot.common.binding.BindingStorageFactory;
 import org.windy.xingtubot.common.binding.AutoLoginRepository;
 import org.windy.xingtubot.common.binding.AutoLoginStorageFactory;
+import org.windy.xingtubot.common.whitelist.LockMessages;
+import org.windy.xingtubot.common.whitelist.LockPrompt;
 
 import java.util.List;
 
@@ -153,22 +155,28 @@ public class WhitelistModule implements Listener {
                 service.markLoggedInSession(name);
                 bukkitLock.unlock(name);
                 JoinQrMap.cleanup(player);
-                player.sendTitle("§a§l欢迎回来", "§f同设备信任期内已自动登录", 10, 60, 15);
-                player.sendMessage("§a✅ 同设备信任期内，已为你自动登录，祝游戏愉快！");
+                sendWelcomeTitle(player, LockMessages.get("welcome-auto-login"));
+                player.sendMessage(LockMessages.get("auto-login-msg"));
                 return;
             }
             String title = spigotConfig.getStringResolved("title-code", "@{bot} /验证");
-            player.sendTitle("§a§l欢迎回来", title, 10, 60, 15);
+            sendWelcomeTitle(player, LockMessages.format("welcome-need-login", "{title}", title));
             JoinQrMap.giveMap(plugin, player); // 加群二维码地图（强制手持）
         } else if (service.hasPending(name)) {
             String bindWord = plugin.getConfig().getString("binding-prompt", "绑定");
-            player.sendTitle("§6§l请完成绑定", "§f在群里发送「§e§l" + bindWord + "§f」", 10, 60, 15);
+            sendWelcomeTitle(player, LockMessages.format("welcome-need-bind", "{bind}", bindWord));
             JoinQrMap.giveMap(plugin, player); // 加群二维码地图（强制手持）
         } else {
             bukkitLock.lock(name);
-            player.sendTitle("§6§l欢迎来到本服", "§f请在聊天框输入 QQ 号开始白名单绑定", 10, 60, 15);
-            player.sendMessage("§e欢迎！请在聊天框输入你的 §bQQ号 §e完成白名单绑定");
+            sendWelcomeTitle(player, LockMessages.get("welcome-await-qq"));
+            player.sendMessage(LockMessages.get("await-qq-msg"));
         }
+    }
+
+    /** 进服欢迎 title：文案按首个 " · " 拆成主/副标题。 */
+    private static void sendWelcomeTitle(Player player, String text) {
+        String[] parts = LockPrompt.titleParts(text);
+        player.sendTitle(parts[0], parts[1], 10, 60, 15);
     }
 
     // onPlayerChat 不再需要——聊天由共享 LockPacketListener 处理

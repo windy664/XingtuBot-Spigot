@@ -28,3 +28,20 @@ unlocked: "§a✅ 已登录，祝游戏愉快！"
 
 # 加群二维码兜底文字（仅当 packetevents 运行期不可用、发不了地图时才用；{group}/{url} 为占位符）
 qr-fallback: "§e加入 QQ 群：{group} {url}"
+
+# ---- 进服欢迎（Bukkit 本地模式）----
+# 下面 welcome-* 是进服瞬间闪一次的 title；用首个 " · " 分隔主标题/副标题。
+
+# 同设备信任期内免密自动登录
+welcome-auto-login: "§a§l欢迎回来 · §f同设备信任期内已自动登录"
+auto-login-msg: "§a✅ 同设备信任期内，已为你自动登录，祝游戏愉快！"
+
+# 已绑定、需登录（{title} = config 的 title-code，通常含 @机器人/命令提示）
+welcome-need-login: "§a§l欢迎回来 · {title}"
+
+# 已登记 QQ、需在群里发绑定（{bind} = binding-prompt，默认「绑定」）
+welcome-need-bind: "§6§l请完成绑定 · §f在群里发送「{bind}」"
+
+# 全新玩家、需输入 QQ 号
+welcome-await-qq: "§6§l欢迎来到本服 · §f请在聊天框输入 QQ 号开始白名单绑定"
+await-qq-msg: "§e欢迎！请在聊天框输入你的 §bQQ号 §e完成白名单绑定"

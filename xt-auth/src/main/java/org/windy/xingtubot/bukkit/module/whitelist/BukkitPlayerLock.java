@@ -11,6 +11,7 @@ import org.windy.xingtubot.common.whitelist.LockMessages;
 import org.windy.xingtubot.common.whitelist.LockPosition;
 import org.windy.xingtubot.common.whitelist.LockPrompt;
 import org.windy.xingtubot.common.whitelist.LockTarget;
+import org.windy.xingtubot.common.whitelist.LockTitle;
 
 import java.util.Locale;
 import java.util.Map;
@@ -159,7 +160,14 @@ public class BukkitPlayerLock implements PlayerLockManager, LockTarget {
                 continue;
             }
             boolean bound = isBound(name);
-            bossBar.set(p, name, LockPrompt.text(bound, isAwaitingQQ(name)), bound);
+            boolean awaiting = isAwaitingQQ(name);
+            String text = LockPrompt.text(bound, awaiting);
+            if (LockPrompt.isQrPhase(bound, awaiting)) {
+                bossBar.set(p, name, text, false); // QR 阶段：bossbar，不挡手里的地图
+            } else {
+                bossBar.clear(p, name);
+                LockTitle.send(p, text); // 其余阶段：title
+            }
         }
     }
 }

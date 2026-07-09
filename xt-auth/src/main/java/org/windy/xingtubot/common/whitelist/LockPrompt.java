@@ -33,4 +33,23 @@ public final class LockPrompt {
     public static boolean positive(boolean bound) {
         return bound;
     }
+
+    /**
+     * 是否处于「展示加群二维码地图」阶段（已声明 QQ、未绑定）。
+     * <p>只有此阶段用 bossbar（常驻、不挡玩家看手里的地图）；其余阶段用 title 即可。
+     */
+    public static boolean isQrPhase(boolean bound, boolean awaitingQQ) {
+        return !bound && !awaitingQQ;
+    }
+
+    /**
+     * 把一行文案按首个 {@code " · "} 拆成 title 的主/副标题；无分隔符则副标题为空。
+     * @return {@code [main, sub]}
+     */
+    public static String[] titleParts(String text) {
+        if (text == null) return new String[]{"", ""};
+        int i = text.indexOf(" · ");
+        if (i < 0) return new String[]{text, ""};
+        return new String[]{text.substring(0, i), text.substring(i + 3)};
+    }
 }

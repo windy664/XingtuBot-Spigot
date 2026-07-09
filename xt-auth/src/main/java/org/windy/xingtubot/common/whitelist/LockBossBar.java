@@ -1,6 +1,7 @@
 package org.windy.xingtubot.common.whitelist;
 
 import com.github.retrooper.packetevents.PacketEvents;
+import com.github.retrooper.packetevents.util.adventure.AdventureSerializer;
 import com.github.retrooper.packetevents.wrapper.play.server.WrapperPlayServerBossBar;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.text.Component;
@@ -17,8 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>PacketEvents 的 {@code getPlayerManager().sendPacket(Object, wrapper)} 接受任意平台 player 对象，
  * 故三端共用；BungeeCord 本无原生 bossbar，Velocity/Bukkit 也复用这套，免三份实现。
  *
- * <p>标题用 PacketEvents 内置（未 relocate）的 adventure {@link Component}；legacy serializer 是 relocate 版、
- * 运行期不保证，故 strip 掉 §颜色码用纯文本，阶段颜色由 bar color 表达（绿=已绑定 / 黄=未完成）。
+ * <p>标题用 PacketEvents 自带的 {@link AdventureSerializer} 解析 §颜色码（保色，含 1.16+ hex）；
+ * bar 背景色另按阶段表达（绿=已绑定 / 黄=未完成）。
  *
  * <p>每个 LockManager 持一个实例，按玩家名维护 bar 的 UUID：{@link #set} 幂等（首次 ADD、后续 UPDATE），
  * {@link #clear} 发 REMOVE 并清状态。PacketEvents 未就绪时静默跳过（由 {@link QrMapSender#available()} 守卫）。
@@ -31,7 +32,7 @@ public final class LockBossBar {
     public void set(Object player, String name, String legacyText, boolean positive) {
         if (player == null || name == null || !QrMapSender.available()) return;
         String key = name.toLowerCase(Locale.ROOT);
-        Component title = Component.text(strip(legacyText));
+        Component title = AdventureSerializer.fromLegacyFormat(legacyText); // §码保色
         BossBar.Color color = positive ? BossBar.Color.GREEN : BossBar.Color.YELLOW;
         UUID id = ids.get(key);
         if (id == null) {
@@ -71,10 +72,5 @@ public final class LockBossBar {
             PacketEvents.getAPI().getPlayerManager().sendPacket(player, w);
         } catch (Throwable ignored) {
         }
-    }
-
-    /** 去掉 §x 颜色/格式码，得纯文本（bossbar 标题用）。 */
-    private static String strip(String s) {
-        return s == null ? "" : s.replaceAll("(?i)§[0-9A-FK-OR]", "");
     }
 }

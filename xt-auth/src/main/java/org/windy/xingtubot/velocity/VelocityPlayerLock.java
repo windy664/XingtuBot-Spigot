@@ -12,6 +12,7 @@ import org.windy.xingtubot.common.whitelist.LockMessages;
 import org.windy.xingtubot.common.whitelist.LockPosition;
 import org.windy.xingtubot.common.whitelist.LockPrompt;
 import org.windy.xingtubot.common.whitelist.LockTarget;
+import org.windy.xingtubot.common.whitelist.LockTitle;
 
 import java.util.Locale;
 import java.util.Map;
@@ -180,7 +181,14 @@ public class VelocityPlayerLock implements PlayerLockManager, LockTarget {
             return;
         }
         boolean bound = isBound(player);
-        bossBar.set(p, player, LockPrompt.text(bound, isAwaitingQQ(player)), bound);
+        boolean awaiting = isAwaitingQQ(player);
+        String text = LockPrompt.text(bound, awaiting);
+        if (LockPrompt.isQrPhase(bound, awaiting)) {
+            bossBar.set(p, player, text, false); // QR 阶段：bossbar，不挡手里的地图
+        } else {
+            bossBar.clear(p, player);
+            LockTitle.send(p, text); // 其余阶段：title
+        }
     }
 
     /** 清理玩家离线时的所有状态。 */
