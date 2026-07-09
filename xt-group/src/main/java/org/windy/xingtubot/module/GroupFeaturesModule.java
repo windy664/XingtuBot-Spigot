@@ -18,6 +18,10 @@ import org.windy.xingtubot.common.reply.PlaceholderResolver;
 import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * 群功能模块：迎送词 + 自定义回复 + 自定义指令。
@@ -35,11 +39,14 @@ public final class GroupFeaturesModule implements BotModule {
     @Override
     public void onEnable(ModuleContext ctx) {
         // ===== 迎送词 =====
+        List<String> allowedList = ctx.config().getStringList("allowed-groups");
+        Set<String> allowedGroups = allowedList.isEmpty()
+                ? Collections.singleton("*") : new HashSet<>(allowedList);
         if (ctx.config().getBoolean("welcome-enable", true)) {
-            ctx.registry().register(new WelcomeHandler(ctx.config()));
+            ctx.registry().register(new WelcomeHandler(ctx.config(), allowedGroups));
         }
         if (ctx.config().getBoolean("leave-enable", true)) {
-            ctx.registry().register(new LeaveHandler(ctx.config()));
+            ctx.registry().register(new LeaveHandler(ctx.config(), allowedGroups));
         }
 
         // ===== 自定义问答（replies.yml）=====

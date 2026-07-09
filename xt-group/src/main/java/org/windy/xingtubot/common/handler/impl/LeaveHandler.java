@@ -4,6 +4,8 @@ import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.handler.MessageHandler;
 
+import java.util.Set;
+
 /**
  * 成员离开群时的消息。
  *
@@ -17,25 +19,32 @@ public class LeaveHandler implements MessageHandler {
     private static final String DEFAULT_LEAVE = "{user} 离开了我们";
 
     private final String leaveMessage;
+    private final Set<String> allowedGroups;
 
-    public LeaveHandler(BotConfig config) {
+    public LeaveHandler(BotConfig config, Set<String> allowedGroups) {
         this.leaveMessage = config.getStringResolved("leave-message", DEFAULT_LEAVE);
+        this.allowedGroups = allowedGroups;
     }
 
     @Override
     public boolean matches(String message, BotMessageEvent event) {
-        return "GROUP_MEMBER_REMOVE".equals(event.getEventType());
+        if (!"GROUP_MEMBER_REMOVE".equals(event.getEventType())) return false;
+        return isGroupAllowed(event.getGuildId());
     }
 
     @Override
     public void handle(String message, BotMessageEvent event) {
         String text = leaveMessage;
         if (text == null || text.isEmpty()) return;
-
         String username = event.getUsername() != null ? event.getUsername() : "群成员";
-        text = text.replace("{bot}", org.windy.xingtubot.common.BotIdentity.getName()).replace("{user}", username);
-
+        text = text.replace("{bot}", org.windy.xingtubot.common.BotIdentity.getName())
+                   .replace("{user}", username);
         event.replyMarkdown(text, null);
+    }
+
+    private boolean isGroupAllowed(String groupOpenid) {
+        if (allowedGroups == null || allowedGroups.isEmpty() || allowedGroups.contains("*")) return true;
+        return groupOpenid != null && allowedGroups.contains(groupOpenid);
     }
 
     @Override
