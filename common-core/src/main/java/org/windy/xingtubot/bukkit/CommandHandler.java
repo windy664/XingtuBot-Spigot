@@ -20,7 +20,7 @@ import java.util.stream.Collectors;
 public class CommandHandler implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUB_COMMANDS = Arrays.asList(
-            "reload", "connect", "reply", "status", "list", "debug");
+            "reload", "connect", "reply", "status", "list", "debug", "proactive");
 
     private final XingtuBot plugin;
 
@@ -39,9 +39,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             sender.sendMessage("§7  list       - 绑定列表");
             sender.sendMessage("§7  debug      - 切换调试模式");
             sender.sendMessage("§7  proactive <群id> [消息] - 测试主动消息");
-            sender.sendMessage("§7  status  - 查看运行状态");
-            sender.sendMessage("§7  list    - 查看绑定列表");
-            sender.sendMessage("§7  debug   - 切换调试模式");
             return true;
         }
 
