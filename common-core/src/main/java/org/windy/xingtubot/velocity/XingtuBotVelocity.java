@@ -20,6 +20,7 @@ import org.windy.xingtubot.common.util.Pretty;
 import org.windy.xingtubot.common.bot.BotLauncher;
 import org.windy.xingtubot.common.bridge.CrossServerProtocol;
 import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.messenger.PlatformMessenger;
 import org.windy.xingtubot.common.poll.QQGatewayClient;
 import org.windy.xingtubot.common.poll.QqBot;
 
@@ -43,6 +44,7 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
     private VelocityConfig config;
     private QqBot qqBot;
     private QQGatewayClient gatewayClient;
+    private PlatformMessenger messenger;
     private VelocityAdapter adapter;
     private BotCommandHandler commandHandler;
     private VelocityBridge velocityBridge;
@@ -167,22 +169,18 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
                 if (gw != null) {
                     qqBot = gw.bot;
                     gatewayClient = gw.gatewayClient;
+                    this.messenger = gw.messenger;
                     // 机器人昵称由 QQ API 自动写入 BotIdentity（QQGatewayClient 内部已处理）；此处仅记日志
                     gatewayClient.setOnBotNameResolved(name ->
                             adapter.log("✅ 机器人昵称已自动获取: " + name));
                     gatewayClient.start();
                     adapter.log("✅ 通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
 
-                    // 接线主动消息
-                    org.windy.xingtubot.common.api.QqOpenApiClient apiClient = qqBot.getApi();
-                    if (apiClient != null) {
-                        // 模组更新等主动推送：填实惰性句柄（module-modtools 持有同一句柄）。
-                        // 群服互联（GroupChatLink）也用同一 ProactiveSender holder——由 xt-chatlink 自己拉取，
-                        // 故此处 bind 一次即可让两边同时就绪，不再 push 裸 apiClient 给尚未注册的 GroupChatLink。
-                        commandHandler.getProactiveSender().bind(apiClient);
-                        // 对外 API 发消息也走主动优先
+                    // 接线主动消息：使用 PlatformMessenger 替代裸 QqOpenApiClient
+                    if (gw.messenger != null) {
+                        commandHandler.getProactiveSender().bind(gw.messenger);
                         if (commandHandler != null && commandHandler.getService() != null) {
-                            commandHandler.getService().setApiClient(apiClient);
+                            commandHandler.getService().setMessenger(gw.messenger);
                         }
                         adapter.log("✅ 主动消息已启用（模组通知 + 群服互联将即时推送）");
                     }

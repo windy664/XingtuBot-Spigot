@@ -29,7 +29,7 @@ public class WelcomeHandler implements MessageHandler {
     @Override
     public boolean matches(String message, BotMessageEvent event) {
         if (!"GROUP_MEMBER_ADD".equals(event.getEventType())) return false;
-        return isGroupAllowed(event.getGuildId());
+        return isGroupAllowed(event.getGroupId());
     }
 
     @Override

@@ -25,21 +25,20 @@ public class WhoAmIHandler implements MessageHandler {
     @Override
     public void handle(String message, BotMessageEvent event) {
         String userId = event.getFormId();
-        String groupId = event.getGuildId();
+        String groupId = event.getGroupId();
 
         StringBuilder sb = new StringBuilder("## 🪪 ID 信息\n");
-        sb.append("**你的用户 ID（openid）**\n");
+        sb.append("**你的用户 ID**\n");
         sb.append("`").append(userId == null || userId.isEmpty() ? "(未知)" : userId).append("`\n");
 
-        // 群上下文判定不依赖 eventType（可能被装饰链丢失）：群消息里 guildId=群openid≠发送者openid；
-        // 私聊 C2C 里 guildId 回退成发送者 openid（与 userId 相同）→ 视为无群。
-        boolean inGroup = groupId != null && !groupId.isEmpty() && !groupId.equals(userId);
+        // 群上下文判定
+        boolean inGroup = event.isGroupMessage() && groupId != null && !groupId.isEmpty();
         if (inGroup) {
-            sb.append("\n**当前群 ID（group_openid）**\n");
+            sb.append("\n**当前群 ID**\n");
             sb.append("`").append(groupId).append("`\n");
         }
 
-        sb.append("\n> 💡 管理员把用户 ID 填进 `admin-openids`；");
+        sb.append("\n> 💡 管理员把用户 ID 填进 `admin-uids`（或旧键 `admin-openids`）；");
         sb.append("把群 ID 填进 `allowed-groups` / 推送目标群即可。");
         if (!inGroup) {
             sb.append("\n> ℹ️ 当前是私聊，没有群 ID。要拿群 ID 请到目标群里 @我 发送 `id`。");

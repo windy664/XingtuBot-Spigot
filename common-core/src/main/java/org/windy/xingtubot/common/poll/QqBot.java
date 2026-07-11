@@ -5,6 +5,7 @@ import com.google.gson.JsonParser;
 import org.windy.xingtubot.common.api.QqOpenApiClient;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.event.BotReplier;
+import org.windy.xingtubot.common.messenger.PlatformMessenger;
 import org.windy.xingtubot.common.platform.PlatformAdapter;
 
 import java.util.Collections;
@@ -36,6 +37,7 @@ public class QqBot {
 
     private final PlatformAdapter adapter;
     private final QqOpenApiClient api;
+    private final PlatformMessenger messenger;
     private final Set<String> allowedGroups; // 允许响应的群 openid 集合，空/含"*"=全部
     private final List<Consumer<BotMessageEvent>> listeners = new CopyOnWriteArrayList<>();
     // 同一条消息多次回复需要 msg_seq 自增；这里用全局自增即可（QQ 仅要求同 msg_id 下递增）
@@ -58,9 +60,10 @@ public class QqBot {
         return !recentEventIds.add(eventKey);
     }
 
-    public QqBot(PlatformAdapter adapter, QqOpenApiClient api, Set<String> allowedGroups) {
+    public QqBot(PlatformAdapter adapter, QqOpenApiClient api, PlatformMessenger messenger, Set<String> allowedGroups) {
         this.adapter = adapter;
         this.api = api;
+        this.messenger = messenger;
         this.allowedGroups = allowedGroups;
     }
 
@@ -213,10 +216,14 @@ public class QqBot {
             BotReplier replier = new OpenApiBotReplier(api, adapter, seq,
                     fGroup, fUser, fMsgId, fEventId, isGroup);
 
-            // 复用现有事件模型：guildId 放会话标识（群/用户 openid），formId 放发送者
-            String guildId = isGroup ? fGroup : fUser;
+            // 构建平台无关事件模型
+            String groupId = isGroup ? fGroup : null;
+            String senderUid = messenger != null ? messenger.toSenderUid(fUser) : fUser;
+            BotMessageEvent.MessageType msgType = isGroup ? BotMessageEvent.MessageType.GROUP : BotMessageEvent.MessageType.PRIVATE;
             BotMessageEvent event = new BotMessageEvent(
-                    guildId, fUser, content == null ? "" : content.trim(), replier, authorUsername, effectiveType);
+                    groupId, fUser, senderUid,
+                    content == null ? "" : content.trim(), replier, authorUsername,
+                    msgType, effectiveType);
             event.setImageUrls(imageUrls); // 群图片 URL 随事件下发，供群服互联拼 ChatImage 码
 
             for (Consumer<BotMessageEvent> listener : listeners) {
@@ -276,9 +283,13 @@ public class QqBot {
         final String fUser = userOpenid;
         final boolean isGroup = fGroup != null;
         BotReplier replier = new ProactiveReplier(api, adapter, fGroup, fUser, isGroup);
-        String guildId = isGroup ? fGroup : fUser;
+        String groupId = isGroup ? fGroup : null;
+        String senderUid = messenger != null ? messenger.toSenderUid(fUser) : fUser;
+        BotMessageEvent.MessageType msgType = isGroup ? BotMessageEvent.MessageType.GROUP : BotMessageEvent.MessageType.PRIVATE;
         BotMessageEvent event = new BotMessageEvent(
-                guildId, fUser, buttonData.trim(), replier, null, "INTERACTION_CREATE");
+                groupId, fUser, senderUid,
+                buttonData.trim(), replier, null,
+                msgType, "INTERACTION_CREATE");
         for (Consumer<BotMessageEvent> listener : listeners) {
             listener.accept(event);
         }

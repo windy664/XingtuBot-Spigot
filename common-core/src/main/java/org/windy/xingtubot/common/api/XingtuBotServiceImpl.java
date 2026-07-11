@@ -1,6 +1,7 @@
 package org.windy.xingtubot.common.api;
 
 import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.messenger.PlatformMessenger;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -10,14 +11,16 @@ import java.util.function.BiPredicate;
 /**
  * XingtuBotService 默认实现。
  * 由平台侧（Spigot/Velocity）构造并注入依赖。
+ *
+ * <p>不再直接持有 {@code QqOpenApiClient}，通过 {@link PlatformMessenger} 与底层协议解耦。
  */
 public class XingtuBotServiceImpl implements XingtuBotService {
 
-    // Markdown 发送器：(groupOpenId, content, keyboardId) -> 实际发送
+    // Markdown 发送器：(groupId, content, keyboardId) -> 实际发送
     // markdown-only：群消息一律走 markdown，无纯文本发送器。
     private final GroupMarkdownSender markdownSender;
-    // 主动消息客户端（可 null）：发送时尽力先走它，走不通再回退 sender/队列
-    private volatile QqOpenApiClient apiClient;
+    // 平台消息适配器（可 null）：发送时尽力先走它，走不通再回退 sender/队列
+    private volatile PlatformMessenger messenger;
     // 注册中心：供第三方 registerHandler/registerCommand 转发（平台侧注入）
     private volatile org.windy.xingtubot.common.handler.HandlerRegistry registry;
 
@@ -26,7 +29,7 @@ public class XingtuBotServiceImpl implements XingtuBotService {
 
     @FunctionalInterface
     public interface GroupMarkdownSender {
-        void send(String groupOpenId, String content, String keyboardTemplateId);
+        void send(String groupId, String content, String keyboardTemplateId);
     }
 
     public XingtuBotServiceImpl(GroupMarkdownSender markdownSender) {
@@ -58,19 +61,23 @@ public class XingtuBotServiceImpl implements XingtuBotService {
 
     // ==================== 消息发送 ====================
 
-    /** 设置主动消息客户端（apiClient 就绪后由平台侧注入）。 */
-    public void setApiClient(QqOpenApiClient apiClient) {
-        this.apiClient = apiClient;
+    /** 设置平台消息适配器（messenger 就绪后由平台侧注入）。 */
+    public void setMessenger(PlatformMessenger messenger) {
+        this.messenger = messenger;
     }
 
     @Override
-    public void sendToGroupMarkdown(String groupOpenId, String markdownContent, String keyboardTemplateId) {
-        if (groupOpenId == null || markdownContent == null) return;
-        // 1) 尽力先走主动消息（主动 markdown 不带按钮模板）
-        QqOpenApiClient api = this.apiClient;
-        if (api != null) {
+    public void sendToGroupMarkdown(String groupId, String markdownContent, String keyboardTemplateId) {
+        if (groupId == null || markdownContent == null) return;
+        // 1) 尽力先走主动消息（适配器就绪时）
+        PlatformMessenger m = this.messenger;
+        if (m != null && m.getState().isReady()) {
             try {
-                api.sendProactiveGroupMarkdown(groupOpenId, markdownContent);
+                if (keyboardTemplateId != null && !keyboardTemplateId.isEmpty()) {
+                    m.sendGroupMarkdownKeyboard(groupId, markdownContent, keyboardTemplateId);
+                } else {
+                    m.sendGroupMarkdown(groupId, markdownContent);
+                }
                 return;
             } catch (Exception ignored) {
                 // 主动失败 → 往下回退
@@ -78,11 +85,11 @@ public class XingtuBotServiceImpl implements XingtuBotService {
         }
         // 2) 平台自定义发送通道（可带按钮模板）
         if (markdownSender != null) {
-            markdownSender.send(groupOpenId, markdownContent, keyboardTemplateId);
+            markdownSender.send(groupId, markdownContent, keyboardTemplateId);
             return;
         }
         // 3) 兜底：挂起队列（按文本推送，markdown 语法会原样显示）
-        PendingMessageQueue.getInstance().offer(groupOpenId, markdownContent);
+        PendingMessageQueue.getInstance().offer(groupId, markdownContent);
     }
 
     // 玩家绑定查询已下放到「白名单」附属插件（xt-auth），经服务总线提供
@@ -132,6 +139,7 @@ public class XingtuBotServiceImpl implements XingtuBotService {
 
     @Override
     public String getBotAppId() {
-        return this.apiClient != null ? this.apiClient.getAppId() : "";
+        PlatformMessenger m = this.messenger;
+        return m != null ? m.getBotIdentifier() : "";
     }
 }

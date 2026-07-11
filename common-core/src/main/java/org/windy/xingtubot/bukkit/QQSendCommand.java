@@ -5,7 +5,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
-import org.windy.xingtubot.common.api.QqOpenApiClient;
+import org.windy.xingtubot.common.messenger.PlatformMessenger;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 
 import java.util.Collections;
@@ -15,28 +15,28 @@ import java.util.List;
  * 游戏内向 QQ 群发消息：/qq <消息>
  * 需要权限节点 xingtubot.qq.send。
  *
- * <p>有 apiClient 时走主动消息（即时推送），否则回退到被动队列。
+ * <p>有 messenger 时走主动消息（即时推送），否则回退到被动队列。
  */
 public class QQSendCommand implements CommandExecutor, TabCompleter {
 
     private final String permission;
     private final PendingMessageQueue queue;
-    private volatile QqOpenApiClient apiClient;
-    private volatile String defaultGroupOpenid; // 最近活跃的群 openid
+    private volatile PlatformMessenger messenger;
+    private volatile String defaultGroupId; // 最近活跃的群 id
 
     public QQSendCommand(String permission) {
         this.permission = permission;
         this.queue = PendingMessageQueue.getInstance();
     }
 
-    /** 设置 OpenAPI 客户端，启用主动消息推送。 */
-    public void setApiClient(QqOpenApiClient apiClient) {
-        this.apiClient = apiClient;
+    /** 设置平台消息适配器，启用主动消息推送。 */
+    public void setMessenger(PlatformMessenger messenger) {
+        this.messenger = messenger;
     }
 
-    /** 设置默认目标群 openid（从最近的群消息事件中获取）。 */
-    public void setDefaultGroupOpenid(String groupOpenid) {
-        this.defaultGroupOpenid = groupOpenid;
+    /** 设置默认目标群 id（从最近的群消息事件中获取）。 */
+    public void setDefaultGroupOpenid(String groupId) {
+        this.defaultGroupId = groupId;
     }
 
     @Override
@@ -76,11 +76,11 @@ public class QQSendCommand implements CommandExecutor, TabCompleter {
         String message = "📢 [" + senderName + "] " + content;
 
         // 优先走主动消息
-        QqOpenApiClient api = this.apiClient;
-        String gid = this.defaultGroupOpenid;
-        if (api != null && gid != null) {
+        PlatformMessenger m = this.messenger;
+        String gid = this.defaultGroupId;
+        if (m != null && m.getState().isReady() && gid != null) {
             try {
-                api.sendProactiveGroupMessage(gid, message);
+                m.sendGroupMessage(gid, message);
                 sender.sendMessage("§a✅ 已发送到 QQ 群: " + content);
                 return true;
             } catch (Exception e) {

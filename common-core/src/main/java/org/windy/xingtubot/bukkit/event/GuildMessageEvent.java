@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 public class GuildMessageEvent extends Event {
     private static final HandlerList handlers = new HandlerList();
 
-    private final String guildId;
+    private final String groupId;
     private final String formId;
     private final String message;
     private final BotReplier replier;
@@ -25,24 +25,24 @@ public class GuildMessageEvent extends Event {
     private java.util.List<String> imageUrls = java.util.Collections.emptyList(); // 入站图片 URL（转发进游戏用），永不 null
 
     /** 兼容旧用法：仅文本回复（WSS 通道）。 */
-    public GuildMessageEvent(String guildId, String formId, String message, Consumer<String> replyCallback) {
-        this(guildId, formId, message, replyCallback == null ? null : (BotReplier) replyCallback::accept, null);
+    public GuildMessageEvent(String groupId, String formId, String message, Consumer<String> replyCallback) {
+        this(groupId, formId, message, replyCallback == null ? null : (BotReplier) replyCallback::accept, null);
     }
 
     /** 富回复：传入支持图片/Markdown/Ark 的回复器。 */
-    public GuildMessageEvent(String guildId, String formId, String message, BotReplier replier) {
-        this(guildId, formId, message, replier, null);
+    public GuildMessageEvent(String groupId, String formId, String message, BotReplier replier) {
+        this(groupId, formId, message, replier, null);
     }
 
     /** 带 QQ 昵称的构造。 */
-    public GuildMessageEvent(String guildId, String formId, String message, BotReplier replier, String username) {
-        this(guildId, formId, message, replier, username, null);
+    public GuildMessageEvent(String groupId, String formId, String message, BotReplier replier, String username) {
+        this(groupId, formId, message, replier, username, null);
     }
 
     /** 带 QQ 昵称 + 事件类型的完整构造。 */
-    public GuildMessageEvent(String guildId, String formId, String message, BotReplier replier,
+    public GuildMessageEvent(String groupId, String formId, String message, BotReplier replier,
                              String username, String eventType) {
-        this.guildId = guildId;
+        this.groupId = groupId;
         this.formId = formId;
         this.message = message;
         this.replier = replier;
@@ -69,8 +69,8 @@ public class GuildMessageEvent extends Event {
         return eventType;
     }
 
-    public String getGuildId() {
-        return guildId;
+    public String getgroupId() {
+        return groupId;
     }
 
     public String getFormId() {

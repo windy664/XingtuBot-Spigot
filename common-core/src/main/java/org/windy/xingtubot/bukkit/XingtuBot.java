@@ -5,11 +5,13 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
-import org.windy.xingtubot.common.api.QqOpenApiClient;
-import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.bot.BotLauncher;
 import org.windy.xingtubot.common.bot.QQOnboard;
 import org.windy.xingtubot.common.config.BotConfig;
+import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.messenger.MessengerConnectionState;
+import org.windy.xingtubot.common.messenger.OfficialBotMessenger;
+import org.windy.xingtubot.common.messenger.PlatformMessenger;
 import org.windy.xingtubot.common.poll.JsonOpenidNameRepository;
 import org.windy.xingtubot.common.poll.OpenidNameCache;
 import org.windy.xingtubot.common.poll.OpenidNameRepository;
@@ -22,6 +24,8 @@ public final class XingtuBot extends JavaPlugin implements Listener {
 
     private QqBot qqBot;
     private QQGatewayClient gatewayClient;
+    private PlatformMessenger messenger; // 平台适配器（官方 bot / OB11）
+    private org.windy.xingtubot.common.onebot.OneBot11Messenger ob11Messenger;
     private GuildMessageEvent lastEvent;
     private SpigotCommandHandler spigotCommandHandler;
     private QQSendCommand qqSendCommand;
@@ -52,8 +56,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         registerCommands();
         enableModules(config, slave);
 
-        // 跨服 Redis 信道（通用基础设施，配置在核心 config）：核心创建并注册到服务总线，
-        // 供 xt-auth 子服侧 SpigotBridge（slave）取用；无玩家在线也能与代理大脑双向通信。
+        // 跨服 Redis 信道
         redisHolder = org.windy.xingtubot.common.bridge.CrossServerChannelFactory.create(
                 new SpigotConfig(config), true, new SpigotBotLogger(getLogger()));
         if (redisHolder != null && spigotCommandHandler != null) {
@@ -61,20 +64,16 @@ public final class XingtuBot extends JavaPlugin implements Listener {
                     org.windy.xingtubot.common.bridge.CrossServerChannel.class, redisHolder.channel);
         }
 
-        // 接线主动消息
-        if (qqBot != null) {
-            QqOpenApiClient api = qqBot.getApi();
-            if (api != null) {
-                if (qqSendCommand != null) qqSendCommand.setApiClient(api);
-                // 主动消息惰性句柄填实（附属插件 ProactiveSender 共享同一句柄）
-                if (spigotCommandHandler != null) {
-                    spigotCommandHandler.getProactiveSender().bind(api);
-                }
-                if (spigotCommandHandler != null && spigotCommandHandler.getXingtuService() != null) {
-                    spigotCommandHandler.getXingtuService().setApiClient(api);
-                }
-                getLogger().info("✅ 主动消息已启用");
+        // 接线主动消息：注入 PlatformMessenger 到惰性句柄和服务实现
+        if (messenger != null) {
+            if (qqSendCommand != null) qqSendCommand.setMessenger(messenger);
+            if (spigotCommandHandler != null) {
+                spigotCommandHandler.getProactiveSender().bind(messenger);
             }
+            if (spigotCommandHandler != null && spigotCommandHandler.getXingtuService() != null) {
+                spigotCommandHandler.getXingtuService().setMessenger(messenger);
+            }
+            getLogger().info("✅ 主动消息已启用（协议: " + messenger.getClass().getSimpleName() + "）");
         }
 
         if (config.getBoolean("debug", false)) {
@@ -96,9 +95,13 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         String roleDesc = slave ? "（手脚）" : (botOn ? "（本地大脑）" : "（off）");
         getLogger().info("▌ 角色     " + config.getString("server-role", "auto") + roleDesc);
         if (botOn) {
-            String appId = config.getString("openapi-app-id", "");
-            String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "未配置";
-            getLogger().info("▌ AppID    " + masked);
+            String protocol = config.getString("qq-protocol", "official");
+            getLogger().info("▌ 协议     " + protocol);
+            if ("official".equals(protocol)) {
+                String appId = config.getString("openapi-app-id", "");
+                String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "未配置";
+                getLogger().info("▌ AppID    " + masked);
+            }
         }
         getLogger().info("▌ 监听     " + config.getString("listen-mode", "mention"));
         getLogger().info("▌ 跨服     " + (botOn ? "已启用" : "未启用"));
@@ -109,9 +112,9 @@ public final class XingtuBot extends JavaPlugin implements Listener {
 
 
     /**
-     * 部署拓扑判定：本服 bot 由谁跑（与白名单无关，是「单机/手脚」的拓扑选择）。
-     *   local/standalone = 本机自己跑 bot；slave = 挂代理后由代理大脑统一接管，本机 bot 禁用；
-     *   auto = 探测到代理则 slave，否则 local。兼容旧键 whitelist-role。
+     * 部署拓扑判定：本服 bot 由谁跑。
+     *   local/standalone = 本机自己跑 bot；slave = 挂代理后由代理大脑统一接管；
+     *   auto = 探测到代理则 slave，否则 local。
      */
     private boolean resolveSlave(FileConfiguration config) {
         String role = config.getString("server-role",
@@ -144,6 +147,9 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         if (redisHolder != null) {
             redisHolder.close();
         }
+        if (messenger != null) {
+            messenger.close();
+        }
         getLogger().info("插件已关闭");
     }
 
@@ -154,55 +160,82 @@ public final class XingtuBot extends JavaPlugin implements Listener {
                 getLogger().info("通信模式 = off，机器人通信未启用。");
                 return;
             case GATEWAY:
-                // 如果未配置 app-id，自动进入扫码接入流程
-                String appId = config.getString("openapi-app-id", "").trim();
-                if (appId.isEmpty()) {
-                    getLogger().info("未配置 openapi-app-id，启动扫码接入流程...");
-                    QQOnboard onboard = new QQOnboard(new SpigotBotLogger(getLogger()));
-                    QQOnboard.ScanResult result = onboard.run();
-                    if (result != null) {
-                        // 写入 config.yml 并重载
-                        config.set("openapi-app-id", result.appId);
-                        config.set("openapi-client-secret", result.clientSecret);
-                        saveConfig();
-                        reloadConfig(); // 从磁盘重载，确保内存中的 config 一致
-                        config = getConfig();
-                        cfg = new SpigotConfig(config);
-                        getLogger().info("✅ 凭据已写入 config.yml，App ID: " + result.appId);
-                    } else {
-                        getLogger().severe("扫码接入失败或超时，请手动填写 openapi-app-id 和 openapi-client-secret 到 config.yml");
-                        return;
-                    }
-                }
-                BotLauncher.GatewayResult gw = BotLauncher.buildGateway(
-                        cfg, new SpigotAdapter(this), new SpigotBotLogger(getLogger()), this::dispatchToBukkit);
-                if (gw != null) {
-                    qqBot = gw.bot;
-                    gatewayClient = gw.gatewayClient;
-                    // 机器人昵称由 QQ API 自动写入 BotIdentity（QQGatewayClient 内部已处理）；此处仅记日志
-                    gatewayClient.setOnBotNameResolved(name ->
-                            getLogger().info("✅ 机器人昵称已自动获取: " + name));
-                    gatewayClient.start();
-                    getLogger().info("通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
-                } else {
-                    getLogger().severe("Gateway 模式配置不全，请检查 openapi-app-id / openapi-client-secret");
-                }
+                startGatewayBot(config, cfg);
+                return;
+            case ONEBOT11:
+                startOnebot11Bot(cfg);
                 return;
             default:
-                getLogger().severe("未知的 server-role，请检查配置。");
+                getLogger().severe("未知的通信模式，请检查 qq-protocol 配置。");
         }
+    }
+
+    /** 启动 QQ 官方协议（gateway 模式）。 */
+    private void startGatewayBot(FileConfiguration config, BotConfig cfg) {
+        // 如果未配置 app-id，自动进入扫码接入流程
+        String appId = config.getString("openapi-app-id", "").trim();
+        if (appId.isEmpty()) {
+            getLogger().info("未配置 openapi-app-id，启动扫码接入流程...");
+            QQOnboard onboard = new QQOnboard(new SpigotBotLogger(getLogger()));
+            QQOnboard.ScanResult result = onboard.run();
+            if (result != null) {
+                config.set("openapi-app-id", result.appId);
+                config.set("openapi-client-secret", result.clientSecret);
+                saveConfig();
+                reloadConfig();
+                config = getConfig();
+                cfg = new SpigotConfig(config);
+                getLogger().info("✅ 凭据已写入 config.yml，App ID: " + result.appId);
+            } else {
+                getLogger().severe("扫码接入失败或超时，请手动填写 openapi-app-id 和 openapi-client-secret 到 config.yml");
+                return;
+            }
+        }
+        BotLauncher.GatewayResult gw = BotLauncher.buildGateway(
+                cfg, new SpigotAdapter(this), new SpigotBotLogger(getLogger()), this::dispatchToBukkit);
+        if (gw != null) {
+            qqBot = gw.bot;
+            gatewayClient = gw.gatewayClient;
+            messenger = gw.messenger;
+            // 机器人昵称由 QQ API 自动写入 BotIdentity
+            gatewayClient.setOnBotNameResolved(name ->
+                    getLogger().info("✅ 机器人昵称已自动获取: " + name));
+            // gateway 断开时 messenger 状态自动切换
+            messenger.setState(MessengerConnectionState.CONNECTING);
+            gatewayClient.start();
+            getLogger().info("通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
+        } else {
+            getLogger().severe("Gateway 模式配置不全，请检查 openapi-app-id / openapi-client-secret");
+        }
+    }
+
+    /** 启动 OneBot 11 协议。 */
+    private void startOnebot11Bot(BotConfig cfg) {
+        getLogger().info("通信模式 = onebot11（OneBot 11 协议）");
+        BotLauncher.OneBotResult ob11 = BotLauncher.buildOnebot11(
+                cfg, new SpigotAdapter(this), new SpigotBotLogger(getLogger()), this::dispatchToBukkit);
+        if (ob11 == null) {
+            getLogger().severe("OneBot 11 配置不全，请检查 onebot.* 配置项");
+            return;
+        }
+        ob11Messenger = ob11.messenger;
+        messenger = ob11.messenger;
+        getLogger().info("OneBot 11 网关已就绪，正在连接 " + cfg.getString("onebot.forward-url", "?"));
+        ob11.messenger.start();
+        getLogger().info("通信模式 = onebot11（正向 WS）已启动");
     }
 
     private void dispatchToBukkit(BotMessageEvent e) {
         // 追踪最近活跃的群（供 /qq 命令 + 游戏聊天转发用）
-        String gid = e.getGuildId();
+        String gid = e.getSessionId();
         if (gid != null && qqSendCommand != null) {
             qqSendCommand.setDefaultGroupOpenid(gid);
         }
+        final String fMsg = e.getMessage();
         Bukkit.getScheduler().runTask(this, () -> {
             GuildMessageEvent event = new GuildMessageEvent(
-                    e.getGuildId(), e.getFormId(), e.getMessage(), e.getReplier(), e.getUsername(), e.getEventType());
-            event.setImageUrls(e.getImageUrls()); // 透传群图片 URL，供群服互联拼 ChatImage 码
+                    e.getGroupId(), e.getFormId(), fMsg, e.getReplier(), e.getUsername(), e.getEventType());
+            event.setImageUrls(e.getImageUrls());
             setLastEvent(event);
             Bukkit.getPluginManager().callEvent(event);
         });
@@ -219,12 +252,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
     }
 
     private void enableModules(FileConfiguration config, boolean slave) {
-        // 一切功能由附属扩展插件（xt-*）提供，主插件只做核心框架。
-        // xt-auth: 白名单+登录 | xt-chatlink: 群服互联 | xt-group: 迎送+自定义 | xt-fun: 娱乐
-        // xt-modquery: 模组工具 | xt-ai: AI 对话 | xt-github: GitHub 追踪
         spigotCommandHandler = new SpigotCommandHandler(this);
-        // 部署拓扑由框架在此一次性算定并写入宿主，供附属扩展（xt-auth 等）只读，
-        // 杜绝扩展各自用 ProxyDetector 重复判定大脑/手脚。slave 取反即为「是否大脑」。
         spigotCommandHandler.getHost().setBrain(!slave);
     }
 
@@ -248,6 +276,11 @@ public final class XingtuBot extends JavaPlugin implements Listener {
 
     public static XingtuBot getInstance() {
         return instance;
+    }
+
+    /** 获取当前平台消息适配器实例。 */
+    public PlatformMessenger getMessenger() {
+        return messenger;
     }
 
     public void log(String message) {

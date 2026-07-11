@@ -3,6 +3,7 @@ package org.windy.xingtubot.bukkit;
 import org.bukkit.Bukkit;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.windy.xingtubot.common.event.BotMessageEvent.MessageType;
 import org.bukkit.event.EventPriority;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
 import org.windy.xingtubot.common.api.XingtuBotService;
@@ -11,6 +12,8 @@ import org.windy.xingtubot.common.auth.PermissionService;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.handler.HandlerContext;
+
+import java.util.List;
 import org.windy.xingtubot.common.handler.HandlerRegistry;
 import org.windy.xingtubot.common.image.TextImageRenderer;
 import org.windy.xingtubot.common.module.ModuleContextImpl;
@@ -37,7 +40,12 @@ public class SpigotCommandHandler implements Listener {
         this.plugin = plugin;
         BotConfig config = new SpigotConfig(plugin.getConfig());
         SpigotBotLogger logger = new SpigotBotLogger(plugin.getLogger());
-        PermissionService permission = new PermissionService(config.getStringList("admin-openids"));
+        // 同时兼容新旧配置键：admin-uids（新）和 admin-openids（旧）
+        List<String> adminUids = config.getStringList("admin-uids");
+        if (adminUids.isEmpty()) {
+            adminUids = config.getStringList("admin-openids"); // 兼容旧配置
+        }
+        PermissionService permission = new PermissionService(adminUids);
         this.permission = permission;
 
         registry = new HandlerRegistry(permission, m -> plugin.getLogger().info("[群指令] " + m));
@@ -129,18 +137,23 @@ public class SpigotCommandHandler implements Listener {
         // 纯图片消息正文为空但带图也要放行（转发进游戏）；文字、图片都空才丢
         if ((msg == null || msg.trim().isEmpty()) && event.getImageUrls().isEmpty()) return;
         if (msg == null) msg = "";
-        String pending = PendingMessageQueue.getInstance().drainForGroup(event.getGuildId());
+        String pending = PendingMessageQueue.getInstance().drainForGroup(event.getgroupId());
         if (pending != null) event.reply(pending);
+        // 从 Bukkit 的 GuildMessageEvent 还原为平台无关的 BotMessageEvent
+        // 当前双端 dialog：formId == senderUid（单协议下值相等）
+        String groupId = event.getgroupId(); // GuildMessageEvent 向后兼容保留 groupId 命名
+        String senderUid = event.getFormId();
+        MessageType msgType = event.getgroupId() != null ? MessageType.GROUP : MessageType.PRIVATE;
         BotMessageEvent botEvent = new BotMessageEvent(
-                event.getGuildId(), event.getFormId(), msg, event.getReplier(), event.getUsername(),
-                event.getEventType());
-        botEvent.setImageUrls(event.getImageUrls()); // 透传图片 URL 给下游 GroupChatHandler 拼 ChatImage 码
-        // 菜单走自定义回复（replies.yml 里 trigger=菜单, content={menu}）；先派发。
+                groupId, event.getFormId(), senderUid,
+                msg, event.getReplier(), event.getUsername(),
+                msgType, event.getEventType());
+        botEvent.setImageUrls(event.getImageUrls());
         boolean handled = registry.dispatch(botEvent);
         // 兜底：replies.yml 没配 菜单 条目时，仍用 buildMenu 生成全部命令菜单。
         String t = msg.trim();
         if (!handled && (t.equals("菜单") || t.equals("帮助") || t.equalsIgnoreCase("help"))) {
-            botEvent.replyMarkdown(registry.buildMenu(permission.isAdmin(event.getFormId())), null);
+            botEvent.replyMarkdown(registry.buildMenu(permission.isAdmin(senderUid)), null);
         }
     }
 

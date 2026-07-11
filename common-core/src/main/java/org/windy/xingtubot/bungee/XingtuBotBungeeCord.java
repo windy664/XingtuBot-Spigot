@@ -13,6 +13,7 @@ import net.md_5.bungee.event.EventHandler;
 import org.windy.xingtubot.common.bot.BotLauncher;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.messenger.PlatformMessenger;
 import org.windy.xingtubot.common.module.XingtuBotHostProvider;
 import org.windy.xingtubot.common.poll.QQGatewayClient;
 import org.windy.xingtubot.common.poll.QqBot;
@@ -32,6 +33,7 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
     private BungeeCordConfig config;
     private QqBot qqBot;
     private QQGatewayClient gatewayClient;
+    private PlatformMessenger messenger;
     private BungeeCordAdapter adapter;
     private BungeeCordCommandHandler commandHandler;
     private BungeeCordBridge bridge;
@@ -148,20 +150,18 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
                 if (gw != null) {
                     qqBot = gw.bot;
                     gatewayClient = gw.gatewayClient;
+                    this.messenger = gw.messenger;
                     // 机器人昵称由 QQ API 自动写入 BotIdentity（QQGatewayClient 内部已处理）；此处仅记日志
                     gatewayClient.setOnBotNameResolved(name ->
                             adapter.log("✅ 机器人昵称已自动获取: " + name));
                     gatewayClient.start();
                     adapter.log("✅ 通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
 
-                    // 接线主动消息
-                    org.windy.xingtubot.common.api.QqOpenApiClient apiClient = qqBot.getApi();
-                    if (apiClient != null) {
-                        // 群服互联（BungeeCordGroupChatLink）与模组通知共用同一 ProactiveSender holder，
-                        // 由 xt-chatlink 自己拉取；故 bind 一次即同时就绪，不再 push 给尚未注册的 GroupChatLink。
-                        commandHandler.getProactiveSender().bind(apiClient);
+                    // 接线主动消息：使用 PlatformMessenger
+                    if (gw.messenger != null) {
+                        commandHandler.getProactiveSender().bind(gw.messenger);
                         if (commandHandler.getService() != null) {
-                            commandHandler.getService().setApiClient(apiClient);
+                            commandHandler.getService().setMessenger(gw.messenger);
                         }
                         adapter.log("✅ 主动消息已启用");
                     }

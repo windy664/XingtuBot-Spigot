@@ -43,7 +43,7 @@ public final class ChatlinkBukkitPlugin extends JavaPlugin {
                                     // 群图片 → ChatImage 码：装 mod 的玩家看到图，没装的看到文本，游戏照常
                                     org.windy.xingtubot.common.util.ChatImageCode.appendTo(
                                             content, botEvent.getImageUrls(), botEvent.getUsername()),
-                                    botEvent.getGuildId(),
+                                    botEvent.getGroupId(),
                                     ChatreplyModule.getSensitiveFilter(),
                                     openid -> {
                                         org.windy.xingtubot.common.binding.BindingRepository repo =

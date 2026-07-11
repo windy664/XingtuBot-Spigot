@@ -28,22 +28,22 @@ public final class AdminStanceMemory {
     /**
      * 记录一条超管发言。
      */
-    public void record(String guildId, String content) {
-        if (guildId == null || content == null || content.trim().isEmpty()) return;
-        Deque<String> q = recent.computeIfAbsent(guildId, k -> new ArrayDeque<>());
+    public void record(String groupId, String content) {
+        if (groupId == null || content == null || content.trim().isEmpty()) return;
+        Deque<String> q = recent.computeIfAbsent(groupId, k -> new ArrayDeque<>());
         synchronized (q) {
             q.addLast(content.trim());
             // 超过上限的旧消息 → 压缩成摘要
             while (q.size() > RECENT_LIMIT) {
                 String old = q.removeFirst();
-                addSummary(guildId, old);
+                addSummary(groupId, old);
             }
         }
     }
 
     /** 把一条旧消息压缩成摘要条目（简单实现：直接保留；未来可接 LLM 摘要） */
-    private void addSummary(String guildId, String msg) {
-        List<String> list = summaries.computeIfAbsent(guildId, k -> Collections.synchronizedList(new ArrayList<>()));
+    private void addSummary(String groupId, String msg) {
+        List<String> list = summaries.computeIfAbsent(groupId, k -> Collections.synchronizedList(new ArrayList<>()));
         // 去重：跟最后一条相同就不重复加
         synchronized (list) {
             if (!list.isEmpty() && list.get(list.size() - 1).equals(msg)) return;
@@ -58,9 +58,9 @@ public final class AdminStanceMemory {
      * 构建"超管观点"上下文，注入到 AI 系统提示中。
      * @return 格式化的上下文文本，没有记录则返回空字符串
      */
-    public String buildContext(String guildId) {
-        Deque<String> r = recent.get(guildId);
-        List<String> s = summaries.get(guildId);
+    public String buildContext(String groupId) {
+        Deque<String> r = recent.get(groupId);
+        List<String> s = summaries.get(groupId);
         if ((r == null || r.isEmpty()) && (s == null || s.isEmpty())) return "";
 
         StringBuilder sb = new StringBuilder();
@@ -97,9 +97,9 @@ public final class AdminStanceMemory {
      * 用于决定是否需要在回复中加入"反驳"暗示。
      * @return true 如果消息可能涉及超管已表达过的话题
      */
-    public boolean mightConflict(String guildId, String message) {
+    public boolean mightConflict(String groupId, String message) {
         if (message == null || message.trim().isEmpty()) return false;
-        Set<String> adminWords = extractKeywords(guildId);
+        Set<String> adminWords = extractKeywords(groupId);
         if (adminWords.isEmpty()) return false;
         Set<String> msgWords = tokenize(message);
         // 交集超过2个词 → 可能在讨论同一话题
@@ -111,10 +111,10 @@ public final class AdminStanceMemory {
     }
 
     /** 提取超管所有发言的关键词 */
-    private Set<String> extractKeywords(String guildId) {
+    private Set<String> extractKeywords(String groupId) {
         Set<String> words = new HashSet<>();
-        Deque<String> r = recent.get(guildId);
-        List<String> s = summaries.get(guildId);
+        Deque<String> r = recent.get(groupId);
+        List<String> s = summaries.get(groupId);
         if (r != null) {
             synchronized (r) {
                 for (String line : r) words.addAll(tokenize(line));

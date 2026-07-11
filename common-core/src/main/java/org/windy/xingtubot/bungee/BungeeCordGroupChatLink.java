@@ -125,8 +125,8 @@ public class BungeeCordGroupChatLink implements Listener {
     public void onGroupMessage(BotMessageEvent event, String sender, String content) {
         content = OpenidNameCache.getInstance().resolveMentions(content);
         content = filterChatlink(content);
-        if (event.getGuildId() != null && !event.getGuildId().isEmpty()) {
-            lastGroupOpenid = event.getGuildId();
+        if (event.getGroupId() != null && !event.getGroupId().isEmpty()) {
+            lastGroupOpenid = event.getGroupId();
         }
         lastGroupMsg.set(new Holder(event));
         String line = chatFormat + sender + "：" + content;
@@ -135,7 +135,7 @@ public class BungeeCordGroupChatLink implements Listener {
             p.sendMessage(component);
         }
         debug("[Chatlink] QQ→game 广播：发送者=" + sender
-                + " 群=" + event.getGuildId()
+                + " 群=" + event.getGroupId()
                 + " 在线玩家=" + proxy.getPlayers().size());
     }
 

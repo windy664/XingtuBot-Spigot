@@ -172,9 +172,9 @@ public class HandlerRegistry {
         if (msg.isEmpty()) return false;
 
         // 记录已知群：QQ 机器人无法枚举自己加入的群，只能从收到的消息里反推。
-        // 落盘后供「推送到全部群（*）」的主动消息使用。非消息事件（入群/退群等）同样带群 openid。
-        if (event.isGroupMessage() && event.getGuildId() != null && !event.getGuildId().isEmpty()) {
-            org.windy.xingtubot.common.queue.KnownGroupStore.getInstance().record(event.getGuildId());
+        // 落盘后供「推送到全部群（*）」的主动消息使用。非消息事件（入群/退群等）同样带群 id。
+        if (event.isGroupMessage() && event.getGroupId() != null && !event.getGroupId().isEmpty()) {
+            org.windy.xingtubot.common.queue.KnownGroupStore.getInstance().record(event.getGroupId());
         }
 
         // listen-mode 过滤：mention 模式下，非@的群消息默认门控（跳过）；
@@ -201,11 +201,11 @@ public class HandlerRegistry {
         final BotMessageEvent dispatchEvent;
         BotReplier replier = event.getReplier();
         if (replier != null && gameEcho != null) {
-            // 必须保留 eventType（用 6 参构造）：否则 handle() 里 isGroupMessage()/isGroupAtMessage() 全失效，
-            // 例如 /id 命令会因此拿不到群消息标识而不显示群 ID。
+            // 必须保留 eventType：否则 handle() 里 isGroupAtMessage() 会失效。
             dispatchEvent = new BotMessageEvent(
-                    event.getGuildId(), event.getFormId(), msg,
-                    new EchoReplier(replier, gameEcho), event.getUsername(), event.getEventType());
+                    event.getGroupId(), event.getFormId(), msg,
+                    new EchoReplier(replier, gameEcho), event.getUsername(),
+                    event.getMessageType(), event.getEventType());
         } else {
             dispatchEvent = event;
         }
@@ -247,7 +247,7 @@ public class HandlerRegistry {
                 // 权限检查：按消息粒度判定（adminFor 默认回退 adminOnly；
                 // 自定义命令等可重写为按条目鉴权，core 无需认识具体功能类型）。
                 boolean needAdmin = handler.adminFor(msg);
-                if (needAdmin && !permission.isAdmin(dispatchEvent.getFormId())) {
+                if (needAdmin && !permission.isAdmin(dispatchEvent.getSenderUid())) {
                     dispatchEvent.reply("⛔ 该指令仅管理员可用");
                     return true;
                 }

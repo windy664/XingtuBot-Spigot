@@ -173,9 +173,9 @@ public class GroupChatLink {
         // 解析消息中的 @提及：<@openid> → @昵称
         content = OpenidNameCache.getInstance().resolveMentions(content);
         content = filterChatlink(content); // QQ→游戏：群消息进游戏前过滤敏感词
-        // 记录群 openid（供主动推送用）
-        if (event.getGuildId() != null && !event.getGuildId().isEmpty()) {
-            lastGroupOpenid = event.getGuildId();
+        // 记录群 ID（供主动推送用）
+        if (event.getGroupId() != null && !event.getGroupId().isEmpty()) {
+            lastGroupOpenid = event.getGroupId();
         }
         lastGroupMsg.set(new Holder(event));
         Component line = Component.text(chatFormat + sender + "：" + content);
@@ -183,7 +183,7 @@ public class GroupChatLink {
             p.sendMessage(line);
         }
         debug("[Chatlink] QQ→game 广播：发送者=" + sender
-                + " 群=" + event.getGuildId()
+                + " 群=" + event.getGroupId()
                 + " 在线玩家=" + proxy.getPlayerCount());
     }
 

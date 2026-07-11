@@ -6,8 +6,8 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
-import org.windy.xingtubot.common.api.QqOpenApiClient;
 import org.windy.xingtubot.common.binding.BindingEntry;
+import org.windy.xingtubot.common.messenger.PlatformMessenger;
 import org.windy.xingtubot.common.binding.BindingRepository;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 
@@ -194,40 +194,53 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
 
     private void handleProactive(CommandSender sender, String[] args) {
         if (args.length < 2) {
-            sender.sendMessage("§e用法: /xtb proactive <群openid> [消息内容]");
+            sender.sendMessage("§e用法: /xtb proactive <群ID> [消息内容]");
             sender.sendMessage("§7测试主动消息推送（不依赖被动回复窗口）");
             return;
         }
-        String groupOpenid = args[1];
+        String groupId = args[1];
         String content = args.length > 2
                 ? String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length))
                 : "这是一条主动消息测试";
 
-        String appId = plugin.getConfig().getString("openapi-app-id", "").trim();
-        String secret = plugin.getConfig().getString("openapi-client-secret", "").trim();
-        if (appId.isEmpty() || secret.isEmpty()) {
-            sender.sendMessage("§c未配置 openapi-app-id / openapi-client-secret");
+        PlatformMessenger messenger = plugin.getMessenger();
+        if (messenger == null || !messenger.getState().isReady()) {
+            sender.sendMessage("§c消息适配器未就绪，尝试直连 API...");
+            // fallback: 用 config 中的 appId/secret 直连（仅官方协议）
+            String appId = plugin.getConfig().getString("openapi-app-id", "").trim();
+            String secret = plugin.getConfig().getString("openapi-client-secret", "").trim();
+            if (!appId.isEmpty() && !secret.isEmpty()) {
+                boolean sandbox = plugin.getConfig().getBoolean("openapi-sandbox", false);
+                org.windy.xingtubot.common.api.QqOpenApiClient api =
+                        new org.windy.xingtubot.common.api.QqOpenApiClient(appId, secret,
+                                sandbox ? org.windy.xingtubot.common.api.QqOpenApiClient.API_SANDBOX
+                                        : org.windy.xingtubot.common.api.QqOpenApiClient.API_PROD, null);
+                final String msg = "🔔 [主动消息] " + content;
+                sender.sendMessage("§e正在发送主动消息到群 " + groupId + "...");
+                org.bukkit.Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                    try {
+                        api.sendProactiveGroupMessage(groupId, msg);
+                        sender.sendMessage("§a✅ 主动消息发送成功！");
+                    } catch (Exception e) {
+                        PendingMessageQueue.getInstance().offer(groupId, msg);
+                        sender.sendMessage("§e⚠️ 主动消息失败，已回退到被动队列: " + e.getMessage());
+                    }
+                });
+            } else {
+                sender.sendMessage("§c消息适配器未就绪且无 API 凭据，无法发送");
+            }
             return;
         }
-        boolean sandbox = plugin.getConfig().getBoolean("openapi-sandbox", false);
-        QqOpenApiClient api =
-                new QqOpenApiClient(appId, secret,
-                        sandbox ? QqOpenApiClient.API_SANDBOX
-                                : QqOpenApiClient.API_PROD, null);
 
         final String msg = "🔔 [主动消息] " + content;
-        sender.sendMessage("§e正在发送主动消息到群 " + groupOpenid + "...");
-
+        sender.sendMessage("§e正在发送主动消息到群 " + groupId + "...");
         org.bukkit.Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
-                api.sendProactiveGroupMessage(groupOpenid, msg);
+                messenger.sendGroupMessage(groupId, msg);
                 sender.sendMessage("§a✅ 主动消息发送成功！");
             } catch (Exception e) {
-                // 主动消息失败 → 回退到被动队列
-                PendingMessageQueue.getInstance()
-                        .offer(groupOpenid, msg);
-                sender.sendMessage("§e⚠️ 主动消息失败（无权限），已回退到被动队列: " + e.getMessage());
-                sender.sendMessage("§7下次群里有人 @机器人 时会一起发出");
+                PendingMessageQueue.getInstance().offer(groupId, msg);
+                sender.sendMessage("§e⚠️ 主动消息失败，已回退到被动队列: " + e.getMessage());
             }
         });
     }

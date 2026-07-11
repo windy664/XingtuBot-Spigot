@@ -85,7 +85,7 @@ public final class AiChatHandler implements MessageHandler {
         if (et != null && et.contains("MEMBER")) return false;
 
         // 群聊白名单：不在白名单里的群，旁听和回复都跳过
-        if (event.isGroupMessage() && !isGroupAllowed(event.getGuildId())) {
+        if (event.isGroupMessage() && !isGroupAllowed(event.getGroupId())) {
             return false;
         }
 
@@ -93,10 +93,10 @@ public final class AiChatHandler implements MessageHandler {
         if (event.isGroupMessage()) {
             String trimmed = message.trim();
             String username = event.getUsername() != null ? event.getUsername() : "群友";
-            groupContext.record(event.getGuildId(), username, trimmed);
+            groupContext.record(event.getGroupId(), username, trimmed);
 
             if (permission != null && permission.isAdmin(event.getFormId())) {
-                adminStance.record(event.getGuildId(), trimmed);
+                adminStance.record(event.getGroupId(), trimmed);
             }
         }
 
@@ -124,7 +124,7 @@ public final class AiChatHandler implements MessageHandler {
         if (event.isGroupMessage() && !event.isGroupAtMessage()) {
             if (permission != null && permission.isAdmin(event.getFormId())) return false;
             if (!checkHourlyBudget()) return false;
-            return shouldChimeIn(msg, event.getGuildId());
+            return shouldChimeIn(msg, event.getGroupId());
         }
 
         return false;
@@ -161,9 +161,9 @@ public final class AiChatHandler implements MessageHandler {
     }
 
     /** 检查群是否在白名单内（白名单为空则所有群都允许） */
-    private boolean isGroupAllowed(String guildId) {
+    private boolean isGroupAllowed(String groupId) {
         if (groupWhitelist.isEmpty()) return true; // 未配置白名单 → 全部允许
-        return guildId != null && groupWhitelist.contains(guildId);
+        return groupId != null && groupWhitelist.contains(groupId);
     }
 
     /** 加载群聊白名单 */
@@ -199,8 +199,8 @@ public final class AiChatHandler implements MessageHandler {
         return hourlyCalls.get() < maxPerHour;
     }
 
-    private boolean shouldChimeIn(String msg, String guildId) {
-        if (adminStance.mightConflict(guildId, msg)) {
+    private boolean shouldChimeIn(String msg, String groupId) {
+        if (adminStance.mightConflict(groupId, msg)) {
             double conflictProb = parseDouble(config.getString("chime-in-conflict-probability", "0.5"), 0.5);
             if (conflictProb > 0 && ThreadLocalRandom.current().nextDouble() < conflictProb) {
                 return true;
@@ -214,7 +214,7 @@ public final class AiChatHandler implements MessageHandler {
     public void handle(String message, BotMessageEvent event) {
         String msg = message.trim();
         boolean isDirectAt = event.isGroupAtMessage();
-        String guildId = event.getGuildId();
+        String groupId = event.getGroupId();
         String senderId = event.getFormId();
         boolean senderIsAdmin = permission != null && permission.isAdmin(senderId);
 
@@ -225,7 +225,7 @@ public final class AiChatHandler implements MessageHandler {
 
         // 单用户频率限制（@触发也受限，但阈值更高）
         if (!senderIsAdmin) {
-            if (!checkRateLimit(guildId + "#" + senderId, isDirectAt)) {
+            if (!checkRateLimit(groupId + "#" + senderId, isDirectAt)) {
                 return;
             }
         }
@@ -240,12 +240,12 @@ public final class AiChatHandler implements MessageHandler {
                 "你是一位温柔、体贴、爱说简单话的女朋友").trim();
         messages.add(createMessage("system", buildSystemPrompt(personality, isDirectAt, senderIsAdmin)));
 
-        String stanceCtx = adminStance.buildContext(guildId);
+        String stanceCtx = adminStance.buildContext(groupId);
         if (!stanceCtx.isEmpty()) {
             messages.add(createMessage("system", stanceCtx));
         }
 
-        List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
+        List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(groupId);
         if (!ctx.isEmpty()) {
             StringBuilder ctxBuilder = new StringBuilder();
             ctxBuilder.append("【群里最近的聊天记录】\n");
@@ -256,7 +256,7 @@ public final class AiChatHandler implements MessageHandler {
             messages.add(createMessage("system", ctxBuilder.toString()));
         }
 
-        String memKey = guildId + "#" + senderId;
+        String memKey = groupId + "#" + senderId;
         if (isDirectAt) {
             messages.addAll(replyMemory.getMessages(memKey));
         }
@@ -275,7 +275,7 @@ public final class AiChatHandler implements MessageHandler {
             messages.add(createMessage("user", userTag + "：" + msg));
         }
 
-        if (!senderIsAdmin && adminStance.mightConflict(guildId, msg)) {
+        if (!senderIsAdmin && adminStance.mightConflict(groupId, msg)) {
             messages.add(createMessage("system",
                     "注意：上面这条消息的观点可能跟管理员不一致。" +
                     "你要自然地表达不同意见，站在管理员的立场，但不要太明显地\"维护\"。"));
@@ -337,7 +337,7 @@ public final class AiChatHandler implements MessageHandler {
         }
 
         String botName = org.windy.xingtubot.common.api.BotIdentity.getName();
-        groupContext.record(guildId, botName, out);
+        groupContext.record(groupId, botName, out);
         if (isDirectAt) {
             List<Map<String, String>> history = replyMemory.getMessages(memKey);
             history.add(createMessage("user", userTag + "：" + msg));

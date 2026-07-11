@@ -18,7 +18,7 @@ public interface ProactiveSender {
      *
      * @return 是否成功发出；false 表示未就绪或失败，调用方应回退被动队列
      */
-    boolean sendGroupMessage(String groupOpenId, String message);
+    boolean sendGroupMessage(String groupId, String message);
 
     /**
      * 主动推送一条群 Markdown 消息。机器人无原生 markdown 权限时由实现回退为纯文本。
@@ -26,8 +26,8 @@ public interface ProactiveSender {
      *
      * @return 是否成功发出；false 表示未就绪或失败，调用方应回退被动队列
      */
-    default boolean sendGroupMarkdown(String groupOpenId, String markdownContent) {
-        return sendGroupMessage(groupOpenId, markdownContent);
+    default boolean sendGroupMarkdown(String groupId, String markdownContent) {
+        return sendGroupMessage(groupId, markdownContent);
     }
 
     /**
@@ -37,7 +37,7 @@ public interface ProactiveSender {
      *
      * @return 是否成功发出；false 表示未就绪或失败
      */
-    default boolean sendGroupMarkdownKeyboard(String groupOpenId, String markdownContent, String keyboardJson) {
-        return sendGroupMarkdown(groupOpenId, markdownContent);
+    default boolean sendGroupMarkdownKeyboard(String groupId, String markdownContent, String keyboardJson) {
+        return sendGroupMarkdown(groupId, markdownContent);
     }
 }

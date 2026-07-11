@@ -22,9 +22,9 @@ public final class GroupContextMemory {
     private final ConcurrentHashMap<String, List<CtxMessage>> groups = new ConcurrentHashMap<>();
 
     /** 记录一条群消息（任何人发的，包括机器人自己） */
-    public void record(String guildId, String username, String content) {
-        if (guildId == null || content == null || content.isEmpty()) return;
-        List<CtxMessage> list = groups.computeIfAbsent(guildId, k -> Collections.synchronizedList(new ArrayList<>()));
+    public void record(String groupId, String username, String content) {
+        if (groupId == null || content == null || content.isEmpty()) return;
+        List<CtxMessage> list = groups.computeIfAbsent(groupId, k -> Collections.synchronizedList(new ArrayList<>()));
         list.add(new CtxMessage(username, content));
         // 裁剪
         while (list.size() > MAX_CONTEXT) {
@@ -33,8 +33,8 @@ public final class GroupContextMemory {
     }
 
     /** 获取群上下文（最近 N 条），返回不可变快照 */
-    public List<CtxMessage> getSnapshot(String guildId) {
-        List<CtxMessage> list = groups.get(guildId);
+    public List<CtxMessage> getSnapshot(String groupId) {
+        List<CtxMessage> list = groups.get(groupId);
         if (list == null) return Collections.emptyList();
         synchronized (list) {
             return new ArrayList<>(list);

@@ -61,6 +61,7 @@ public class QQGatewayClient {
     private final BotLogger logger;
     private final java.util.function.BooleanSupplier debug; // debug=true 才打逐事件类型日志
     private volatile Consumer<String> onBotNameResolved; // 获取到机器人名字后的回调
+    private volatile Runnable onReadyCallback; // 连接就绪（READY 事件后）的回调
 
     // Token 缓存
     private volatile String accessToken;
@@ -143,6 +144,11 @@ public class QQGatewayClient {
     /** 设置机器人名字回调：连接成功后从 API 获取到名字时调用。 */
     public void setOnBotNameResolved(Consumer<String> callback) {
         this.onBotNameResolved = callback;
+    }
+
+    /** 设置连接就绪回调（READY 事件触发后调用）。 */
+    public void setOnReady(Runnable callback) {
+        this.onReadyCallback = callback;
     }
 
     // ========================= 连接 =========================
@@ -366,6 +372,11 @@ public class QQGatewayClient {
             GatewayWebSocket ws = currentWs;
             if (ws != null && ws.getURI() != null) {
                 cachedGatewayUrl = ws.getURI().toString();
+            }
+            // 触发就绪回调
+            Runnable readyCb = onReadyCallback;
+            if (readyCb != null) {
+                try { readyCb.run(); } catch (Exception ignored) {}
             }
             // 获取机器人详细信息并输出
             scheduler.execute(this::probePermissions);

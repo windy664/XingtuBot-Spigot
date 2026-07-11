@@ -1,6 +1,12 @@
 # 调试模式
 debug: false
 
+# 机器人通信协议（决定 QQ 机器人使用哪种协议接入）。
+#   official  = QQ 官方 WebSocket 网关 + OpenAPI 回复（默认，需填写上方 openapi 凭据）
+#   onebot11  = OneBot 11 协议（正向 WS 收事件 + HTTP API 发送，需配合 OneBot11 实现使用）
+# 注：仅当 server-role 非 off/none/disable 时生效。
+qq-protocol: official
+
 ####################################
 # QQ 开放平台凭据（运行 bot 必需）
 # 是否运行 bot 由下方 server-role 决定（off=不运行）；旧的 bot-mode 键已废弃删除。
@@ -9,6 +15,32 @@ openapi-app-id: ""
 openapi-client-secret: ""
 # 沙箱环境（true=sandbox，false=正式）
 openapi-sandbox: false
+
+###############################################################################
+# OneBot 11 配置（仅在 qq-protocol: onebot11 时生效，配合 NapCat/LLOneBot 等实现使用）
+####################################
+
+# OneBot 连接模式（决定机器人端如何收发消息）：
+#   forward_ws = 正向 WebSocket（默认，机器人作为 WS 客户端连接 OneBot 服务端）
+#   http       = 预留，HTTP 调用模式（机器人需起一个 HTTP 服务端接收回调）
+onebot.mode: forward_ws
+
+# 正向 WebSocket 连接地址（onebot.mode=forward_ws 时必填）
+# 格式：ws://IP:端口   或  wss://域名
+onebot.forward-url: ""
+
+# OneBot WS 访问令牌（NapCat WS 服务端的 verify-token）
+# forward_ws 模式下必须填写，用于 WS 握手鉴权。
+onebot.ws-token: ""
+
+# OneBot HTTP API 调用地址（非 WS 地址，可选但强烈建议填写）
+# 用于主动消息、群信息等高级功能。示例：
+#   onebot.api-url: "http://127.0.0.1:3000/"
+onebot.api-url: ""
+
+# OneBot HTTP API 访问令牌（NapCat HTTP 服务的 access-token）
+# 用于主动消息、群信息等 HTTP API 调用。可能与 ws-token 不同。
+onebot.http-token: ""
 
 ####################################
 # 机器人超级管理员（按 openid 识别，QQ 自带不可伪造）
