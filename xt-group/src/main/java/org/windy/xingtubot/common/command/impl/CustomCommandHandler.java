@@ -186,7 +186,7 @@ public class CustomCommandHandler implements GroupCommand {
         return "";
     }
 
-    /** 查询 openid 绑定的玩家名。未绑定返回 null。 */
+    /** 查询 openid 绑定的玩家名。 */
     private String resolvePlayerName(String openid) {
         if (bindingStore == null || openid == null) return null;
         org.windy.xingtubot.common.binding.BindingEntry e = bindingStore.findByOpenid(openid);

@@ -1,6 +1,6 @@
 package org.windy.xingtubot.common.module;
 
-import org.windy.xingtubot.common.auth.PermissionService;
+import org.windy.xingtubot.common.handler.PermissionChecker;
 import org.windy.xingtubot.common.handler.HandlerRegistry;
 import org.windy.xingtubot.common.platform.PlatformAdapter;
 
@@ -47,7 +47,7 @@ public interface XingtuBotHost {
     Object getServiceObject(Class<?> type);
 
     /** 超管权限服务。 */
-    PermissionService permission();
+    PermissionChecker permission();
 
     /** 平台适配器（Bukkit/Velocity）。可能为 null。 */
     PlatformAdapter platform();

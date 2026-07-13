@@ -1,4 +1,5 @@
 package org.windy.xingtubot.common.binding;
+import org.windy.xingtubot.common.binding.*;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

@@ -27,7 +27,8 @@ import java.util.Set;
  * 群功能模块：迎送词 + 自定义回复 + 自定义指令。
  *
  * <p>迎送词直接注册 handler；自定义回复/指令需要 PlaceholderResolver / ConsoleExecutor /
- * PlayerCommandExecutor / CrossServerConsole / BindingRepository 等能力（从主插件服务总线获取）。
+ * PlayerCommandExecutor / CrossServerConsole 等能力（从主插件服务总线获取）。
+ * BindingRepository 由 xt-auth 提供，通过服务总线反射获取。
  */
 public final class GroupFeaturesModule implements BotModule {
 

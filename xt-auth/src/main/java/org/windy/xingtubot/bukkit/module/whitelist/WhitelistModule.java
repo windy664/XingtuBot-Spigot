@@ -73,8 +73,9 @@ public class WhitelistModule implements Listener {
 
         // ===== packetevents 登录锁 =====
         // 先创建 lockManager（BindingService 后补），再创建 AuthAdapter
+        BukkitPlayerOps bukkitOps = new BukkitPlayerOps(plugin);
         bukkitLock = new BukkitPlayerLock(plugin, null);
-        BukkitDirectAuthAdapter authAdapter = new BukkitDirectAuthAdapter(plugin, bukkitLock);
+        BukkitDirectAuthAdapter authAdapter = new BukkitDirectAuthAdapter(bukkitLock, bukkitOps);
 
         this.service = new BindingServiceImpl(store, authAdapter, appIdSupplier,
                 msg -> plugin.getLogger().warning(msg));

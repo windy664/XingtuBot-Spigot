@@ -23,10 +23,6 @@ public interface AuthAdapter {
     /** 给在线玩家显示一个标题/副标题（支持 §颜色码）。subTitle 可为 null/空。 */
     void titlePlayer(String player, String mainTitle, String subTitle);
 
-    /**
-     * 带停留时间的标题（单位 tick，20 tick=1 秒）。用于<b>持续提示</b>循环：stay 设得≥刷新间隔、
-     * fadeIn 设 0，可让标题不闪烁地常驻。默认实现忽略时间、退化为 {@link #titlePlayer(String, String, String)}。
-     */
     default void titlePlayer(String player, String mainTitle, String subTitle,
                              int fadeInTicks, int stayTicks, int fadeOutTicks) {
         titlePlayer(player, mainTitle, subTitle);

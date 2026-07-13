@@ -1,7 +1,7 @@
 package org.windy.xingtubot.common.handler;
 
 import com.google.gson.JsonObject;
-import org.windy.xingtubot.common.auth.PermissionService;
+import org.windy.xingtubot.common.handler.PermissionChecker;
 import org.windy.xingtubot.common.command.GroupCommand;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.event.BotReplier;
@@ -29,7 +29,7 @@ public class HandlerRegistry {
     // 用于 AI 闲聊等被动响应器——它对每条消息都有机会响应，但不消费消息。
     private final List<MessageHandler> observers = new ArrayList<>();
     private final Consumer<String> logger;
-    private final PermissionService permission;
+    private final PermissionChecker permission;
     private final ThreadPoolExecutor pool;
     private org.windy.xingtubot.common.api.XingtuBotServiceImpl hookService;
     private boolean initialized = false;
@@ -56,7 +56,7 @@ public class HandlerRegistry {
         this.gameEcho = gameEcho;
     }
 
-    public HandlerRegistry(PermissionService permission, Consumer<String> logger) {
+    public HandlerRegistry(PermissionChecker permission, Consumer<String> logger) {
         this.permission = permission;
         this.logger = logger;
         this.pool = new ThreadPoolExecutor(

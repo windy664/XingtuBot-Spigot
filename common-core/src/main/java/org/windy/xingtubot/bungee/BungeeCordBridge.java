@@ -7,8 +7,6 @@ import net.md_5.bungee.api.event.PluginMessageEvent;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.event.EventHandler;
-import org.windy.xingtubot.common.binding.AuthAdapter;
-import org.windy.xingtubot.common.binding.BindingService;
 import org.windy.xingtubot.common.bridge.BridgeCodec;
 import org.windy.xingtubot.common.bridge.CrossServerChannel;
 import org.windy.xingtubot.common.bridge.CrossServerProtocol;
@@ -21,68 +19,31 @@ import java.util.function.Consumer;
 
 /**
  * BungeeCord（大脑）侧的跨服桥：注册插件消息通道，处理子服上报，回应握手。
- * 与 VelocityBridge 功能对等。
+ * 纯跨服通信层，不含认证逻辑。与 VelocityBridge 对等。
  */
 public class BungeeCordBridge implements Listener {
 
     private final ProxyServer proxy;
     private final Plugin plugin;
     private final String channel;
-    private final AuthAdapter auth;
     private final Consumer<String> logger;
     private final Map<String, Consumer<String>> consoleCallbacks = new ConcurrentHashMap<>();
     private final Map<String, Consumer<String>> papiCallbacks = new ConcurrentHashMap<>();
     private CrossServerChannel redisChannel;
-    private Consumer<String> onUnboundJoin;
-    // packetevents 登录锁（xt-auth 注入，可选）
-    private volatile org.windy.xingtubot.common.lock.PlayerLockManager lockManager;
 
-    /** xt-auth / 主插件提供 BindingService（惰性解析；可能为 null = 无白名单）。 */
-    private volatile java.util.function.Supplier<BindingService> serviceProvider;
-
-    public BungeeCordBridge(ProxyServer proxy, Plugin plugin, String channel,
-                            AuthAdapter auth, Consumer<String> logger) {
-        this(proxy, plugin, channel, auth, logger, (java.util.function.Supplier<BindingService>) null);
-    }
-
-    /** 直接传入 BindingService（主插件内白名单场景）：内部包成 supplier。 */
-    public BungeeCordBridge(ProxyServer proxy, Plugin plugin, String channel,
-                            BindingService service, AuthAdapter auth, Consumer<String> logger) {
-        this(proxy, plugin, channel, auth, logger, service == null ? null : () -> service);
-    }
-
-    public BungeeCordBridge(ProxyServer proxy, Plugin plugin, String channel,
-                            AuthAdapter auth, Consumer<String> logger,
-                            java.util.function.Supplier<BindingService> serviceProvider) {
+    public BungeeCordBridge(ProxyServer proxy, Plugin plugin, String channel, Consumer<String> logger) {
         this.proxy = proxy;
         this.plugin = plugin;
         this.channel = channel;
-        this.auth = auth;
         this.logger = logger;
-        this.serviceProvider = serviceProvider;
         proxy.registerChannel(channel);
         proxy.getPluginManager().registerListener(plugin, this);
-    }
-
-    /** xt-auth 就绪后注入 BindingService 供给者（惰性）。 */
-    public void setServiceProvider(java.util.function.Supplier<BindingService> serviceProvider) {
-        this.serviceProvider = serviceProvider;
-    }
-
-    /** 认证适配器（DO_LOGIN/DO_REGISTER 下发通道）：供 xt-auth 注入到 BindingService。 */
-    public AuthAdapter getAuthAdapter() {
-        return auth;
-    }
-
-    /** 解析当前 BindingService（无白名单时为 null）。 */
-    private BindingService service() {
-        java.util.function.Supplier<BindingService> sp = this.serviceProvider;
-        return sp != null ? sp.get() : null;
     }
 
     /** @deprecated 昵称统一走 {@link org.windy.xingtubot.common.api.BotIdentity}，不再生效。 */
     @Deprecated
     public void setBotName(String botName) { /* no-op */ }
+
     public void setRedisChannel(CrossServerChannel redisChannel) {
         this.redisChannel = redisChannel;
         // 订阅 Redis：收到子服经 Redis 上报的消息，复用与 PluginMessage 同一套处理；应答走 Redis 广播。
@@ -90,12 +51,6 @@ public class BungeeCordBridge implements Listener {
             BridgeCodec.Decoded msg = BridgeCodec.decode(data);
             if (msg != null) handleDecoded(msg, this.redisChannel::broadcast);
         });
-    }
-    public void setOnUnboundJoin(Consumer<String> callback) { this.onUnboundJoin = callback; }
-
-    /** 注入 packetevents 登录锁管理器（xt-auth 按 config 决定是否启用）。 */
-    public void setLockManager(org.windy.xingtubot.common.lock.PlayerLockManager lockManager) {
-        this.lockManager = lockManager;
     }
 
     public void dispatchConsole(String targetServerName, String command, Consumer<String> onResult) {
@@ -177,37 +132,6 @@ public class BungeeCordBridge implements Listener {
                 reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS));
                 break;
 
-            case PLAYER_JOIN:
-                // 进服判定由主插件 onPostLogin 驱动，不依赖子服上报
-                break;
-
-            case DECLARE_QQ: {
-                // 子服上报：玩家在游戏内输入了 QQ 号 → 下载该 QQ 头像登记并回发提示（与 Velocity 对等）。
-                String player = msg.field(0);
-                String qq = msg.field(1);
-                BindingService svc = service();
-                if (svc == null) break;
-                proxy.getScheduler().runAsync(plugin, () -> {
-                    try {
-                        BindingService.Result r = svc.declareQQ(player, qq);
-                        if (r.success) {
-                            // 进入「去群里发『绑定』」阶段：清掉子服的等待输 QQ 态。
-                            sendToPlayerServer(player, BridgeCodec.encode(CrossServerProtocol.Type.CLEAR_QQ, player));
-                        }
-                        // 提示/报错文案回发给玩家（加群二维码 Bungee 在进服时已由 onUnboundJoin 给出）。
-                        auth.messagePlayer(player, r.message);
-                    } catch (Exception e) {
-                        if (logger != null) logger.accept("处理 DECLARE_QQ 异常: " + e.getMessage());
-                    }
-                });
-                break;
-            }
-
-            case PLAYER_QUIT: {
-                // 不清待验证记录：玩家切服/掉线后仍可在 TTL 内去群里发「绑定」绑成（按 TTL 自动过期）。
-                break;
-            }
-
             case PAPI_RESULT: {
                 String requestId = msg.field(0);
                 String resolved = msg.field(1);
@@ -225,64 +149,9 @@ public class BungeeCordBridge implements Listener {
                 break;
             }
 
-            case QUERY_BINDING_BY_OPENID: {
-                // 子服查询：某 openid 绑定了哪个玩家。查到后把玩家名应答回去（与 Velocity 对等）。
-                String requestId = msg.field(0);
-                String openid = msg.field(1);
-                if (requestId == null) break;
-                String playerName = "";
-                BindingService svc = service();
-                if (svc != null && openid != null) {
-                    java.util.List<String> players = svc.getStore().getPlayersByOpenid(openid);
-                    if (!players.isEmpty()) playerName = players.get(0);
-                }
-                reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.BINDING_RESULT, requestId, playerName));
-                break;
-            }
-
             default:
                 break;
         }
-    }
-
-    /** 进服三态判定：未绑定→引导输QQ；已绑定→自动免登解锁。 */
-    public void evaluateOnJoin(String player) {
-        ProxiedPlayer p = proxy.getPlayer(player);
-        if (p == null || !p.isConnected()) return;
-        BindingService service = service();
-        if (service == null) return; // 无白名单服务，跳过进服判定
-        if (!service.isPlayerBound(player)) {
-            lock(player);
-            sendToPlayerServer(player, BridgeCodec.encode(CrossServerProtocol.Type.NEED_QQ, player));
-            auth.titlePlayer(player, "§6§l欢迎来到本服", "§f请在聊天框输入 QQ 号开始白名单绑定");
-            auth.messagePlayer(player, "§e欢迎！请在聊天框输入你的 §bQQ号 §e完成白名单绑定");
-            if (onUnboundJoin != null) onUnboundJoin.accept(player);
-        } else if (!service.isLoggedInSession(player)) {
-            service.clearExpired();
-            if (service.hasPending(player)) {
-                unlock(player);
-                auth.login(player);
-                service.clearSession(player);
-                auth.titlePlayer(player, "§a§l登录成功", "§f欢迎回来！");
-            } else {
-                lock(player);
-                sendToPlayerServer(player, BridgeCodec.encode(CrossServerProtocol.Type.NEED_QQ, player));
-                auth.messagePlayer(player, "§e请在群里发送 §b@机器人 登录 §e完成白名单验证");
-            }
-        } else {
-            // 已登录（跨子服切换）
-            unlock(player);
-        }
-    }
-
-    private void lock(String player) {
-        org.windy.xingtubot.common.lock.PlayerLockManager lm = this.lockManager;
-        if (lm != null) lm.lock(player);
-    }
-
-    private void unlock(String player) {
-        org.windy.xingtubot.common.lock.PlayerLockManager lm = this.lockManager;
-        if (lm != null) lm.unlock(player);
     }
 
     private void sendToPlayerServer(String player, byte[] data) {
@@ -290,5 +159,9 @@ public class BungeeCordBridge implements Listener {
         if (p != null && p.getServer() != null) {
             p.getServer().sendData(channel, data);
         }
+    }
+
+    private void log(String message) {
+        if (logger != null) logger.accept(message);
     }
 }

@@ -25,6 +25,7 @@ base {
 }
 
 shadowJar {
+    configurations = [project.configurations.runtimeClasspath]
     archiveBaseName.set('XingtuBot')
     archiveClassifier.set('')
 
@@ -38,6 +39,7 @@ shadowJar {
 }
 
 build.dependsOn shadowJar
+jar.enabled = false  // shadowJar 已替代 jar，禁用避免覆盖
 
 processResources {
     def props = [version: version]

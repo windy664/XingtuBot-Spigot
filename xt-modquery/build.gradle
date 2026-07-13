@@ -29,6 +29,8 @@ base {
     archivesName = 'XingtuBot-Modquery'
 }
 
+jar.enabled = false
+
 shadowJar {
     archiveBaseName.set('XingtuBot-Modquery')
     archiveClassifier.set('')

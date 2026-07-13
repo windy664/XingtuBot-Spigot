@@ -92,6 +92,28 @@ public final class Md {
     }
 
     /**
+     * 把 markdown 里的单个 {@code \n} 补成 QQ 的软换行（行尾两空格 + {@code \n}）。
+     *
+     * <p>QQ 原生 markdown 会把单个 {@code \n} 吞成一行（软换行需行尾两空格），故所有卡片/模板文本
+     * 出站前统一过一遍这里。<b>幂等</b>：已是两空格结尾的 {@code \n} 不再叠加（{@link #plain} 产出的
+     * {@code "  \n"} 再过也不变），可安全在发送层集中调用。行尾其它空白后再补两空格无副作用。
+     */
+    public static String softBreaks(String md) {
+        if (md == null || md.isEmpty() || md.indexOf('\n') < 0) return md;
+        StringBuilder out = new StringBuilder(md.length() + 32);
+        for (int i = 0; i < md.length(); i++) {
+            char c = md.charAt(i);
+            if (c == '\n') {
+                int n = out.length();
+                boolean twoSpaces = n >= 2 && out.charAt(n - 1) == ' ' && out.charAt(n - 2) == ' ';
+                if (!twoSpaces) out.append("  ");
+            }
+            out.append(c);
+        }
+        return out.toString();
+    }
+
+    /**
      * 把纯文本安全转成 QQ markdown：转义会触发渲染的特殊字符 + 软换行。
      *
      * <p>用于让原本走纯文本的回复统一改走 markdown 通道，同时保证文本里的

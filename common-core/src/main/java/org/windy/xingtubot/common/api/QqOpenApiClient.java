@@ -336,7 +336,7 @@ public class QqOpenApiClient {
     public String sendProactiveGroupMarkdown(String groupOpenid, String markdownContent,
                                              String keyboardJson) throws IOException {
         JsonObject md = new JsonObject();
-        md.addProperty("content", markdownContent);
+        md.addProperty("content", org.windy.xingtubot.common.util.Md.softBreaks(markdownContent));
         JsonObject body = new JsonObject();
         body.addProperty("msg_type", MSG_TYPE_MARKDOWN);
         body.add("markdown", md);
@@ -407,7 +407,7 @@ public class QqOpenApiClient {
 
     private String sendMarkdownByEvent(String path, String markdownContent, String eventId, int msgSeq) throws IOException {
         JsonObject md = new JsonObject();
-        md.addProperty("content", markdownContent);
+        md.addProperty("content", org.windy.xingtubot.common.util.Md.softBreaks(markdownContent));
         JsonObject body = new JsonObject();
         body.addProperty("msg_type", MSG_TYPE_MARKDOWN);
         body.add("markdown", md);
@@ -427,7 +427,10 @@ public class QqOpenApiClient {
         body.addProperty("msg_type", MSG_TYPE_MARKDOWN);
         // content 字段群消息必填，用 markdown 的文本内容做兜底
         if (markdown != null && markdown.has("content")) {
-            body.addProperty("content", markdown.get("content").getAsString());
+            // 统一补软换行（单 \n 会被 QQ 吞成一行）；幂等，模板参数类 markdown 无 content 不受影响
+            String normalized = org.windy.xingtubot.common.util.Md.softBreaks(markdown.get("content").getAsString());
+            markdown.addProperty("content", normalized);
+            body.addProperty("content", normalized);
             body.add("markdown", markdown);
         }
         if (keyboard != null) body.add("keyboard", keyboard);

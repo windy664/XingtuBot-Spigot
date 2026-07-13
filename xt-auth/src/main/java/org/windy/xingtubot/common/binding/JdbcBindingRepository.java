@@ -1,79 +1,40 @@
 package org.windy.xingtubot.common.binding;
+import org.windy.xingtubot.common.binding.*;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * JDBC 实现的绑定仓库，SQLite 与 MySQL 共用（SQL 基本通用）。
- *
- * <p>每次操作开/关连接（简单可靠，量级不大）。MySQL 多端并发安全；
- * SQLite 多进程并发写会锁库，故 SQLite 仅由「大脑」单端使用（上层据 storage-type 决定）。
- *
- * <p>驱动通过反射加载，未打入对应驱动时给出清晰报错，避免硬依赖打包失败。
+ * SQLite 实现的绑定仓库。
+ * 每次操作开/关连接（简单可靠，量级不大）。仅由「大脑」单端使用。
  */
 public class JdbcBindingRepository implements BindingRepository {
 
-    public enum Dialect { SQLITE, MYSQL }
-
     private final String url;
-    private final String user;
-    private final String password;
-    private final Dialect dialect;
     private final Consumer<String> logger;
 
-    public JdbcBindingRepository(Dialect dialect, String url, String user, String password,
-                                 Consumer<String> logger) {
-        this.dialect = dialect;
+    private JdbcBindingRepository(String url, Consumer<String> logger) {
         this.url = url;
-        this.user = user;
-        this.password = password;
         this.logger = logger;
-        ensureDriver();
+        try {
+            DriverManager.registerDriver(new org.sqlite.JDBC());
+        } catch (SQLException e) {
+            throw new IllegalStateException("注册 sqlite 驱动失败", e);
+        }
         initSchema();
     }
 
-    /** 工厂：SQLite（文件路径）。 */
     public static JdbcBindingRepository sqlite(String dbFilePath, Consumer<String> logger) {
-        return new JdbcBindingRepository(Dialect.SQLITE, "jdbc:sqlite:" + dbFilePath, null, null, logger);
-    }
-
-    /** 工厂：MySQL。 */
-    public static JdbcBindingRepository mysql(String host, int port, String database,
-                                              String user, String password, Consumer<String> logger) {
-        String url = "jdbc:mysql://" + host + ":" + port + "/" + database
-                + "?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true";
-        return new JdbcBindingRepository(Dialect.MYSQL, url, user, password, logger);
-    }
-
-    private void ensureDriver() {
-        // 直接 new 驱动实例并注册（非反射）：DriverManager 的 ServiceLoader 自动发现在
-        // Velocity/Bungee 插件隔离 classloader 下不生效，显式注册才稳。
-        try {
-            if (dialect == Dialect.SQLITE) {
-                DriverManager.registerDriver(new org.sqlite.JDBC());
-            } else {
-                DriverManager.registerDriver(new com.mysql.cj.jdbc.Driver());
-            }
-        } catch (SQLException e) {
-            throw new IllegalStateException("注册数据库驱动失败（请确认对应 JDBC 驱动已打入插件）", e);
-        }
+        return new JdbcBindingRepository("jdbc:sqlite:" + dbFilePath, logger);
     }
 
     private Connection open() throws SQLException {
-        if (dialect == Dialect.SQLITE) {
-            return DriverManager.getConnection(url);
-        }
-        return DriverManager.getConnection(url, user, password);
+        return DriverManager.getConnection(url);
     }
 
     private void initSchema() {
-        // openid 唯一、player 唯一；两种方言通用的建表语句
         String sql = "CREATE TABLE IF NOT EXISTS binding ("
                 + "player VARCHAR(64) PRIMARY KEY, "
                 + "openid VARCHAR(128), "
@@ -81,7 +42,6 @@ public class JdbcBindingRepository implements BindingRepository {
                 + "time VARCHAR(32))";
         try (Connection c = open(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.executeUpdate();
-            // openid 唯一索引（IF NOT EXISTS 两方言均支持）
             try (PreparedStatement idx = c.prepareStatement(
                     "CREATE UNIQUE INDEX IF NOT EXISTS idx_binding_openid ON binding(openid)")) {
                 idx.executeUpdate();
@@ -93,7 +53,6 @@ public class JdbcBindingRepository implements BindingRepository {
 
     @Override
     public void put(BindingEntry entry) {
-        // 先删可能冲突的旧记录（同 player 或同 openid），再插入
         try (Connection c = open()) {
             try (PreparedStatement del = c.prepareStatement(
                     "DELETE FROM binding WHERE player = ? OR openid = ?")) {

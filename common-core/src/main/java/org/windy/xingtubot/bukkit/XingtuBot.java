@@ -70,8 +70,8 @@ public final class XingtuBot extends JavaPlugin implements Listener {
                 if (spigotCommandHandler != null) {
                     spigotCommandHandler.getProactiveSender().bind(api);
                 }
-                if (spigotCommandHandler != null && spigotCommandHandler.getXingtuService() != null) {
-                    spigotCommandHandler.getXingtuService().setApiClient(api);
+                if (spigotCommandHandler != null && spigotCommandHandler.getService() != null) {
+                    spigotCommandHandler.getService().setApiClient(api);
                 }
                 getLogger().info("✅ 主动消息已启用");
             }

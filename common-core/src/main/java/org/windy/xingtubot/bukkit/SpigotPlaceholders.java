@@ -2,8 +2,6 @@ package org.windy.xingtubot.bukkit;
 
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.windy.xingtubot.common.binding.BindingEntry;
-import org.windy.xingtubot.common.binding.BindingRepository;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.reply.PlaceholderResolver;
 import org.windy.xingtubot.bukkit.util.PapiResolver;
@@ -16,30 +14,14 @@ import java.util.List;
  * Spigot 端占位符解析。
  * 内置占位符同步替换 + PAPI %xxx% 通过反射解析。
  *
- * <p>绑定数据直接读 BindingRepository（由 xt-auth 注册到服务总线）。
- *
- * <p>内置占位符：
- * <ul>
- *   <li>{online} 当前服务器在线人数</li>
- *   <li>{sender} 发送者（已绑定显示玩家名，否则 QQ 昵称）</li>
- *   <li>{date} 日期 {time} 时间</li>
- *   <li>{max} 最大在线人数</li>
- *   <li>{player_names} 在线玩家名列表</li>
- * </ul>
- *
- * <p>PAPI 变量（%xingtubot_*%）：
- * <ul>
- *   <li>%xingtubot_bound% 当前玩家是否已绑定（true/false）</li>
- *   <li>%xingtubot_player% 绑定的玩家名（未绑定返回空）</li>
- *   <li>%xingtubot_bot_name% 机器人昵称</li>
- * </ul>
+ * <p>绑定数据通过服务总线反射获取（xt-auth 提供 BindingRepository 实现）。
  */
 public class SpigotPlaceholders implements PlaceholderResolver {
 
-    private final BindingRepository bindingStore;
+    private final Object bindingStore; // xt-auth BindingRepository，运行时反射访问
     private final String defaultSender;
 
-    public SpigotPlaceholders(BindingRepository bindingStore, String defaultSender) {
+    public SpigotPlaceholders(Object bindingStore, String defaultSender) {
         this.bindingStore = bindingStore;
         this.defaultSender = defaultSender != null ? defaultSender : "群成员";
     }
@@ -65,11 +47,18 @@ public class SpigotPlaceholders implements PlaceholderResolver {
         callback.accept(result);
     }
 
-    /** 查询发送者绑定的玩家名（直接查 bindingStore，未绑定返回 null）。 */
+    /** 查询发送者绑定的玩家名（反射调用 bindingStore.getPlayersByOpenid）。 */
+    @SuppressWarnings("unchecked")
     private String boundPlayer(BotMessageEvent event) {
         if (event.getFormId() == null || bindingStore == null) return null;
-        List<String> players = bindingStore.getPlayersByOpenid(event.getFormId());
-        return players.isEmpty() ? null : players.get(0);
+        try {
+            List<String> players = (List<String>) bindingStore.getClass()
+                    .getMethod("getPlayersByOpenid", String.class)
+                    .invoke(bindingStore, event.getFormId());
+            return (players != null && !players.isEmpty()) ? players.get(0) : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // ==================== 内置占位符 ====================
@@ -107,10 +96,8 @@ public class SpigotPlaceholders implements PlaceholderResolver {
 
     private String senderName(BotMessageEvent event) {
         if (event.getFormId() != null) {
-            if (bindingStore != null) {
-                List<String> players = bindingStore.getPlayersByOpenid(event.getFormId());
-                if (!players.isEmpty()) return players.get(0);
-            }
+            String player = boundPlayer(event);
+            if (player != null) return player;
         }
         if (event.getUsername() != null && !event.getUsername().isEmpty()) {
             return event.getUsername();
@@ -120,16 +107,6 @@ public class SpigotPlaceholders implements PlaceholderResolver {
 
     // ==================== PAPI Expansion 注册 ====================
 
-    /**
-     * 注册 %xingtubot_*% PAPI 变量（如果 PAPI 已安装）。
-     *
-     * <p>注册的变量：
-     * <ul>
-     *   <li>%xingtubot_bound%    — 当前玩家是否已绑定（true/false）</li>
-     *   <li>%xingtubot_player%   — 绑定的玩家名（未绑定返回空）</li>
-     *   <li>%xingtubot_bot_name% — 机器人昵称</li>
-     * </ul>
-     */
     public void registerPapiExpansion() {
         try {
             if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") == null) return;
@@ -152,15 +129,29 @@ public class SpigotPlaceholders implements PlaceholderResolver {
             switch (params.toLowerCase()) {
                 case "bound": {
                     if (bindingStore != null) {
-                        return bindingStore.findByPlayer(player.getName()) != null ? "true" : "false";
+                        try {
+                            Object entry = bindingStore.getClass()
+                                    .getMethod("findByPlayer", String.class)
+                                    .invoke(bindingStore, player.getName());
+                            return entry != null ? "true" : "false";
+                        } catch (Exception e) {
+                            return "false";
+                        }
                     }
                     return "false";
                 }
                 case "player": {
                     if (bindingStore != null) {
-                        BindingEntry entry =
-                                bindingStore.findByPlayer(player.getName());
-                        return entry != null ? entry.player : "";
+                        try {
+                            Object entry = bindingStore.getClass()
+                                    .getMethod("findByPlayer", String.class)
+                                    .invoke(bindingStore, player.getName());
+                            if (entry != null) {
+                                return (String) entry.getClass().getField("player").get(entry);
+                            }
+                        } catch (Exception e) {
+                            // fall through
+                        }
                     }
                     return "";
                 }

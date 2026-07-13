@@ -1,0 +1,16 @@
+# XingtuBot-Fun: 群娱乐配置
+
+# 天气查询
+weather-enable: true
+
+# 运势查询
+fortune-enable: true
+
+# 随机动漫图片
+anime-enable: true
+
+# 文字生图
+textimage-enable: true
+
+# 富消息 demo
+demo-enable: false

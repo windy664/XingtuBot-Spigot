@@ -26,4 +26,16 @@ public interface LockTarget {
      * @return true 表示首次捕获
      */
     boolean capturePosition(String name, double x, double y, double z, float yaw, float pitch);
+
+    /** 该玩家的真实背包是否已被捕获（供解锁恢复）。 */
+    boolean hasCapturedInventory(String name);
+
+    /**
+     * 缓存后端下发的真实背包（锁期显空、解锁时用它恢复）。锁期玩家改不了背包，故首次捕获即准确。
+     * @param items   窗口 0 全部槽位的真实内容（packetevents ItemStack 列表）
+     * @param carried 光标上的物品
+     */
+    void captureInventory(String name,
+                          java.util.List<com.github.retrooper.packetevents.protocol.item.ItemStack> items,
+                          com.github.retrooper.packetevents.protocol.item.ItemStack carried);
 }

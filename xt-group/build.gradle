@@ -3,6 +3,7 @@
 
 dependencies {
     compileOnly project(':common-core')
+    compileOnly project(':xt-auth')  // BindingRepository 等类型
 
     compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
 

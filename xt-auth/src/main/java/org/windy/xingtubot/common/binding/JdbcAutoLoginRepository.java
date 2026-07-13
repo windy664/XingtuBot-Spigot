@@ -1,68 +1,35 @@
 package org.windy.xingtubot.common.binding;
+import org.windy.xingtubot.common.binding.*;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.function.Consumer;
 
 /**
- * JDBC 实现的自动登录信任期仓库，SQLite 与 MySQL 共用（与 {@link JdbcBindingRepository} 同模式）。
- *
- * <p>每次操作开/关连接（低频，量级不大）。MySQL 多端并发安全；SQLite 仅由代理大脑单端使用。
- * 表 {@code auto_login(player, ip, expiry)}，player 主键。
+ * SQLite 实现的自动登录信任期仓库。
+ * 每次操作开/关连接（低频，量级不大）。仅由代理大脑单端使用。
  */
 public class JdbcAutoLoginRepository implements AutoLoginRepository {
 
-    public enum Dialect { SQLITE, MYSQL }
-
     private final String url;
-    private final String user;
-    private final String password;
-    private final Dialect dialect;
     private final Consumer<String> logger;
 
-    public JdbcAutoLoginRepository(Dialect dialect, String url, String user, String password,
-                                   Consumer<String> logger) {
-        this.dialect = dialect;
+    private JdbcAutoLoginRepository(String url, Consumer<String> logger) {
         this.url = url;
-        this.user = user;
-        this.password = password;
         this.logger = logger;
-        ensureDriver();
+        try {
+            DriverManager.registerDriver(new org.sqlite.JDBC());
+        } catch (SQLException e) {
+            throw new IllegalStateException("注册 sqlite 驱动失败", e);
+        }
         initSchema();
     }
 
     public static JdbcAutoLoginRepository sqlite(String dbFilePath, Consumer<String> logger) {
-        return new JdbcAutoLoginRepository(Dialect.SQLITE, "jdbc:sqlite:" + dbFilePath, null, null, logger);
-    }
-
-    public static JdbcAutoLoginRepository mysql(String host, int port, String database,
-                                                String user, String password, Consumer<String> logger) {
-        String url = "jdbc:mysql://" + host + ":" + port + "/" + database
-                + "?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8&allowPublicKeyRetrieval=true";
-        return new JdbcAutoLoginRepository(Dialect.MYSQL, url, user, password, logger);
-    }
-
-    private void ensureDriver() {
-        // 显式注册驱动（Velocity/Bungee 插件隔离 classloader 下 ServiceLoader 自动发现不生效）。
-        try {
-            if (dialect == Dialect.SQLITE) {
-                DriverManager.registerDriver(new org.sqlite.JDBC());
-            } else {
-                DriverManager.registerDriver(new com.mysql.cj.jdbc.Driver());
-            }
-        } catch (SQLException e) {
-            throw new IllegalStateException("注册数据库驱动失败（请确认对应 JDBC 驱动已打入插件）", e);
-        }
+        return new JdbcAutoLoginRepository("jdbc:sqlite:" + dbFilePath, logger);
     }
 
     private Connection open() throws SQLException {
-        if (dialect == Dialect.SQLITE) {
-            return DriverManager.getConnection(url);
-        }
-        return DriverManager.getConnection(url, user, password);
+        return DriverManager.getConnection(url);
     }
 
     private void initSchema() {

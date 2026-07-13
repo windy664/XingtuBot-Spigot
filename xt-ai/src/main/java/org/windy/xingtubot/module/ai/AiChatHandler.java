@@ -1,7 +1,7 @@
 package org.windy.xingtubot.module.ai;
 
 import org.windy.xingtubot.common.ai.AiService;
-import org.windy.xingtubot.common.auth.PermissionService;
+import org.windy.xingtubot.common.handler.PermissionChecker;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.handler.HandlerContext;
@@ -44,11 +44,11 @@ public final class AiChatHandler implements MessageHandler {
     private final BotLogger logger;
     private final SensitiveFilter sensitiveFilter;
     private final Supplier<List<String>> managedPrefixes;
-    private final PermissionService permission;
+    private final PermissionChecker permission;
     private final StickerManager stickerManager;
     private final AiChatMemory replyMemory = new AiChatMemory();
     private final GroupContextMemory groupContext = new GroupContextMemory();
-    private final AdminStanceMemory adminStance = new AdminStanceMemory();
+    private final AdminStanceMemory adminStance;
 
     // 频率限制：单用户滑动窗口
     private final ConcurrentHashMap<String, Deque<Long>> rateLimitMap = new ConcurrentHashMap<>();
@@ -62,14 +62,15 @@ public final class AiChatHandler implements MessageHandler {
     private volatile Set<String> groupWhitelist = Collections.emptySet();
 
     public AiChatHandler(AiService aiService, BotConfig config, BotLogger logger,
-                         Supplier<List<String>> managedPrefixes, PermissionService permission,
-                         StickerManager stickerManager) {
+                         Supplier<List<String>> managedPrefixes, PermissionChecker permission,
+                         StickerManager stickerManager, java.io.File dataDir) {
         this.aiService = aiService;
         this.config = config;
         this.logger = logger;
         this.managedPrefixes = managedPrefixes;
         this.permission = permission;
         this.stickerManager = stickerManager;
+        this.adminStance = new AdminStanceMemory(dataDir);
         this.sensitiveFilter = SensitiveFilter.fromConfig(config, logger);
         reloadBlockedKeywords();
         reloadGroupWhitelist();

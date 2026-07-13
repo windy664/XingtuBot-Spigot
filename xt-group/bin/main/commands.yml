@@ -1,0 +1,41 @@
+# 自定义命令配置
+# trigger: 触发词（群里发什么触发）
+# description: 描述（用于日志）
+# as: player=以玩家身份执行 / console=以控制台身份执行
+# command: 要执行的命令（支持 %player_name% 和 {args} 占位符）
+# need-bind: true=需要绑定白名单（%player_name% 查绑定库）
+# not-bound-msg: 未绑定时的提示
+# admin: true=仅超管可用
+# server: 目标子服（仅 Velocity 跨服，不填=当前服）
+
+commands:
+  # 签到：在 shelter 子服由控制台代执行 signin click <玩家>（需绑定白名单；命令自带玩家名，离线也能签）
+  - trigger: "签到"
+    description: "每日签到"
+    as: console
+    server: shelter
+    command: "signin click %player_name%"
+    need-bind: true
+    not-bound-msg: "请先绑定白名单再签到（群里发「绑定」开始）"
+
+  # 示例：回家（玩家身份）
+  # - trigger: "回家"
+  #   description: "传送到家"
+  #   as: player
+  #   command: "home"
+  #   need-bind: true
+
+  # 示例：全服公告（控制台身份，仅超管）
+  # - trigger: "公告"
+  #   description: "发送全服公告"
+  #   as: console
+  #   admin: true
+  #   command: "say {args}"
+
+  # 示例：跨服执行（Velocity 模式）
+  # - trigger: "lobby公告"
+  #   description: "向大厅发公告"
+  #   as: console
+  #   admin: true
+  #   server: lobby
+  #   command: "say {args}"

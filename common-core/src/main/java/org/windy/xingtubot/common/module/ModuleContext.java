@@ -1,6 +1,6 @@
 package org.windy.xingtubot.common.module;
 
-import org.windy.xingtubot.common.auth.PermissionService;
+import org.windy.xingtubot.common.handler.PermissionChecker;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.handler.HandlerRegistry;
 import org.windy.xingtubot.common.platform.BotLogger;
@@ -29,7 +29,7 @@ public interface ModuleContext {
     PlatformAdapter platform();
 
     /** 超管权限服务。 */
-    PermissionService permission();
+    PermissionChecker permission();
 
     /** 数据目录。 */
     File dataFolder();

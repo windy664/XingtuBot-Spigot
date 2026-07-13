@@ -1,0 +1,18 @@
+# XingtuBot-Group: 群功能配置（迎送词 + 自定义回复 + 自定义指令）
+
+# 群聊白名单（仅这些群启用迎送词，"*" 或留空 = 全部群）
+allowed-groups:
+  - "*"
+
+# 入群欢迎（Markdown 格式，{bot}=机器人昵称）
+welcome-enable: true
+welcome-message: |-
+  ## 🎉 欢迎新成员！
+  我是 **{bot}**，有什么需要帮忙的随时 @我~
+
+  > 💡 发送「菜单」查看全部功能
+
+# 成员离开（Markdown 格式，{bot}=机器人昵称，{user}=离开者昵称）
+leave-enable: true
+leave-message: |-
+  👋 **{user}** 离开了我们

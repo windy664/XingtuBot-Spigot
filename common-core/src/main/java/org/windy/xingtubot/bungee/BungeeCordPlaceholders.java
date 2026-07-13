@@ -2,29 +2,25 @@ package org.windy.xingtubot.bungee;
 
 import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.config.ServerInfo;
-import org.windy.xingtubot.common.binding.BindingService;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.reply.PlaceholderResolver;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.List;
 import java.util.stream.Collectors;
 
 /**
  * BungeeCord 内置占位符解析。与 VelocityPlaceholders 功能对等。
+ * 绑定解析由 xt-auth 的 PlaceholderResolver 处理。
  */
 public class BungeeCordPlaceholders implements PlaceholderResolver {
 
     private final ProxyServer proxy;
-    private final BindingService binding;
     private final BungeeCordBridge bridge;
     private final String defaultSender;
 
-    public BungeeCordPlaceholders(ProxyServer proxy, BindingService binding, BungeeCordBridge bridge,
-                                  String defaultSender) {
+    public BungeeCordPlaceholders(ProxyServer proxy, BungeeCordBridge bridge, String defaultSender) {
         this.proxy = proxy;
-        this.binding = binding;
         this.bridge = bridge;
         this.defaultSender = defaultSender == null ? "群成员" : defaultSender;
     }
@@ -33,21 +29,10 @@ public class BungeeCordPlaceholders implements PlaceholderResolver {
     public void resolve(String text, BotMessageEvent event, java.util.function.Consumer<String> callback) {
         String builtin = resolveBuiltin(text, event);
         if (bridge != null && builtin.contains("%")) {
-            String player = boundPlayer(event);
-            if (player != null) {
-                bridge.resolvePapi(player, builtin, callback);
-                return;
-            }
+            bridge.resolvePapi(event.getUsername(), builtin, callback);
+            return;
         }
         callback.accept(builtin);
-    }
-
-    private String boundPlayer(BotMessageEvent event) {
-        if (binding != null && event.getFormId() != null) {
-            List<String> players = binding.getStore().getPlayersByOpenid(event.getFormId());
-            if (!players.isEmpty()) return players.get(0);
-        }
-        return null;
     }
 
     private String resolveBuiltin(String text, BotMessageEvent event) {
@@ -57,7 +42,8 @@ public class BungeeCordPlaceholders implements PlaceholderResolver {
             r = r.replace("{online}", String.valueOf(proxy.getOnlineCount()));
         }
         if (r.contains("{sender}")) {
-            r = r.replace("{sender}", senderName(event));
+            String name = event.getUsername();
+            r = r.replace("{sender}", name != null && !name.isEmpty() ? name : defaultSender);
         }
         if (r.contains("{date}")) {
             r = r.replace("{date}", new SimpleDateFormat("yyyy-MM-dd").format(new Date()));
@@ -95,16 +81,5 @@ public class BungeeCordPlaceholders implements PlaceholderResolver {
             r = r.replace("{player_names}", names.isEmpty() ? "暂无" : names);
         }
         return r;
-    }
-
-    private String senderName(BotMessageEvent event) {
-        if (binding != null && event.getFormId() != null) {
-            List<String> players = binding.getStore().getPlayersByOpenid(event.getFormId());
-            if (!players.isEmpty()) return players.get(0);
-        }
-        if (event.getUsername() != null && !event.getUsername().isEmpty()) {
-            return event.getUsername();
-        }
-        return defaultSender;
     }
 }

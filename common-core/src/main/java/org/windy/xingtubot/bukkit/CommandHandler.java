@@ -7,8 +7,6 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
 import org.windy.xingtubot.common.api.QqOpenApiClient;
-import org.windy.xingtubot.common.binding.BindingEntry;
-import org.windy.xingtubot.common.binding.BindingRepository;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 
 import java.util.ArrayList;
@@ -137,12 +135,14 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         sender.sendMessage("§e║ §7在线玩家: §f" + Bukkit.getOnlinePlayers().size()
                 + "/" + Bukkit.getMaxPlayers());
 
-        // 绑定数据
-        BindingRepository store = getBindingStore();
+        // 绑定数据（xt-auth 提供，运行时通过服务总线获取）
+        Object store = getBindingStore();
         if (store != null) {
             try {
-                int boundCount = store.all().size();
-                sender.sendMessage("§e║ §7已绑定: §f" + boundCount + " 人");
+                @SuppressWarnings("unchecked")
+                java.util.List<?> all = (java.util.List<?>) store.getClass()
+                        .getMethod("all").invoke(store);
+                sender.sendMessage("§e║ §7已绑定: §f" + (all != null ? all.size() : 0) + " 人");
             } catch (Exception e) {
                 sender.sendMessage("§e║ §7已绑定: §f无法获取");
             }
@@ -160,24 +160,34 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     }
 
     private void handleList(CommandSender sender) {
-        BindingRepository store = getBindingStore();
+        Object store = getBindingStore();
         if (store == null) {
             sender.sendMessage("§c绑定数据不可用（白名单未启用或为 slave 模式）。");
             return;
         }
         try {
-            List<BindingEntry> all = store.all();
-            if (all.isEmpty()) {
+            @SuppressWarnings("unchecked")
+            java.util.List<?> all = (java.util.List<?>) store.getClass()
+                    .getMethod("all").invoke(store);
+            if (all == null || all.isEmpty()) {
                 sender.sendMessage("§7暂无绑定记录。");
                 return;
             }
             sender.sendMessage("§e绑定列表（" + all.size() + " 人）:");
+            java.lang.reflect.Field fPlayer = null;
+            java.lang.reflect.Field fOpenid = null;
             int i = 0;
-            for (BindingEntry entry : all) {
+            for (Object entry : all) {
                 i++;
-                boolean online = Bukkit.getPlayerExact(entry.player) != null;
+                if (fPlayer == null) {
+                    fPlayer = entry.getClass().getField("player");
+                    fOpenid = entry.getClass().getField("openid");
+                }
+                String player = (String) fPlayer.get(entry);
+                String openid = (String) fOpenid.get(entry);
+                boolean online = Bukkit.getPlayerExact(player) != null;
                 String status = online ? "§a●" : "§7○";
-                sender.sendMessage(status + " §f" + entry.player + " §7- " + entry.openid);
+                sender.sendMessage(status + " §f" + player + " §7- " + openid);
                 if (i >= 50) {
                     sender.sendMessage("§7... 仅显示前 50 条");
                     break;
@@ -235,11 +245,17 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         });
     }
 
-    private BindingRepository getBindingStore() {
-        // 绑定库由 xt-auth 注册到服务总线（XingtuBotHost），从那取，不再依赖主插件内的白名单类。
-        org.windy.xingtubot.common.module.XingtuBotHost host =
-                Bukkit.getServicesManager().load(org.windy.xingtubot.common.module.XingtuBotHost.class);
-        return host != null ? host.getService(BindingRepository.class) : null;
+    /** 绑定库由 xt-auth 注册到服务总线，通过 Class.forName 反射获取类型，避免编译期依赖 xt-auth。 */
+    private Object getBindingStore() {
+        try {
+            org.windy.xingtubot.common.module.XingtuBotHost host =
+                    Bukkit.getServicesManager().load(org.windy.xingtubot.common.module.XingtuBotHost.class);
+            if (host == null) return null;
+            Class<?> repoClass = Class.forName("org.windy.xingtubot.common.binding.BindingRepository");
+            return host.getService(repoClass);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     @Override

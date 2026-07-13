@@ -538,7 +538,10 @@ public class ModUpdateService {
         List<String> descs = new ArrayList<>();
         for (FeedItem item : lastFeedResults) {
             String d = item.description != null ? item.description : "";
-            if (d.length() > 60) d = d.substring(0, 60) + "…";
+
+            d = d.replace("\n", " ").replace("\r", "");
+
+            if (d.length() > 120) d = d.substring(0, 120) + "…";
             descs.add(d);
         }
         if (translator != null && translator.isEnabled()) {
@@ -635,7 +638,10 @@ public class ModUpdateService {
             List<String> descs = new ArrayList<>();
             for (FeedItem item : newItems) {
                 String d = item.description != null ? item.description : "";
-                if (d.length() > 80) d = d.substring(0, 80) + "…";
+
+                d = d.replace("\n", " ").replace("\r", "");
+
+                if (d.length() > 120) d = d.substring(0, 120) + "…";
                 descs.add(d);
             }
             if (translator != null && translator.isEnabled()) {

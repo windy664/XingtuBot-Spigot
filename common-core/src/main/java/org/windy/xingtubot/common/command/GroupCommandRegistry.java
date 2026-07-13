@@ -1,6 +1,6 @@
 package org.windy.xingtubot.common.command;
 
-import org.windy.xingtubot.common.auth.PermissionService;
+import org.windy.xingtubot.common.handler.PermissionChecker;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 
 import java.util.ArrayList;
@@ -22,10 +22,10 @@ public class GroupCommandRegistry {
 
     private final List<GroupCommand> commands = new ArrayList<>();
     private final Consumer<String> logger;
-    private final PermissionService permission;
+    private final PermissionChecker permission;
     private final ThreadPoolExecutor pool;
 
-    public GroupCommandRegistry(PermissionService permission, Consumer<String> logger) {
+    public GroupCommandRegistry(PermissionChecker permission, Consumer<String> logger) {
         this.permission = permission;
         this.logger = logger;
         // 核心 2、最大 4 线程，队列 50；满了直接丢弃并提示，绝不阻塞调用方（轮询线程）

@@ -1,6 +1,6 @@
 package org.windy.xingtubot.common.module;
 
-import org.windy.xingtubot.common.auth.PermissionService;
+import org.windy.xingtubot.common.handler.PermissionChecker;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.handler.HandlerRegistry;
 import org.windy.xingtubot.common.platform.BotLogger;
@@ -24,14 +24,14 @@ public class ModuleContextImpl implements ModuleContext, XingtuBotHost {
     private final BotConfig config;
     private final BotLogger logger;
     private final PlatformAdapter platform;
-    private final PermissionService permission;
+    private final PermissionChecker permission;
     private final File dataFolder;
     private final Map<Class<?>, Object> services = new ConcurrentHashMap<>();
     // 部署拓扑：本实例是否为大脑（master）。由平台侧在启动时算定后 setBrain 注入；扩展只读 isBrain()。
     private volatile boolean brain = false;
 
     public ModuleContextImpl(HandlerRegistry registry, BotConfig config, BotLogger logger,
-                             PlatformAdapter platform, PermissionService permission,
+                             PlatformAdapter platform, PermissionChecker permission,
                              File dataFolder) {
         this.registry = registry;
         this.config = config;
@@ -62,7 +62,7 @@ public class ModuleContextImpl implements ModuleContext, XingtuBotHost {
     }
 
     @Override
-    public PermissionService permission() {
+    public PermissionChecker permission() {
         return permission;
     }
 

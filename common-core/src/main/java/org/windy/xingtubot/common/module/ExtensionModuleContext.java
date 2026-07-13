@@ -1,6 +1,6 @@
 package org.windy.xingtubot.common.module;
 
-import org.windy.xingtubot.common.auth.PermissionService;
+import org.windy.xingtubot.common.handler.PermissionChecker;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.handler.HandlerRegistry;
 import org.windy.xingtubot.common.platform.BotLogger;
@@ -43,7 +43,7 @@ public final class ExtensionModuleContext implements ModuleContext {
     }
 
     @Override
-    public PermissionService permission() {
+    public PermissionChecker permission() {
         return host.permission();
     }
 

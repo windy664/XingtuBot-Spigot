@@ -70,31 +70,20 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
 
         adapter = new BungeeCordAdapter(getProxy(), () -> config.getBoolean("debug", false));
 
-        // 白名单「大脑」
+        // 跨服 Bridge 是通用基础设施（PAPI/控制台/群服互联都走它）：只要代理端跑 bot 就建。
+        // auth 逻辑完全由 xt-auth 的 AuthBungeeCordPlugin 处理（DirectAuthAdapter + packetevents）。
         bridge = null;
-        // 跨服 Bridge 是通用基础设施（PAPI/控制台/群服互联/白名单都走它）：只要代理端跑 bot 就建，
-        // 不与白名单开关耦合（否则关白名单会误伤跨服 PAPI/控制台）。BindingService 由 xt-auth 注册。
         boolean velocityIsBrain = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
         if (velocityIsBrain) {
-            BungeeCordPluginMessageAuthAdapter authAdapter =
-                    new BungeeCordPluginMessageAuthAdapter(getProxy(), org.windy.xingtubot.common.bridge.CrossServerProtocol.CHANNEL);
-            // BindingService 由 xt-auth 附属注册为 service，bridge 惰性从 host 获取（与 Velocity 一致，
-            // 消除核心自建 store 造成的双开/双注册）。注意：群里「登录」/「绑定」由 WhitelistHandler
-            // 经 BindingService 处理，故 xt-auth 会把这个 authAdapter 注入 BindingService 来驱动解锁
-            // （见 AuthBungeeCordPlugin）；bridge 自身的 authAdapter 仅用于进服提示/DECLARE_QQ 回执。
             bridge = new BungeeCordBridge(getProxy(), this,
                     org.windy.xingtubot.common.bridge.CrossServerProtocol.CHANNEL,
-                    authAdapter, getLogger()::info,
-                    () -> getHost() != null
-                            ? getHost().getService(org.windy.xingtubot.common.binding.BindingService.class) : null);
+                    getLogger()::info);
             // 跨服 Redis 信道（通用基础设施，配置在核心 config）：由核心创建并注入到 bridge。
             redisHolder = org.windy.xingtubot.common.bridge.CrossServerChannelFactory.create(
                     config, false, new BungeeCordBotLogger(getLogger()));
             if (redisHolder != null) {
                 bridge.setRedisChannel(redisHolder.channel);
             }
-            // 未绑定进服的加群二维码由 xt-auth 附属插件经 setOnUnboundJoin 注册（白名单功能完整归属 xt-auth）。
-            adapter.log("✅ 白名单大脑已就绪（BungeeCord 主导，子服执行 AuthMe）");
         }
 
         // 群服互联由 xt-chatlink 扩展插件处理
@@ -173,8 +162,9 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
                 getLogger().severe("[XingtuBot] 未知的 server-role");
         }
 
+        printBanner();
         if (config.getBoolean("debug", false)) {
-            printConfigSummary();
+            printDebugInfo();
         }
     }
 
@@ -260,8 +250,7 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
         OpenidNameCache.getInstance().init(repo);
     }
 
-    private void printConfigSummary() {
-        boolean botOn = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
+    private void printBanner() {
         getLogger().info("");
         getLogger().info(" ██╗  ██╗██╗███╗   ██╗ ██████╗ ████████╗██╗   ██╗██████╗  ██████╗ ████████╗");
         getLogger().info(" ╚██╗██╔╝██║████╗  ██║██╔════╝ ╚══██╔══╝██║   ██║██╔══██╗██╔═══██╗╚══██╔══╝");
@@ -271,10 +260,14 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
         getLogger().info(" ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═════╝  ╚═════╝    ╚═╝   ");
         getLogger().info("");
         getLogger().info("▌ 昕途机器人 · BungeeCord");
-        getLogger().info("▌ 角色     " + config.getString("server-role", "auto") + (botOn ? "（大脑）" : "（off）"));
-        getLogger().info("▌ 监听     " + config.getString("listen-mode", "mention"));
-        getLogger().info("▌ 跨服     " + (botOn ? "已启用" : "未启用"));
         getLogger().info("▌ ✔ 已启动  输入 /bqq help 查看命令");
         getLogger().info("");
+    }
+
+    private void printDebugInfo() {
+        boolean botOn = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
+        getLogger().info("[Debug] 角色: " + config.getString("server-role", "auto") + (botOn ? "（大脑）" : "（off）"));
+        getLogger().info("[Debug] 监听: " + config.getString("listen-mode", "mention"));
+        getLogger().info("[Debug] 跨服: " + (botOn ? "已启用" : "未启用"));
     }
 }

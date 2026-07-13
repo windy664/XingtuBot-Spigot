@@ -157,7 +157,7 @@ public class QQGatewayClient {
 
             // 获取 token
             String token = getAccessToken();
-            log("✅ Access token 获取成功");
+            debugLog("✅ Access token 获取成功");
 
             // 获取 gateway URL — 优先用缓存，减少限频期间的 HTTP 请求
             String gatewayUrl = cachedGatewayUrl;
@@ -165,7 +165,7 @@ public class QQGatewayClient {
                 gatewayUrl = getGatewayUrl(token);
                 cachedGatewayUrl = gatewayUrl; // 成功才缓存
             }
-            log("连接网关: " + gatewayUrl);
+            debugLog("连接网关: " + gatewayUrl);
 
             // 创建 WebSocket
             GatewayWebSocket ws = new GatewayWebSocket(new URI(gatewayUrl));
@@ -192,7 +192,7 @@ public class QQGatewayClient {
     // ========================= WebSocket 事件处理 =========================
 
     private void onWsOpen() {
-        log("WebSocket 已连接，等待 HELLO...");
+        debugLog("WebSocket 已连接，等待 HELLO...");
         reconnectAttempts = 0;
         lastConnectTime = System.currentTimeMillis();
     }
@@ -260,7 +260,14 @@ public class QQGatewayClient {
             case 4915: meaning = "该机器人不允许当前 intents（被禁用）"; break;
             default: meaning = ""; break;
         }
-        log("WebSocket 关闭: code=" + code + (meaning.isEmpty() ? "" : " (" + meaning + ")") + " reason=" + reason);
+        String closeMessage = "WebSocket 关闭: code=" + code
+                + (meaning.isEmpty() ? "" : " (" + meaning + ")") + " reason=" + reason;
+        // 正常关闭属于连接流水；异常关闭即使未开启 debug 也必须可见。
+        if (code == 1000) {
+            debugLog(closeMessage);
+        } else {
+            log(closeMessage);
+        }
         stopHeartbeat();
 
         if (manualStop.get()) return;
@@ -299,9 +306,9 @@ public class QQGatewayClient {
         long duration = lastConnectTime > 0 ? System.currentTimeMillis() - lastConnectTime : Long.MAX_VALUE;
         if (duration < QUICK_DISCONNECT_THRESHOLD && lastConnectTime > 0) {
             quickDisconnectCount++;
-            log("⚡ 快速断连（" + duration + "ms 内），累计 " + quickDisconnectCount + "/" + MAX_QUICK_DISCONNECT_COUNT + " 次");
+            debugLog("⚡ 快速断连（" + duration + "ms 内），累计 " + quickDisconnectCount + "/" + MAX_QUICK_DISCONNECT_COUNT + " 次");
             if (quickDisconnectCount >= MAX_QUICK_DISCONNECT_COUNT) {
-                log("⚠️ 连续快速断连 " + MAX_QUICK_DISCONNECT_COUNT + " 次，可能权限或配置有问题，等待 60 秒");
+                debugLog("⚠️ 连续快速断连 " + MAX_QUICK_DISCONNECT_COUNT + " 次，可能权限或配置有问题，等待 60 秒");
                 quickDisconnectCount = 0;
                 scheduleReconnect(RATE_LIMIT_DELAY);
                 return;
@@ -325,7 +332,7 @@ public class QQGatewayClient {
 
         // 发送 IDENTIFY 或 RESUME
         if (sessionId != null && lastSeq >= 0) {
-            log("尝试 RESUME（sessionId=" + sessionId + ", seq=" + lastSeq + "）");
+            debugLog("尝试 RESUME（sessionId=" + sessionId + ", seq=" + lastSeq + "）");
             JsonObject resume = new JsonObject();
             resume.addProperty("op", OP_RESUME);
             JsonObject resumeD = new JsonObject();
@@ -335,7 +342,7 @@ public class QQGatewayClient {
             resume.add("d", resumeD);
             currentWs.send(resume.toString());
         } else {
-            log("发送 IDENTIFY（intents=" + INTENTS + "）");
+            debugLog("发送 IDENTIFY（intents=" + INTENTS + "）");
             JsonObject identify = new JsonObject();
             identify.addProperty("op", OP_IDENTIFY);
             JsonObject identifyD = new JsonObject();
@@ -373,7 +380,7 @@ public class QQGatewayClient {
         }
 
         if ("RESUMED".equals(t)) {
-            log("✅ 会话恢复成功");
+            debugLog("✅ 会话恢复成功");
             // 连接成功，缓存当前 gateway URL
             GatewayWebSocket ws = currentWs;
             if (ws != null && ws.getURI() != null) {
@@ -433,9 +440,9 @@ public class QQGatewayClient {
                     kvLog("简介", desc.length() > 50 ? desc.substring(0, 50) + "..." : desc);
                 }
                 if (!avatar.isEmpty()) {
-                    kvLog("头像", avatar);
+                    kvLog("头像", avatar.length() > 60 ? avatar.substring(0, 57) + "..." : avatar);
                 }
-                kvLog("网关", "已连接 (sessionId=" + sessionId + ")");
+                kvLog("网关", "已连接");
                 kvLog("API", "验证通过 ✅");
                 infoFooter();
             } else {
@@ -458,16 +465,14 @@ public class QQGatewayClient {
 
     private void infoHeader() {
         log("");
-        log("──────────  🤖 机器人信息  ──────────");
     }
 
     private void infoFooter() {
-        log("────────────────────────────────────");
+        log("");
     }
 
-    /** 「机器人信息」分栏行：键按显示宽度对齐到 6 格。 */
     private void kvLog(String label, String value) {
-        log("   " + Pretty.padEnd(label, 6) + value);
+        log("▌ " + Pretty.padEnd(label, 6) + value);
     }
 
     // ========================= 心跳 =========================
@@ -544,7 +549,7 @@ public class QQGatewayClient {
         long delay = delayMs >= 0 ? delayMs :
                 RECONNECT_DELAYS[Math.min(reconnectAttempts, RECONNECT_DELAYS.length - 1)];
         reconnectAttempts++;
-        log("第 " + reconnectAttempts + " 次重连，" + delay + "ms 后...");
+        debugLog("第 " + reconnectAttempts + " 次重连，" + delay + "ms 后...");
         scheduler.schedule(this::connect, delay, TimeUnit.MILLISECONDS);
     }
 
@@ -601,6 +606,13 @@ public class QQGatewayClient {
     private void log(String msg) {
         if (logger != null) {
             logger.info("[Gateway] " + msg);
+        }
+    }
+
+    /** 仅在 config.yml 的 debug=true 时输出连接过程等详细日志。 */
+    private void debugLog(String msg) {
+        if (debug.getAsBoolean()) {
+            log(msg);
         }
     }
 

@@ -47,7 +47,8 @@ public final class AiModule implements BotModule {
                 aiService, config, ctx.logger(),
                 () -> ctx.registry().getManagedPrefixes(),
                 ctx.permission(),
-                stickerManager);
+                stickerManager,
+                ctx.dataFolder());
         ctx.registry().registerObserver(handler);
 
         String omniModel = config.getString("llm-model-omni", "mimo-v2-omni");

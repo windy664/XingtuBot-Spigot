@@ -51,3 +51,49 @@ subprojects {
         }
     }
 }
+
+// 一键构建全部模块（./gradlew buildAll）
+task buildAll(group: 'build', description: '构建所有模块 jar') {
+    // common-core 先构建（其他模块编译依赖它的 shadow jar）
+    dependsOn ':common-core:shadowJar'
+    // 再构建所有子模块
+    dependsOn subprojects.findAll { it.path != ':common-core' }.collect { p ->
+        p.tasks.matching { t -> t.name == 'shadowJar' || (t.name == 'jar' && !p.tasks.any { it.name == 'shadowJar' }) }
+    }
+}
+
+// 构建完成后把所有 jar 汇总到根 build/libs/
+task collectJars(type: Copy, group: 'build', description: '收集所有模块 jar 到 build/libs/') {
+    from subprojects.collect { it.tasks.matching { t -> t.name == 'shadowJar' || (t.name == 'jar' && !t.enabled == false) } }
+    into "${rootDir}/build/libs"
+    // 只拿最终产物（跳过空的普通 jar）
+    include '*.jar'
+    // shadow jar 替代普通 jar：同名只保留大的
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+subprojects {
+    afterEvaluate {
+        tasks.matching { it.name == 'shadowJar' || (it.name == 'jar' && it.enabled) }.configureEach {
+            finalizedBy rootProject.collectJars
+        }
+    }
+}
+
+// 依赖其他项目的模块编译时需要依赖项目的 shadow jar 产物
+subprojects {
+    afterEvaluate {
+        tasks.matching { it.name == 'compileJava' }.configureEach {
+            def projDeps = project.configurations.collectMany { cfg ->
+                cfg.dependencies.findAll {
+                    it instanceof org.gradle.api.artifacts.ProjectDependency
+                }.collect { it.dependencyProject }
+            }.findAll { it.path != project.path }.unique()
+
+            projDeps.each { dep ->
+                def depProject = dep
+                dependsOn depProject.tasks.matching { t -> t.name == 'shadowJar' || (t.name == 'jar' && !depProject.tasks.any { it.name == 'shadowJar' }) }
+            }
+        }
+    }
+}

@@ -1,0 +1,31 @@
+# ==========================================
+# 🔍 模组扩展配置：GitHub 项目追踪
+# ==========================================
+
+# 功能开关
+github-watch-enable: true
+
+# 轮询频率（单位：秒）。
+# 建议保持 300 秒 (5分钟)，太快容易被封镜像源 IP。
+github-poll-interval-seconds: 300
+
+# 百度翻译 API 设置（中英双语对照依赖此项）
+# 申请地址: https://api.fanyi.baidu.com/ (申请通用翻译 API 免费版)
+baidu-translate-appid: "在此填入你的 APPID"
+baidu-translate-appkey: "在此填入你的 密钥"
+
+# 推送目标群（群 openid 列表）
+# "*" 代表推送到机器人已加入的所有群组。
+allowed-groups:
+  - "*"
+
+# 国内镜像源配置（优化 GitHub API 直连速度）
+# 针对 GitHub 仓库生效，Gitee 默认直连。无需修改，默认即可。
+github-mirrors:
+  - "https://gh-proxy.com/"
+  - "https://mirror.ghproxy.com/"
+
+# seen state 持久化方式（追踪哪些 issue/PR/release/commit 已推送过）
+# yaml   → 文件 github-state.yml（默认，重启可能丢少量状态）
+# sqlite → 本地数据库
+github-storage-type: yaml

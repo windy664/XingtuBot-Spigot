@@ -1,6 +1,6 @@
 package org.windy.xingtubot.common.handler;
 
-import org.windy.xingtubot.common.auth.PermissionService;
+import org.windy.xingtubot.common.handler.PermissionChecker;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.platform.BotLogger;
 
@@ -12,10 +12,10 @@ public class HandlerContext {
 
     private final BotConfig config;
     private final BotLogger logger;
-    private final PermissionService permission;
+    private final PermissionChecker permission;
     private final Object platform; // 平台特定对象：Velocity = ProxyServer，Spigot = JavaPlugin
 
-    public HandlerContext(BotConfig config, BotLogger logger, PermissionService permission, Object platform) {
+    public HandlerContext(BotConfig config, BotLogger logger, PermissionChecker permission, Object platform) {
         this.config = config;
         this.logger = logger;
         this.permission = permission;
@@ -30,7 +30,7 @@ public class HandlerContext {
         return logger;
     }
 
-    public PermissionService getPermission() {
+    public PermissionChecker getPermission() {
         return permission;
     }
 
