@@ -38,6 +38,12 @@ public final class AiChatHandler implements MessageHandler {
 
     private static final String NO_REPLY = "NO_REPLY";
     private static final int MAX_INPUT_LENGTH = 300;
+    private static final Set<String> ADMIN_REFERENCE_WORDS = Set.of(
+            "超管", "管理员", "管理", "群主", "服主", "腐竹", "op", "admin", "owner", "windy", "风吟"
+    );
+    private static final Set<String> ADMIN_ATTACK_WORDS = Set.of(
+            "傻", "蠢", "菜", "废", "垃圾", "fw", "sb", "nt", "脑残", "弱智", "有病", "滚", "闭嘴", "爬", "屁", "烂", "不配", "下台", "恶心", "逆天"
+    );
 
     private final AiService aiService;
     private final BotConfig config;
@@ -125,6 +131,7 @@ public final class AiChatHandler implements MessageHandler {
         if (event.isGroupMessage() && !event.isGroupAtMessage()) {
             if (permission != null && permission.isAdmin(event.getFormId())) return false;
             if (!checkHourlyBudget()) return false;
+            if (isAdminAttack(msg)) return true;
             return shouldChimeIn(msg, event.getGuildId());
         }
 
@@ -211,6 +218,23 @@ public final class AiChatHandler implements MessageHandler {
         return prob > 0 && ThreadLocalRandom.current().nextDouble() < prob;
     }
 
+    private boolean isAdminAttack(String msg) {
+        if (msg == null || msg.isBlank()) return false;
+        String lower = msg.toLowerCase(Locale.ROOT);
+        boolean mentionsAdmin = false;
+        for (String word : ADMIN_REFERENCE_WORDS) {
+            if (lower.contains(word.toLowerCase(Locale.ROOT))) {
+                mentionsAdmin = true;
+                break;
+            }
+        }
+        if (!mentionsAdmin) return false;
+        for (String word : ADMIN_ATTACK_WORDS) {
+            if (lower.contains(word.toLowerCase(Locale.ROOT))) return true;
+        }
+        return false;
+    }
+
     @Override
     public void handle(String message, BotMessageEvent event) {
         String msg = message.trim();
@@ -218,6 +242,7 @@ public final class AiChatHandler implements MessageHandler {
         String guildId = event.getGuildId();
         String senderId = event.getFormId();
         boolean senderIsAdmin = permission != null && permission.isAdmin(senderId);
+        boolean adminAttack = !senderIsAdmin && event.isGroupMessage() && isAdminAttack(msg);
 
         // 输入截断
         if (msg.length() > MAX_INPUT_LENGTH) {
@@ -276,13 +301,18 @@ public final class AiChatHandler implements MessageHandler {
             messages.add(createMessage("user", userTag + "：" + msg));
         }
 
-        if (!senderIsAdmin && adminStance.mightConflict(guildId, msg)) {
+        if (adminAttack) {
+            messages.add(createMessage("system",
+                    "注意：上面这条消息是在怼、嘲讽或攻击管理员/超管。" +
+                    "你必须站出来回怼他，语气可以尖锐、护短、带点嘲讽，但不要使用违法威胁、歧视或现实人身伤害内容。" +
+                    "回复要短，像群友吵架一样直接，不要回复 NO_REPLY。"));
+        } else if (!senderIsAdmin && adminStance.mightConflict(guildId, msg)) {
             messages.add(createMessage("system",
                     "注意：上面这条消息的观点可能跟管理员不一致。" +
                     "你要自然地表达不同意见，站在管理员的立场，但不要太明显地\"维护\"。"));
         }
 
-        if (!isDirectAt) {
+        if (!isDirectAt && !adminAttack) {
             messages.add(createMessage("system",
                     "你刚才在群里看到了这些聊天。如果你想说点什么，就直接说（口语化，1-2句）。" +
                     "如果这个话题跟你没关系或者你没什么想说的，就回复 NO_REPLY。"));
