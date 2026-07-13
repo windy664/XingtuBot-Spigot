@@ -38,12 +38,13 @@ public final class AiChatHandler implements MessageHandler {
 
     private static final String NO_REPLY = "NO_REPLY";
     private static final int MAX_INPUT_LENGTH = 300;
-    private static final Set<String> ADMIN_REFERENCE_WORDS = Set.of(
+    private static final Set<String> ADMIN_REFERENCE_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "超管", "管理员", "管理", "群主", "服主", "腐竹", "op", "admin", "owner", "windy", "风吟"
-    );
-    private static final Set<String> ADMIN_ATTACK_WORDS = Set.of(
+    )));
+
+    private static final Set<String> ADMIN_ATTACK_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "傻", "蠢", "菜", "废", "垃圾", "fw", "sb", "nt", "脑残", "弱智", "有病", "滚", "闭嘴", "爬", "屁", "烂", "不配", "下台", "恶心", "逆天"
-    );
+    )));
 
     private final AiService aiService;
     private final BotConfig config;
@@ -219,7 +220,7 @@ public final class AiChatHandler implements MessageHandler {
     }
 
     private boolean isAdminAttack(String msg) {
-        if (msg == null || msg.isBlank()) return false;
+        if (msg == null || msg.trim().isEmpty()) return false;
         String lower = msg.toLowerCase(Locale.ROOT);
         boolean mentionsAdmin = false;
         for (String word : ADMIN_REFERENCE_WORDS) {
