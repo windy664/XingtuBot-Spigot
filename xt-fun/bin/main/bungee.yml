@@ -1,5 +1,0 @@
-name: XingtuBot-Fun
-version: '2.2.1'
-main: org.windy.xingtubot.ext.xtfun.FunBungeeCordPlugin
-depends: [XingtuBotBungeeCord]
-author: 风吟

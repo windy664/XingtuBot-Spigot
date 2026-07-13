@@ -1,5 +1,0 @@
-name: XingtuBot-Github
-version: '2.2.1'
-main: org.windy.xingtubot.ext.xtgithub.GithubBungeeCordPlugin
-depends: [XingtuBotBungeeCord]
-author: 风吟

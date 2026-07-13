@@ -1,5 +1,0 @@
-name: XingtuBot-Chatlink
-version: '2.2.1'
-main: org.windy.xingtubot.ext.xtchatlink.ChatlinkBungeeCordPlugin
-depends: [XingtuBotBungeeCord]
-author: 风吟

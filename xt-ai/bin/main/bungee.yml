@@ -1,5 +1,0 @@
-name: XingtuBot-AI
-version: '2.2.1'
-main: org.windy.xingtubot.ext.xtai.AiBungeeCordPlugin
-depends: [XingtuBotBungeeCord]
-author: 风吟
