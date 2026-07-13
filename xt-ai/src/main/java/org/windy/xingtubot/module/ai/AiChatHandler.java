@@ -417,7 +417,7 @@ public final class AiChatHandler implements MessageHandler {
         sb.append("【说话规则】\n");
         sb.append("1. 像真人聊天一样自然，用口语化的表达，不要书面语\n");
         sb.append("2. 回复要简短（通常1-3句话），不要长篇大论\n");
-        sb.append("3. 可以用表情、颜文字、语气词（哈哈、诶、嗯嗯、啊这）\n");
+        sb.append("3. 可以用颜文字、语气词（哈哈、诶、嗯嗯、啊这）\n");
         sb.append("4. 看到群里聊天记录，顺着话题接话，不要突然转换话题\n");
         sb.append("5. 如果不确定说什么，可以说NO_REPLY，不要尬聊\n");
         sb.append("6. 偶尔可以开玩笑、吐槽，像朋友一样\n");
