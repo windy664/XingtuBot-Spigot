@@ -34,6 +34,18 @@ personality: "群里的话痨，爱吐槽，经常发哈哈哈"
 # 60次 ≈ 平均1分钟1次，足够正常聊天，防连续刷
 ai-max-calls-per-hour: 60
 
+##########################################
+# 自主参与判断（傻模型）
+##########################################
+# 普通群消息是否需要接话，由这个轻量模型先判断 YES/NO，不再用概率掷骰子
+chime-in-judge-enable: true
+# OpenRouter 兼容 OpenAI 接口；不用 OpenRouter 时改成你的兼容接口地址
+chime-in-judge-base-url: "https://openrouter.ai/api/v1"
+# 留空 = 复用上面的 llm-api-key；如果主模型不是 OpenRouter，就在这里单独填 OpenRouter key
+chime-in-judge-api-key: ""
+# OpenRouter 免费模型路由；会从可用免费模型中选择
+chime-in-judge-model: "openrouter/free"
+
 # 命令关键词黑名单（消息包含这些词 → 不触发AI，API根本不会调）
 # 已注册的XingtuBot命令前缀会自动过滤，这里补充非前缀型的关键词
 # "登录""绑定""注册""白名单" 硬编码兜底，不需要重复写

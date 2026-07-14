@@ -2,7 +2,6 @@ package org.windy.xingtubot.module;
 
 import org.windy.xingtubot.common.ai.AiService;
 import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.config.YamlBotConfig;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ModuleContext;
 import org.windy.xingtubot.module.ai.AiChatHandler;
@@ -36,8 +35,7 @@ public final class AiModule implements BotModule {
         String model = config.getString("llm-model", "mimo-v2.5");
 
         AiService aiService = new AiService(apiKey, baseUrl, model);
-        BotConfig chimeInConfig = new YamlBotConfig(ctx.dataFolder(), getClass().getClassLoader(), "chime-in.yml");
-        AiService chimeInJudgeService = createChimeInJudgeService(chimeInConfig, apiKey);
+        AiService chimeInJudgeService = createChimeInJudgeService(config, apiKey);
         ctx.registerService(AiService.class, aiService);
 
         // 注册 AI 聊天 observer
@@ -55,7 +53,7 @@ public final class AiModule implements BotModule {
     private AiService createChimeInJudgeService(BotConfig config, String fallbackApiKey) {
         if (!config.getBoolean("chime-in-judge-enable", true)) return null;
 
-        String model = config.getString("chime-in-judge-model", "").trim();
+        String model = config.getString("chime-in-judge-model", "openrouter/free").trim();
         if (model.isEmpty()) return null;
 
         String apiKey = config.getString("chime-in-judge-api-key", "").trim();
