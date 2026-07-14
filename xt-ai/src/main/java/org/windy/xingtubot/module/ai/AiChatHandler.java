@@ -12,7 +12,7 @@ import org.windy.xingtubot.common.service.SensitiveFilter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
+import java.util.function.BiPredicate;
 
 /**
  * AI 群聊处理器（平台中立）。
@@ -43,7 +43,7 @@ public final class AiChatHandler implements MessageHandler {
     private final BotConfig config;
     private final BotLogger logger;
     private final SensitiveFilter sensitiveFilter;
-    private final Supplier<List<String>> managedPrefixes;
+    private final BiPredicate<String, BotMessageEvent> commandMatcher;
     private final PermissionChecker permission;
     private final AiChatMemory replyMemory = new AiChatMemory();
     private final GroupContextMemory groupContext = new GroupContextMemory();
@@ -63,19 +63,19 @@ public final class AiChatHandler implements MessageHandler {
     private final ConcurrentHashMap<String, JudgeDecision> pendingJudgeDecisions = new ConcurrentHashMap<>();
 
     public AiChatHandler(AiService aiService, BotConfig config, BotLogger logger,
-                         Supplier<List<String>> managedPrefixes, PermissionChecker permission,
+                         BiPredicate<String, BotMessageEvent> commandMatcher, PermissionChecker permission,
                          java.io.File dataDir) {
-        this(aiService, null, config, logger, managedPrefixes, permission, dataDir);
+        this(aiService, null, config, logger, commandMatcher, permission, dataDir);
     }
 
     public AiChatHandler(AiService aiService, AiService chimeInJudgeService, BotConfig config, BotLogger logger,
-                         Supplier<List<String>> managedPrefixes, PermissionChecker permission,
+                         BiPredicate<String, BotMessageEvent> commandMatcher, PermissionChecker permission,
                          java.io.File dataDir) {
         this.aiService = aiService;
         this.chimeInJudgeService = chimeInJudgeService;
         this.config = config;
         this.logger = logger;
-        this.managedPrefixes = managedPrefixes;
+        this.commandMatcher = commandMatcher;
         this.permission = permission;
         this.adminStance = new AdminStanceMemory(dataDir);
         this.sensitiveFilter = SensitiveFilter.fromConfig(config, logger);
@@ -97,33 +97,27 @@ public final class AiChatHandler implements MessageHandler {
             return false;
         }
 
+        String msg = message.trim();
+        if (msg.isEmpty()) return false;
+
+        if (isRegisteredCommand(msg, event)) return false;
+
         // 旁听：白名单内的群消息记录到群上下文（不消耗API，只记内存）
         if (event.isGroupMessage()) {
-            String trimmed = message.trim();
             String username = event.getUsername() != null ? event.getUsername() : "群友";
-            groupContext.record(event.getGuildId(), username, trimmed);
+            groupContext.record(event.getGuildId(), username, msg);
 
             if (permission != null && permission.isAdmin(event.getFormId())) {
                 recordAdminName(event.getGuildId(), username);
-                adminStance.record(event.getGuildId(), trimmed);
+                adminStance.record(event.getGuildId(), msg);
             }
         }
-
-        String msg = message.trim();
-        if (msg.isEmpty()) return false;
 
         // --- 命令过滤：命中黑名单 → 不触发AI，API不会调 ---
         if (isBlockedCommand(msg)) return false;
 
         // 触发条件1：@机器人
         if (event.isGroupAtMessage()) {
-            // 已注册命令前缀（天气/模组/运势等）
-            String lower = msg.toLowerCase();
-            if (managedPrefixes != null) {
-                for (String p : managedPrefixes.get()) {
-                    if (p != null && !p.isEmpty() && lower.startsWith(p)) return false;
-                }
-            }
             // 全局调用上限检查
             if (!checkHourlyBudget()) return false;
             return true;
@@ -153,6 +147,16 @@ public final class AiChatHandler implements MessageHandler {
             if (lower.contains(kw)) return true;
         }
         return false;
+    }
+
+    private boolean isRegisteredCommand(String msg, BotMessageEvent event) {
+        if (commandMatcher == null) return false;
+        try {
+            return commandMatcher.test(msg, event);
+        } catch (Exception e) {
+            if (logger != null) logger.warn("[AI] command filter failed: " + e.getMessage());
+            return false;
+        }
     }
 
     /** 加载命令关键词黑名单 */

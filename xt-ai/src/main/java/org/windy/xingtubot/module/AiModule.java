@@ -41,7 +41,7 @@ public final class AiModule implements BotModule {
         // 注册 AI 聊天 observer
         AiChatHandler handler = new AiChatHandler(
                 aiService, chimeInJudgeService, config, ctx.logger(),
-                () -> ctx.registry().getManagedPrefixes(),
+                ctx.registry()::isHandledByCommand,
                 ctx.permission(),
                 ctx.dataFolder());
         ctx.registry().registerObserver(handler);
