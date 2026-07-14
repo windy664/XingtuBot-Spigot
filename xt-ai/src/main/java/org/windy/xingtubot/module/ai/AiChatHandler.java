@@ -37,13 +37,6 @@ public final class AiChatHandler implements MessageHandler {
 
     private static final String NO_REPLY = "NO_REPLY";
     private static final int MAX_INPUT_LENGTH = 300;
-    private static final Set<String> ADMIN_TITLE_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "超管", "管理员", "管理", "群主", "服主", "腐竹", "op", "admin", "owner"
-    )));
-    private static final Set<String> ATTACK_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "傻", "蠢", "菜", "废", "垃圾", "fw", "sb", "nt", "脑残", "弱智", "有病",
-            "滚", "闭嘴", "爬", "屁", "烂", "不配", "下台", "恶心", "逆天"
-    )));
 
     private final AiService aiService;
     private final AiService chimeInJudgeService;
@@ -67,6 +60,7 @@ public final class AiChatHandler implements MessageHandler {
     // 群聊白名单（为空则不限制，所有群都启用）
     private volatile Set<String> groupWhitelist = Collections.emptySet();
     private final ConcurrentHashMap<String, Set<String>> adminNamesByGroup = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, JudgeDecision> pendingJudgeDecisions = new ConcurrentHashMap<>();
 
     public AiChatHandler(AiService aiService, BotConfig config, BotLogger logger,
                          Supplier<List<String>> managedPrefixes, PermissionChecker permission,
@@ -139,8 +133,10 @@ public final class AiChatHandler implements MessageHandler {
         if (event.isGroupMessage() && !event.isGroupAtMessage()) {
             if (permission != null && permission.isAdmin(event.getFormId())) return false;
             if (!checkHourlyBudget()) return false;
-            if (isAdminAttack(msg, event.getGuildId())) return true;
-            return shouldChimeIn(msg, event.getGuildId());
+            JudgeDecision decision = judgeChimeIn(msg, event.getGuildId());
+            if (!decision.shouldReply()) return false;
+            pendingJudgeDecisions.put(decisionKey(event, msg), decision);
+            return true;
         }
 
         return false;
@@ -215,16 +211,17 @@ public final class AiChatHandler implements MessageHandler {
         return hourlyCalls.get() < maxPerHour;
     }
 
-    private boolean shouldChimeIn(String msg, String guildId) {
-        if (chimeInJudgeService == null) return false;
+    private JudgeDecision judgeChimeIn(String msg, String guildId) {
+        if (chimeInJudgeService == null) return JudgeDecision.noReply();
 
-        boolean adminConflict = adminStance.mightConflict(guildId, msg);
         List<Map<String, String>> messages = new ArrayList<>();
         messages.add(createMessage("system",
-                "You are a cheap group-chat classifier. Decide whether the bot should chime in now. " +
-                "Reply with exactly YES or NO. Say YES only if the message is naturally worth a short reply, " +
-                "or if admin_conflict is true and the bot should calmly support the admin stance. " +
-                "Say NO for commands, greetings that do not need an answer, private-looking talk, spam, or boring chatter."));
+                "You are a cheap group-chat classifier. Decide what the bot should do with a normal group message. " +
+                "Reply with exactly one token: ADMIN_ATTACK, ADMIN_STANCE, CHIME_IN, or NO_REPLY. " +
+                "ADMIN_ATTACK means the message attacks, insults, smears, or mocks an admin/superadmin. " +
+                "ADMIN_STANCE means the bot should reply from the admin/superadmin stance, but it is not a direct attack. " +
+                "CHIME_IN means a casual short reply is naturally useful. NO_REPLY means stay silent. " +
+                "Use the known admin names and admin stance memory as context; do not require exact keyword matches."));
 
         List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
         if (!ctx.isEmpty()) {
@@ -237,24 +234,21 @@ public final class AiChatHandler implements MessageHandler {
             messages.add(createMessage("user", recent.toString()));
         }
 
-        messages.add(createMessage("user", "admin_conflict=" + adminConflict + "\nmessage=" + msg));
+        String stanceCtx = adminStance.buildContext(guildId);
+        if (!stanceCtx.isEmpty()) {
+            messages.add(createMessage("user", "Admin stance memory:\n" + stanceCtx));
+        }
+
+        messages.add(createMessage("user",
+                "known_admin_names=" + buildAdminNamesContext(guildId) + "\nmessage=" + msg));
 
         try {
             String decision = chimeInJudgeService.chat(messages);
-            return isJudgeYes(decision);
+            return JudgeDecision.parse(decision);
         } catch (Exception e) {
             if (logger != null) logger.warn("[AI] chime-in judge failed: " + e.getMessage());
-            return false;
+            return JudgeDecision.noReply();
         }
-    }
-
-    private static boolean isJudgeYes(String decision) {
-        if (decision == null) return false;
-        String normalized = decision.trim().toUpperCase(Locale.ROOT);
-        if (normalized.startsWith("YES")) return true;
-        if (normalized.startsWith("NO")) return false;
-        String compact = normalized.replaceAll("[^A-Z]", "");
-        return "YES".equals(compact);
     }
 
     private void recordAdminName(String guildId, String username) {
@@ -264,26 +258,10 @@ public final class AiChatHandler implements MessageHandler {
                 .add(normalized);
     }
 
-    private boolean isAdminAttack(String msg, String guildId) {
-        if (msg == null || msg.trim().isEmpty()) return false;
-        String lower = msg.toLowerCase(Locale.ROOT);
-        if (!containsAny(lower, ATTACK_WORDS)) return false;
-        if (containsAny(lower, ADMIN_TITLE_WORDS)) return true;
-
+    private String buildAdminNamesContext(String guildId) {
         Set<String> names = guildId == null ? null : adminNamesByGroup.get(guildId);
-        if (names == null || names.isEmpty()) return false;
-        String compact = normalizeName(msg);
-        for (String name : names) {
-            if (name.length() >= 2 && compact.contains(name)) return true;
-        }
-        return false;
-    }
-
-    private static boolean containsAny(String text, Set<String> words) {
-        for (String word : words) {
-            if (text.contains(word.toLowerCase(Locale.ROOT))) return true;
-        }
-        return false;
+        if (names == null || names.isEmpty()) return "(none seen yet)";
+        return String.join(", ", names);
     }
 
     private static String normalizeName(String value) {
@@ -291,9 +269,54 @@ public final class AiChatHandler implements MessageHandler {
         return value.toLowerCase(Locale.ROOT).replaceAll("[\\s\\p{Punct}]", "").trim();
     }
 
+    private static String decisionKey(BotMessageEvent event, String msg) {
+        String guild = event.getGuildId() == null ? "" : event.getGuildId();
+        String sender = event.getFormId() == null ? "" : event.getFormId();
+        return guild + "#" + sender + "#" + (msg == null ? 0 : msg.hashCode());
+    }
+
+    private static final class JudgeDecision {
+        private static final String ADMIN_ATTACK = "ADMIN_ATTACK";
+        private static final String ADMIN_STANCE = "ADMIN_STANCE";
+        private static final String CHIME_IN = "CHIME_IN";
+        private static final String NO_REPLY_MODE = "NO_REPLY";
+
+        private final String mode;
+
+        private JudgeDecision(String mode) {
+            this.mode = mode;
+        }
+
+        static JudgeDecision noReply() {
+            return new JudgeDecision(NO_REPLY_MODE);
+        }
+
+        static JudgeDecision parse(String raw) {
+            if (raw == null) return noReply();
+            String normalized = raw.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z_]", "");
+            if (normalized.contains(ADMIN_ATTACK)) return new JudgeDecision(ADMIN_ATTACK);
+            if (normalized.contains(ADMIN_STANCE)) return new JudgeDecision(ADMIN_STANCE);
+            if (normalized.contains(CHIME_IN)) return new JudgeDecision(CHIME_IN);
+            return noReply();
+        }
+
+        boolean shouldReply() {
+            return !NO_REPLY_MODE.equals(mode);
+        }
+
+        boolean isAdminAttack() {
+            return ADMIN_ATTACK.equals(mode);
+        }
+
+        boolean isAdminStance() {
+            return ADMIN_ATTACK.equals(mode) || ADMIN_STANCE.equals(mode);
+        }
+    }
+
     @Override
     public void handle(String message, BotMessageEvent event) {
-        String msg = message.trim();
+        String rawMsg = message.trim();
+        String msg = rawMsg;
         boolean isDirectAt = event.isGroupAtMessage();
         String guildId = event.getGuildId();
         String senderId = event.getFormId();
@@ -303,7 +326,15 @@ public final class AiChatHandler implements MessageHandler {
         if (msg.length() > MAX_INPUT_LENGTH) {
             msg = msg.substring(0, MAX_INPUT_LENGTH);
         }
-        boolean adminAttack = !senderIsAdmin && event.isGroupMessage() && isAdminAttack(msg, guildId);
+        JudgeDecision judgeDecision = isDirectAt
+                ? JudgeDecision.noReply()
+                : pendingJudgeDecisions.remove(decisionKey(event, rawMsg));
+        if (!isDirectAt && judgeDecision == null) {
+            judgeDecision = judgeChimeIn(msg, guildId);
+            if (!judgeDecision.shouldReply()) return;
+        }
+        boolean adminAttack = judgeDecision.isAdminAttack();
+        boolean adminStanceReply = judgeDecision.isAdminStance();
 
         // 单用户频率限制（@触发也受限，但阈值更高）
         if (!senderIsAdmin) {
@@ -362,7 +393,7 @@ public final class AiChatHandler implements MessageHandler {
                     "注意：上面这条消息是在攻击管理员/超管。" +
                     "你必须站在管理员立场回怼他，语气可以护短、尖锐、带点嘲讽，但不要违法威胁、歧视或现实人身伤害。" +
                     "回复要短，像群友吵架一样直接，不要回复 NO_REPLY。"));
-        } else if (!senderIsAdmin && adminStance.mightConflict(guildId, msg)) {
+        } else if (adminStanceReply) {
             messages.add(createMessage("system",
                     "注意：上面这条消息的观点可能跟管理员不一致。" +
                     "你要自然地表达不同意见，站在管理员的立场，但不要太明显地\"维护\"。"));
