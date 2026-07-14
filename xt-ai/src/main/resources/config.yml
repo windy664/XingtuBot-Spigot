@@ -37,7 +37,7 @@ ai-max-calls-per-hour: 60
 ##########################################
 # 自主参与判断（傻模型）
 ##########################################
-# 普通群消息是否需要接话，由这个轻量模型先判断 YES/NO，不再用概率掷骰子
+# 普通群消息先由轻量模型判断：ADMIN_ATTACK / CHIME_IN / NO_REPLY
 chime-in-judge-enable: true
 # OpenRouter 兼容 OpenAI 接口；不用 OpenRouter 时改成你的兼容接口地址
 chime-in-judge-base-url: "https://openrouter.ai/api/v1"
@@ -45,6 +45,11 @@ chime-in-judge-base-url: "https://openrouter.ai/api/v1"
 chime-in-judge-api-key: ""
 # OpenRouter 免费模型路由；会从可用免费模型中选择
 chime-in-judge-model: "openrouter/free"
+# 普通自主插话要先攒够几条新群消息；每次回复后会在 min~max 之间重新选一个阈值
+chime-in-min-messages: 5
+chime-in-max-messages: 9
+# 普通自主插话冷却；攻击超管不受这个冷却限制
+chime-in-cooldown-seconds: 120
 
 # 命令关键词黑名单（消息包含这些词 → 不触发AI，API根本不会调）
 # 已注册的XingtuBot命令前缀会自动过滤，这里补充非前缀型的关键词
