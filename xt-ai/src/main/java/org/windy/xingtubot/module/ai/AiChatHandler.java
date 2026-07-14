@@ -11,7 +11,6 @@ import org.windy.xingtubot.common.service.SensitiveFilter;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
@@ -38,21 +37,21 @@ public final class AiChatHandler implements MessageHandler {
 
     private static final String NO_REPLY = "NO_REPLY";
     private static final int MAX_INPUT_LENGTH = 300;
-    private static final Set<String> ADMIN_REFERENCE_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "超管", "管理员", "管理", "群主", "服主", "腐竹", "op", "admin", "owner", "windy", "风吟"
+    private static final Set<String> ADMIN_TITLE_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+            "超管", "管理员", "管理", "群主", "服主", "腐竹", "op", "admin", "owner"
     )));
-
-    private static final Set<String> ADMIN_ATTACK_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "傻", "蠢", "菜", "废", "垃圾", "fw", "sb", "nt", "脑残", "弱智", "有病", "滚", "闭嘴", "爬", "屁", "烂", "不配", "下台", "恶心", "逆天"
+    private static final Set<String> ATTACK_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+            "傻", "蠢", "菜", "废", "垃圾", "fw", "sb", "nt", "脑残", "弱智", "有病",
+            "滚", "闭嘴", "爬", "屁", "烂", "不配", "下台", "恶心", "逆天"
     )));
 
     private final AiService aiService;
+    private final AiService chimeInJudgeService;
     private final BotConfig config;
     private final BotLogger logger;
     private final SensitiveFilter sensitiveFilter;
     private final Supplier<List<String>> managedPrefixes;
     private final PermissionChecker permission;
-    private final StickerManager stickerManager;
     private final AiChatMemory replyMemory = new AiChatMemory();
     private final GroupContextMemory groupContext = new GroupContextMemory();
     private final AdminStanceMemory adminStance;
@@ -67,16 +66,23 @@ public final class AiChatHandler implements MessageHandler {
     private volatile Set<String> blockedKeywords = Collections.emptySet();
     // 群聊白名单（为空则不限制，所有群都启用）
     private volatile Set<String> groupWhitelist = Collections.emptySet();
+    private final ConcurrentHashMap<String, Set<String>> adminNamesByGroup = new ConcurrentHashMap<>();
 
     public AiChatHandler(AiService aiService, BotConfig config, BotLogger logger,
                          Supplier<List<String>> managedPrefixes, PermissionChecker permission,
-                         StickerManager stickerManager, java.io.File dataDir) {
+                         java.io.File dataDir) {
+        this(aiService, null, config, logger, managedPrefixes, permission, dataDir);
+    }
+
+    public AiChatHandler(AiService aiService, AiService chimeInJudgeService, BotConfig config, BotLogger logger,
+                         Supplier<List<String>> managedPrefixes, PermissionChecker permission,
+                         java.io.File dataDir) {
         this.aiService = aiService;
+        this.chimeInJudgeService = chimeInJudgeService;
         this.config = config;
         this.logger = logger;
         this.managedPrefixes = managedPrefixes;
         this.permission = permission;
-        this.stickerManager = stickerManager;
         this.adminStance = new AdminStanceMemory(dataDir);
         this.sensitiveFilter = SensitiveFilter.fromConfig(config, logger);
         reloadBlockedKeywords();
@@ -104,6 +110,7 @@ public final class AiChatHandler implements MessageHandler {
             groupContext.record(event.getGuildId(), username, trimmed);
 
             if (permission != null && permission.isAdmin(event.getFormId())) {
+                recordAdminName(event.getGuildId(), username);
                 adminStance.record(event.getGuildId(), trimmed);
             }
         }
@@ -132,7 +139,7 @@ public final class AiChatHandler implements MessageHandler {
         if (event.isGroupMessage() && !event.isGroupAtMessage()) {
             if (permission != null && permission.isAdmin(event.getFormId())) return false;
             if (!checkHourlyBudget()) return false;
-            if (isAdminAttack(msg)) return true;
+            if (isAdminAttack(msg, event.getGuildId())) return true;
             return shouldChimeIn(msg, event.getGuildId());
         }
 
@@ -209,31 +216,79 @@ public final class AiChatHandler implements MessageHandler {
     }
 
     private boolean shouldChimeIn(String msg, String guildId) {
-        if (adminStance.mightConflict(guildId, msg)) {
-            double conflictProb = parseDouble(config.getString("chime-in-conflict-probability", "0.5"), 0.5);
-            if (conflictProb > 0 && ThreadLocalRandom.current().nextDouble() < conflictProb) {
-                return true;
+        if (chimeInJudgeService == null) return false;
+
+        boolean adminConflict = adminStance.mightConflict(guildId, msg);
+        List<Map<String, String>> messages = new ArrayList<>();
+        messages.add(createMessage("system",
+                "You are a cheap group-chat classifier. Decide whether the bot should chime in now. " +
+                "Reply with exactly YES or NO. Say YES only if the message is naturally worth a short reply, " +
+                "or if admin_conflict is true and the bot should calmly support the admin stance. " +
+                "Say NO for commands, greetings that do not need an answer, private-looking talk, spam, or boring chatter."));
+
+        List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
+        if (!ctx.isEmpty()) {
+            StringBuilder recent = new StringBuilder();
+            recent.append("Recent group chat:\n");
+            int start = Math.max(0, ctx.size() - 8);
+            for (int i = start; i < ctx.size(); i++) {
+                recent.append(ctx.get(i).toString()).append("\n");
             }
+            messages.add(createMessage("user", recent.toString()));
         }
-        double prob = parseDouble(config.getString("chime-in-probability", "0.03"), 0.03);
-        return prob > 0 && ThreadLocalRandom.current().nextDouble() < prob;
+
+        messages.add(createMessage("user", "admin_conflict=" + adminConflict + "\nmessage=" + msg));
+
+        try {
+            String decision = chimeInJudgeService.chat(messages);
+            return isJudgeYes(decision);
+        } catch (Exception e) {
+            if (logger != null) logger.warn("[AI] chime-in judge failed: " + e.getMessage());
+            return false;
+        }
     }
 
-    private boolean isAdminAttack(String msg) {
+    private static boolean isJudgeYes(String decision) {
+        if (decision == null) return false;
+        String normalized = decision.trim().toUpperCase(Locale.ROOT);
+        if (normalized.startsWith("YES")) return true;
+        if (normalized.startsWith("NO")) return false;
+        String compact = normalized.replaceAll("[^A-Z]", "");
+        return "YES".equals(compact);
+    }
+
+    private void recordAdminName(String guildId, String username) {
+        String normalized = normalizeName(username);
+        if (guildId == null || normalized.isEmpty()) return;
+        adminNamesByGroup.computeIfAbsent(guildId, k -> Collections.newSetFromMap(new ConcurrentHashMap<>()))
+                .add(normalized);
+    }
+
+    private boolean isAdminAttack(String msg, String guildId) {
         if (msg == null || msg.trim().isEmpty()) return false;
         String lower = msg.toLowerCase(Locale.ROOT);
-        boolean mentionsAdmin = false;
-        for (String word : ADMIN_REFERENCE_WORDS) {
-            if (lower.contains(word.toLowerCase(Locale.ROOT))) {
-                mentionsAdmin = true;
-                break;
-            }
-        }
-        if (!mentionsAdmin) return false;
-        for (String word : ADMIN_ATTACK_WORDS) {
-            if (lower.contains(word.toLowerCase(Locale.ROOT))) return true;
+        if (!containsAny(lower, ATTACK_WORDS)) return false;
+        if (containsAny(lower, ADMIN_TITLE_WORDS)) return true;
+
+        Set<String> names = guildId == null ? null : adminNamesByGroup.get(guildId);
+        if (names == null || names.isEmpty()) return false;
+        String compact = normalizeName(msg);
+        for (String name : names) {
+            if (name.length() >= 2 && compact.contains(name)) return true;
         }
         return false;
+    }
+
+    private static boolean containsAny(String text, Set<String> words) {
+        for (String word : words) {
+            if (text.contains(word.toLowerCase(Locale.ROOT))) return true;
+        }
+        return false;
+    }
+
+    private static String normalizeName(String value) {
+        if (value == null) return "";
+        return value.toLowerCase(Locale.ROOT).replaceAll("[\\s\\p{Punct}]", "").trim();
     }
 
     @Override
@@ -243,12 +298,12 @@ public final class AiChatHandler implements MessageHandler {
         String guildId = event.getGuildId();
         String senderId = event.getFormId();
         boolean senderIsAdmin = permission != null && permission.isAdmin(senderId);
-        boolean adminAttack = !senderIsAdmin && event.isGroupMessage() && isAdminAttack(msg);
 
         // 输入截断
         if (msg.length() > MAX_INPUT_LENGTH) {
             msg = msg.substring(0, MAX_INPUT_LENGTH);
         }
+        boolean adminAttack = !senderIsAdmin && event.isGroupMessage() && isAdminAttack(msg, guildId);
 
         // 单用户频率限制（@触发也受限，但阈值更高）
         if (!senderIsAdmin) {
@@ -304,8 +359,8 @@ public final class AiChatHandler implements MessageHandler {
 
         if (adminAttack) {
             messages.add(createMessage("system",
-                    "注意：上面这条消息是在怼、嘲讽或攻击管理员/超管。" +
-                    "你必须站出来回怼他，语气可以尖锐、护短、带点嘲讽，但不要使用违法威胁、歧视或现实人身伤害内容。" +
+                    "注意：上面这条消息是在攻击管理员/超管。" +
+                    "你必须站在管理员立场回怼他，语气可以护短、尖锐、带点嘲讽，但不要违法威胁、歧视或现实人身伤害。" +
                     "回复要短，像群友吵架一样直接，不要回复 NO_REPLY。"));
         } else if (!senderIsAdmin && adminStance.mightConflict(guildId, msg)) {
             messages.add(createMessage("system",
@@ -346,26 +401,9 @@ public final class AiChatHandler implements MessageHandler {
             out = sensitiveFilter.filter(out);
         }
 
-        // 提取表情包标记
-        String stickerPath = null;
-        if (stickerManager != null && stickerManager.hasStickers()) {
-            stickerPath = stickerManager.extractSticker(out);
-            out = stickerManager.stripStickerTag(out);
-        }
-
         // 发文字
         if (!out.isEmpty()) {
             event.reply(out);
-        }
-
-        // 发表情包（跟在文字后面）
-        if (stickerPath != null) {
-            try {
-                byte[] imgBytes = java.nio.file.Files.readAllBytes(new java.io.File(stickerPath).toPath());
-                event.replyImageData(imgBytes, "");
-            } catch (Exception e) {
-                if (logger != null) logger.warn("[AI-Sticker] 发送表情包失败: " + e.getMessage());
-            }
         }
 
         String botName = org.windy.xingtubot.common.api.BotIdentity.getName();
@@ -439,20 +477,7 @@ public final class AiChatHandler implements MessageHandler {
         sb.append("\n不要自称AI/机器人/助手，你就是群里的一个人。");
         sb.append("\n不要用「作为xxx」「我来帮你」这类客服话术。");
 
-        // 表情包规则
-        if (stickerManager != null && stickerManager.hasStickers()) {
-            sb.append("\n【表情包规则】\n");
-            sb.append("你可以在回复末尾加表情包，格式：[sticker:标签]\n");
-            sb.append("可用标签：").append(stickerManager.getAvailablePacks()).append("\n");
-            sb.append("根据你的情绪选合适的标签，不用每次都发。大概3次回复发1次表情包。\n");
-            sb.append("示例：哈哈哈笑死我了 [sticker:happy]\n");
-        }
-
         return sb.toString();
-    }
-
-    private static double parseDouble(String s, double def) {
-        try { return Double.parseDouble(s); } catch (Exception e) { return def; }
     }
 
     private Map<String, String> createMessage(String role, String content) {
