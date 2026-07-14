@@ -130,7 +130,7 @@ public final class LockMessages {
         if (m == null) return;
         Map<String, String> v = new HashMap<>(DEFAULTS);
         for (Map.Entry<String, String> e : DEFAULTS.entrySet()) {
-            v.put(e.getKey(), m.get(e.getKey(), e.getValue()));
+            v.put(e.getKey(), normalizeEscapes(m.get(e.getKey(), e.getValue())));
         }
         values = v;
     }
@@ -138,7 +138,16 @@ public final class LockMessages {
     /** 取文案（未知键返回空串）。 */
     public static String get(String key) {
         String v = values.get(key);
-        return v != null ? v : "";
+        return v != null ? normalizeEscapes(v) : "";
+    }
+
+    private static String normalizeEscapes(String value) {
+        if (value == null || value.isEmpty()) return value;
+        return value
+                .replace("\\r\\n", "\n")
+                .replace("\\n", "\n")
+                .replace("\\r", "\n")
+                .replace("\\t", "\t");
     }
 
     /** 取文案并做占位符替换：{@code format(key, "{a}", va, "{b}", vb)}。 */
