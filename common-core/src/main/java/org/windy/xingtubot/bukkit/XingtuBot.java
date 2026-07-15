@@ -183,7 +183,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
                 if (gw != null) {
                     qqBot = gw.bot;
                     gatewayClient = gw.gatewayClient;
-                    // 机器人昵称由 QQ API 自动写入 BotIdentity（QQGatewayClient 内部已处理）；此处仅记日志
+                    // 机器人昵称由 QQ API 自动写入 BotRuntimeState（QQGatewayClient 内部已处理）；此处仅记日志
                     gatewayClient.setOnBotNameResolved(name ->
                             getLogger().info("✅ 机器人昵称已自动获取: " + name));
                     gatewayClient.start();
@@ -213,7 +213,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         Bukkit.getScheduler().runTask(this, () -> {
             GuildMessageEvent event = new GuildMessageEvent(
                     e.getConversationId(), e.getSenderId(), e.getMessage(),
-                    e.getReplier(), e.getUsername(), e.getEventType());
+                    e.getReply(), e.getUsername(), e.getEventType());
             event.setImageUrls(e.getImageUrls()); // 透传群图片 URL，供群服互联拼 ChatImage 码
             setLastEvent(event);
             Bukkit.getPluginManager().callEvent(event);

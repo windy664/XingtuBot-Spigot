@@ -5,7 +5,7 @@ import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.platform.BotLogger;
 
 /**
- * Handler 初始化上下文：向 MessageHandler 注入平台无关的依赖。
+ * Handler 初始化上下文：向 BotMessageHandler 注入平台无关的依赖。
  * 平台特定对象（如 ProxyServer、VelocityBridge）通过 {@link #getPlatform()} 获取。
  */
 public class HandlerContext {

@@ -1,10 +1,10 @@
 package org.windy.xingtubot.common.command.impl;
 
 import org.windy.xingtubot.common.binding.BindingRepository;
+import org.windy.xingtubot.common.command.BotCommand;
 import org.windy.xingtubot.common.command.CustomCommandConfig;
 import org.windy.xingtubot.common.command.CustomCommandConfig.Entry;
-import org.windy.xingtubot.common.command.GroupCommand;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -17,7 +17,7 @@ import java.util.function.BiConsumer;
  * - 跨服执行（Velocity 模式）
  * - 未绑定提示
  */
-public class CustomCommandHandler implements GroupCommand {
+public class CustomCommandHandler implements BotCommand {
 
     private final CustomCommandConfig config;
     private final BindingRepository bindingStore;
@@ -75,18 +75,18 @@ public class CustomCommandHandler implements GroupCommand {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         Entry entry = config.match(message.trim());
         if (entry == null) return;
 
-        // 权限检查（adminOnly 已在 GroupCommandRegistry/HandlerRegistry 中处理）
+        // 权限检查（adminOnly 已在 HandlerRegistry 中处理）
 
         String args = config.extractArgs(message, entry);
 
         // 需要绑定 → 查绑定库
         String playerName = null;
         if (entry.needBind) {
-            playerName = resolvePlayerName(event.getFormId());
+            playerName = resolvePlayerName(event.getSenderId());
             if (playerName == null) {
                 event.reply(entry.notBoundMsg);
                 return;
@@ -115,10 +115,10 @@ public class CustomCommandHandler implements GroupCommand {
     }
 
     /** 执行命令（占位符解析完成后调用）。 */
-    private void executeCommand(String resolvedCmd, Entry entry, String playerName, BotMessageEvent event) {
+    private void executeCommand(String resolvedCmd, Entry entry, String playerName, BotMessageContext event) {
         if (entry.execAs == CustomCommandConfig.ExecAs.PLAYER) {
             if (playerName == null) {
-                playerName = resolvePlayerName(event.getFormId());
+                playerName = resolvePlayerName(event.getSenderId());
                 if (playerName == null) {
                     event.reply("需要绑定白名单才能以玩家身份执行此命令");
                     return;
@@ -194,7 +194,7 @@ public class CustomCommandHandler implements GroupCommand {
     }
 
     /** 智能回复：命令输出有 MC 颜色码时转 Markdown，否则纯文本。 */
-    private void replySmart(BotMessageEvent event, String output) {
+    private void replySmart(BotMessageContext event, String output) {
         if (output == null || output.isEmpty()) return;
         if (output.contains("§")) {
             event.replyMarkdown(

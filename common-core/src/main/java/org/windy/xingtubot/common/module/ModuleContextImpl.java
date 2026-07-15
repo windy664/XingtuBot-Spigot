@@ -27,6 +27,7 @@ public class ModuleContextImpl implements ModuleContext, XingtuBotHost {
     private final PermissionChecker permission;
     private final File dataFolder;
     private final Map<Class<?>, Object> services = new ConcurrentHashMap<>();
+    private final Map<String, Object> namedServices = new ConcurrentHashMap<>();
     // 部署拓扑：本实例是否为大脑（master）。由平台侧在启动时算定后 setBrain 注入；扩展只读 isBrain()。
     private volatile boolean brain = false;
 
@@ -76,6 +77,13 @@ public class ModuleContextImpl implements ModuleContext, XingtuBotHost {
         services.put(type, instance);
     }
 
+    @Override
+    public void registerService(String key, Object instance) {
+        if (key != null && instance != null) {
+            namedServices.put(key, instance);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     @Override
     public <T> T getService(Class<T> type) {
@@ -85,6 +93,11 @@ public class ModuleContextImpl implements ModuleContext, XingtuBotHost {
     @Override
     public Object getServiceObject(Class<?> type) {
         return services.get(type);
+    }
+
+    @Override
+    public Object getServiceObject(String key) {
+        return key == null ? null : namedServices.get(key);
     }
 
     /** 平台侧设置部署拓扑（本实例是否大脑）。须在扩展插件读取 {@link #isBrain()} 之前调用。 */

@@ -1,14 +1,14 @@
 package org.windy.xingtubot.common.command.impl;
 
-import org.windy.xingtubot.common.command.GroupCommand;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.command.BotCommand;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.image.TextImageRenderer;
 
 /**
  * 文字生图命令：生图 <模板> <文字>。
  * 包装 {@link TextImageRenderer}。
  */
-public class TextImageCommand implements GroupCommand {
+public class TextImageCommand implements BotCommand {
 
     private final TextImageRenderer renderer;
 
@@ -22,7 +22,7 @@ public class TextImageCommand implements GroupCommand {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         String rest = message.trim().substring(2).trim();
         if (rest.isEmpty()) {
             event.reply("用法：生图 <模板> <文字>，例如：生图 公告 今晚8点联机");

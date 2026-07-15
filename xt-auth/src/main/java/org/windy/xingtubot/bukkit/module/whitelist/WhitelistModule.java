@@ -159,7 +159,7 @@ public class WhitelistModule implements Listener {
                 return;
             }
             String title = LockMessages.get("need-login-title")
-                    .replace("{bot}", org.windy.xingtubot.common.api.BotIdentity.getName());
+                    .replace("{bot}", org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName());
             sendWelcomeTitle(player, LockMessages.format("welcome-need-login", "{title}", title));
             JoinQrMap.giveMap(plugin, player); // 加群二维码地图（强制手持）
         } else if (service.hasPending(name)) {
@@ -199,7 +199,7 @@ public class WhitelistModule implements Listener {
     @EventHandler
     public void onGuildMessage(GuildMessageEvent event) {
         String message = event.getMessage() == null ? "" : event.getMessage().trim();
-        String openid = event.getFormId();
+        String openid = event.getSenderId();
         String loginPrompt = plugin.getConfig().getString("login-prompt", "登录");
 
         String bindingPrompt = plugin.getConfig().getString("binding-prompt", "绑定");

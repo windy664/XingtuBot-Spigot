@@ -93,7 +93,7 @@ public final class BotLauncher {
         QqBot bot = new QqBot(adapter, api, allowedGroups);
         bot.addMessageListener(listener);
 
-        // 框架级调试开关单一来源：绑定后各附属插件（如 MCMOD 爬取）经 DebugFlag.isOn() 实时跟随。
+        // 框架级调试开关单一来源：绑定后各附属插件经 BotRuntimeState.isDebugEnabled() 实时跟随。
         org.windy.xingtubot.common.runtime.BotRuntimeState.bindDebug(() -> config.getBoolean("debug", false));
 
         // 构建 gateway 客户端（debug 决定是否打逐事件类型日志）

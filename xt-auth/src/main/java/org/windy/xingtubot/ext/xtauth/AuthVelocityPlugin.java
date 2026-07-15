@@ -259,7 +259,7 @@ public class AuthVelocityPlugin {
                 .orElse(null);
 
         proxy.getScheduler().buildTask(this, () -> {
-            String region = showRegion ? org.windy.xingtubot.common.util.IpGeo.province(ip) : "";
+            String region = showRegion ? org.windy.xingtubot.auth.util.IpGeo.province(ip) : "";
             String card = buildLoginCard(playerName, region, loginWord);
             String openid = resolveOpenid(host, playerName);
             String keyboard = org.windy.xingtubot.common.util.Keyboards.callbackForUser(

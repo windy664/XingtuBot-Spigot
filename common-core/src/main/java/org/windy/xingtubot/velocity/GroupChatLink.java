@@ -8,7 +8,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.module.capability.ProactiveSender;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.poll.OpenidNameCache;
@@ -39,7 +39,8 @@ public class GroupChatLink {
     private final ProxyServer proxy;
     private final String chatFormat;        // 群消息在游戏内的前缀
     // game→QQ 聊天行 markdown 模板（占位符 {player}/{message}）。
-    private volatile String gameFormat = org.windy.xingtubot.common.util.ChatlinkFormat.DEFAULT;
+    private static final String DEFAULT_GAME_FORMAT = "💬 **{player}**：{message}";
+    private volatile String gameFormat = DEFAULT_GAME_FORMAT;
     // 主动消息能力：存「取 sender 的供给器」而非 sender 本身，每次发送时现取。
     // 避免在本插件 onEnable 那一刻核心还没 registerService(ProactiveSender) → 缓存了 null 且永不自愈。
     private volatile java.util.function.Supplier<ProactiveSender> senderSupplier;
@@ -48,16 +49,16 @@ public class GroupChatLink {
     private volatile Set<String> allowedGroups = Collections.singleton("*");
     // 敏感词过滤器（仅群服互联用，可 null=不过滤）。
     private volatile org.windy.xingtubot.common.service.SensitiveFilter sensitiveFilter;
-    // 调试日志（可 null）。仅 DebugFlag 开启时输出，供排查群服互联链路用。
+    // 调试日志（可 null）。仅核心调试开关开启时输出，供排查群服互联链路用。
     private volatile BotLogger logger;
 
     // 最近一条群消息事件 + 到期时间（用于服→群挂靠回复额度，被动模式兜底）
     private final AtomicReference<Holder> lastGroupMsg = new AtomicReference<>();
 
     private static final class Holder {
-        final BotMessageEvent event;
+        final BotMessageContext event;
         final long expireAt;
-        Holder(BotMessageEvent event) {
+        Holder(BotMessageContext event) {
             this.event = event;
             this.expireAt = System.currentTimeMillis() + 5 * 60 * 1000;
         }
@@ -90,16 +91,15 @@ public class GroupChatLink {
 
     /** 设置 game→QQ 聊天行 markdown 模板（占位符 {player}/{message}；空/null 用默认）。 */
     public void setGameFormat(String format) {
-        this.gameFormat = (format == null || format.trim().isEmpty())
-                ? org.windy.xingtubot.common.util.ChatlinkFormat.DEFAULT : format;
+        this.gameFormat = (format == null || format.trim().isEmpty()) ? DEFAULT_GAME_FORMAT : format;
     }
 
-    /** 注入调试日志器（仅 DebugFlag 开启时打点；传 null 关闭）。 */
+    /** 注入调试日志器（仅核心调试开关开启时打点；传 null 关闭）。 */
     public void setLogger(BotLogger logger) {
         this.logger = logger;
     }
 
-    /** 调试日志：有 logger 且 DebugFlag 开启才输出（实时跟随 /xtb debug）。 */
+    /** 调试日志：有 logger 且核心调试开关开启才输出（实时跟随 /xtb debug）。 */
     private void debug(String msg) {
         BotLogger l = this.logger;
         if (l != null && org.windy.xingtubot.common.runtime.BotRuntimeState.isDebugEnabled()) l.info(msg);
@@ -169,7 +169,7 @@ public class GroupChatLink {
     }
 
     /** 群 → 服：把群消息显示给所有在线玩家。 */
-    public void onGroupMessage(BotMessageEvent event, String sender, String content) {
+    public void onGroupMessage(BotMessageContext event, String sender, String content) {
         // 解析消息中的 @提及：<@openid> → @昵称
         content = OpenidNameCache.getInstance().resolveMentions(content);
         content = filterChatlink(content); // QQ→游戏：群消息进游戏前过滤敏感词
@@ -201,8 +201,8 @@ public class GroupChatLink {
         // 游戏→QQ：玩家发言进群前过滤敏感词
         final String body = filterChatlink(event.getMessage());
         // 主动推送走 markdown（加粗名等修饰生效）；队列兜底走纯文本（被动通道会再统一转义）
-        final String md = org.windy.xingtubot.common.util.ChatlinkFormat.markdown(gameFormat, name, body);
-        final String plain = org.windy.xingtubot.common.util.ChatlinkFormat.plain(gameFormat, name, body);
+        final String md = formatMarkdown(gameFormat, name, body);
+        final String plain = formatPlain(gameFormat, name, body);
 
         // 广播到每个具体群：尽力先主动消息，失败回退被动队列
         final ProactiveSender s = sender();
@@ -239,5 +239,22 @@ public class GroupChatLink {
         } else {
             PendingMessageQueue.getInstance().offer(message);
         }
+    }
+
+    private static String formatMarkdown(String template, String player, String message) {
+        return template(template)
+                .replace("{player}", org.windy.xingtubot.common.util.Md.plain(player == null ? "" : player))
+                .replace("{message}", org.windy.xingtubot.common.util.Md.plain(message == null ? "" : message));
+    }
+
+    private static String formatPlain(String template, String player, String message) {
+        return template(template)
+                .replace("**", "")
+                .replace("{player}", player == null ? "" : player)
+                .replace("{message}", message == null ? "" : message);
+    }
+
+    private static String template(String template) {
+        return template == null || template.trim().isEmpty() ? DEFAULT_GAME_FORMAT : template;
     }
 }

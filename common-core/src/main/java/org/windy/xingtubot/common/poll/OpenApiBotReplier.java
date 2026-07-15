@@ -2,16 +2,16 @@ package org.windy.xingtubot.common.poll;
 
 import com.google.gson.JsonObject;
 import org.windy.xingtubot.common.qq.QqOpenApiClient;
-import org.windy.xingtubot.common.event.BotReplier;
+import org.windy.xingtubot.common.event.MessageReply;
 import org.windy.xingtubot.common.platform.PlatformAdapter;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * OpenAPI 模式的 BotReplier 实现。
+ * OpenAPI 模式的 MessageReply 实现。
  * 独立顶级类，避免 Youer 混合端 classloader 对内部类的加载问题。
  */
-public class OpenApiBotReplier implements BotReplier {
+public class OpenApiBotReplier implements MessageReply {
 
     /** 一次 OpenAPI 调用，入参为自增的 msg_seq；允许抛出受检异常。 */
     public interface ApiCall {

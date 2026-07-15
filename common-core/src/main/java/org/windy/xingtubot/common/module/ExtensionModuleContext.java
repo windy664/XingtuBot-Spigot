@@ -53,6 +53,11 @@ public final class ExtensionModuleContext implements ModuleContext {
     }
 
     @Override
+    public void registerService(String key, Object instance) {
+        host.registerService(key, instance);
+    }
+
+    @Override
     public <T> T getService(Class<T> type) {
         return host.getService(type);
     }
@@ -60,6 +65,11 @@ public final class ExtensionModuleContext implements ModuleContext {
     @Override
     public Object getServiceObject(Class<?> type) {
         return host.getServiceObject(type);
+    }
+
+    @Override
+    public Object getServiceObject(String key) {
+        return host.getServiceObject(key);
     }
 
     // ===== 插件私有部分 → 用扩展自身的 =====

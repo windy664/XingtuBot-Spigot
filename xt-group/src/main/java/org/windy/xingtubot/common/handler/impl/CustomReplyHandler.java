@@ -1,8 +1,8 @@
 package org.windy.xingtubot.common.handler.impl;
 
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.handler.MenuEntry;
-import org.windy.xingtubot.common.handler.MessageHandler;
+import org.windy.xingtubot.common.handler.BotMessageHandler;
 import org.windy.xingtubot.common.reply.CustomReply;
 import org.windy.xingtubot.common.reply.CustomReplyService;
 
@@ -17,7 +17,7 @@ import java.util.Map;
  * <p>帮助菜单从 replies.yml 的 {@code menu} 部分读取（按分类），同时合并
  * replies 中 {@code menu: true} 的条目到「💬 自定义」分类。
  */
-public class CustomReplyHandler implements MessageHandler {
+public class CustomReplyHandler implements BotMessageHandler {
 
     private final CustomReplyService customReply;
 
@@ -26,7 +26,7 @@ public class CustomReplyHandler implements MessageHandler {
     }
 
     @Override
-    public boolean matches(String message, BotMessageEvent event) {
+    public boolean matches(String message, BotMessageContext event) {
         return customReply != null && customReply.canHandle(event);
     }
 
@@ -44,7 +44,7 @@ public class CustomReplyHandler implements MessageHandler {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         if (customReply != null) {
             customReply.tryHandle(event);
         }

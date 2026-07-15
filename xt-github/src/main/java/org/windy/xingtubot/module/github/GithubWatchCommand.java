@@ -1,7 +1,7 @@
 package org.windy.xingtubot.module.github;
 
-import org.windy.xingtubot.common.command.GroupCommand;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.command.BotCommand;
+import org.windy.xingtubot.common.event.BotMessageContext;
 
 import java.util.Arrays;
 import java.util.List;
@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 /**
  * /github 命令：管理 GitHub 仓库追踪。
  */
-public class GithubWatchCommand implements GroupCommand {
+public class GithubWatchCommand implements BotCommand {
 
     private static final Pattern REPO_PATTERN = Pattern.compile("([\\w.-]+)/([\\w.-]+)");
     private final GithubTrackerService tracker;
@@ -26,7 +26,7 @@ public class GithubWatchCommand implements GroupCommand {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         String[] parts = message.split("\\s+");
         String[] args = parts.length > 1 ? Arrays.copyOfRange(parts, 1, parts.length) : new String[0];
 
@@ -55,7 +55,7 @@ public class GithubWatchCommand implements GroupCommand {
         }
     }
 
-    private void handleWatch(String[] args, BotMessageEvent event) {
+    private void handleWatch(String[] args, BotMessageContext event) {
         if (args.length < 2) {
             event.reply("用法: /github watch <owner/repo>\n"
                     + "GitHub 示例: /github watch windy664/XingtuBot-Spigot\n"
@@ -74,7 +74,7 @@ public class GithubWatchCommand implements GroupCommand {
         event.reply(added ? "✅ 已订阅 " + label : "⚠️ 已经在订阅 " + label + " 了");
     }
 
-    private void handleUnwatch(String[] args, BotMessageEvent event) {
+    private void handleUnwatch(String[] args, BotMessageContext event) {
         if (args.length < 2) {
             event.reply("用法: /github unwatch <owner/repo>");
             return;
@@ -96,7 +96,7 @@ public class GithubWatchCommand implements GroupCommand {
         return s.startsWith("gitee:") || s.contains("gitee.com/");
     }
 
-    private void handleList(BotMessageEvent event) {
+    private void handleList(BotMessageContext event) {
         List<GithubTrackerService.WatchedRepo> list = tracker.listWatched();
         if (list.isEmpty()) {
             event.reply("当前无订阅。使用 /github watch <owner/repo> 添加。");

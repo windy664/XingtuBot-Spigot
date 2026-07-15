@@ -1,7 +1,7 @@
 package org.windy.xingtubot.common.command.impl;
 
-import org.windy.xingtubot.common.command.GroupCommand;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.command.BotCommand;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.service.ModrinthApiService;
 import org.windy.xingtubot.common.service.ModrinthApiService.ProjectDetail;
 import org.windy.xingtubot.common.service.SearchResult;
@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
  * Modrinth 搜索命令：/mod 搜模组，/pack 搜整合包。
  * 交互式 session（搜索 → 回复序号 → 详情），60秒超时。
  */
-public class ModrinthCommand implements GroupCommand {
+public class ModrinthCommand implements BotCommand {
 
     private static final long SESSION_TTL = 300_000; // 5 分钟：结果按钮可能晚点才被点
     /** 点搜索结果按钮回传的详情指令前缀（按钮 data = DETAIL_CMD + 序号）。 */
@@ -57,8 +57,8 @@ public class ModrinthCommand implements GroupCommand {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
-        String formId = event.getFormId();
+    public void handle(String message, BotMessageContext event) {
+        String formId = event.getSenderId();
         String msg = message.trim();
 
         // 诊断命令
@@ -139,7 +139,7 @@ public class ModrinthCommand implements GroupCommand {
 
     // ==================== 内部 ====================
 
-    private void doSearch(String keyword, String projectType, String formId, BotMessageEvent event) {
+    private void doSearch(String keyword, String projectType, String formId, BotMessageContext event) {
         List<SearchResult> results = api.search(keyword, projectType);
         if (results.isEmpty()) {
             String typeLabel = "modpack".equals(projectType) ? "整合包" : "模组";

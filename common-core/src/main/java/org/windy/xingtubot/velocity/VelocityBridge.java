@@ -43,12 +43,6 @@ public class VelocityBridge {
         proxy.getEventManager().register(plugin, this);
     }
 
-    /** @deprecated 昵称统一走 {@link org.windy.xingtubot.common.api.BotIdentity}，本方法不再生效。 */
-    @Deprecated
-    public void setBotName(String botName) {
-        // no-op
-    }
-
     public void setRedisChannel(org.windy.xingtubot.common.bridge.CrossServerChannel redisChannel) {
         this.redisChannel = redisChannel;
         // 订阅 Redis：收到子服经 Redis 上报的消息后，复用与 PluginMessage 同一套处理逻辑，

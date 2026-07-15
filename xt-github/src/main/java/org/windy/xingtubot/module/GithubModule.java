@@ -3,7 +3,6 @@ package org.windy.xingtubot.module;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ModuleContext;
-import org.windy.xingtubot.common.module.capability.GameEcho;
 import org.windy.xingtubot.common.module.capability.ProactiveSender;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 import org.windy.xingtubot.common.service.Translator;
@@ -15,6 +14,7 @@ import org.windy.xingtubot.module.github.GithubWatchCommand;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * GitHub 项目追踪模块：负责核心生命周期调度和消息分发。
@@ -134,8 +134,15 @@ public final class GithubModule implements BotModule {
             PendingMessageQueue.getInstance().offer(md);
         }
 
-        GameEcho echo = ctx.getService(GameEcho.class);
-        if (echo != null) echo.echo(md);
+        echoToGame(ctx, md);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void echoToGame(ModuleContext ctx, String md) {
+        Object echo = ctx.getServiceObject("xingtubot.chatlink.gameEcho");
+        if (echo instanceof Consumer) {
+            ((Consumer<String>) echo).accept(md);
+        }
     }
 
     @Override

@@ -2,7 +2,7 @@ package org.windy.xingtubot.bungee;
 
 import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.config.ServerInfo;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.reply.PlaceholderResolver;
 
 import java.text.SimpleDateFormat;
@@ -26,7 +26,7 @@ public class BungeeCordPlaceholders implements PlaceholderResolver {
     }
 
     @Override
-    public void resolve(String text, BotMessageEvent event, java.util.function.Consumer<String> callback) {
+    public void resolve(String text, BotMessageContext event, java.util.function.Consumer<String> callback) {
         String builtin = resolveBuiltin(text, event);
         if (bridge != null && builtin.contains("%")) {
             bridge.resolvePapi(event.getUsername(), builtin, callback);
@@ -35,7 +35,7 @@ public class BungeeCordPlaceholders implements PlaceholderResolver {
         callback.accept(builtin);
     }
 
-    private String resolveBuiltin(String text, BotMessageEvent event) {
+    private String resolveBuiltin(String text, BotMessageContext event) {
         if (text == null || text.isEmpty()) return text;
         String r = text;
         if (r.contains("{online}")) {

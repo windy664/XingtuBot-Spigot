@@ -2,6 +2,7 @@ package org.windy.xingtubot.bungee;
 
 import net.md_5.bungee.api.ProxyServer;
 import org.windy.xingtubot.common.config.BotConfig;
+import org.windy.xingtubot.common.event.BotMessage;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.handler.AbstractCommandHandler;
 import org.windy.xingtubot.common.handler.impl.OpenIdCaptureHandler;
@@ -33,8 +34,8 @@ public class BungeeCordCommandHandler extends AbstractCommandHandler {
         openIdCapture.setConsoleLogger(m -> proxy.getLogger().info(m));
         getRegistry().register(openIdCapture);
 
-        // GameChatBridge
-        getHost().registerService(GameChatBridge.class, (GameChatBridge) (event, content) -> {
+        getHost().registerService("xingtubot.chatlink.gameBridge",
+                (java.util.function.BiConsumer<org.windy.xingtubot.common.event.BotMessageContext, String>) (event, content) -> {
             BungeeCordGroupChatLink gcl = getHost().getService(BungeeCordGroupChatLink.class);
             if (gcl != null) gcl.onGroupMessage(event, senderNameOf(event), content);
         });
@@ -61,7 +62,7 @@ public class BungeeCordCommandHandler extends AbstractCommandHandler {
         handle(event, getPermission().isAdmin(event.getSenderId()));
     }
 
-    private String senderNameOf(BotMessageEvent event) {
+    private String senderNameOf(BotMessage event) {
         return senderNameOf(event, config.getString("entries-Empty", "群成员"));
     }
 }

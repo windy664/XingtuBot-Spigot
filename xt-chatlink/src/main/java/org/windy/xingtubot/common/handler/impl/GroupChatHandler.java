@@ -1,7 +1,7 @@
 package org.windy.xingtubot.common.handler.impl;
 
-import org.windy.xingtubot.common.event.BotMessageEvent;
-import org.windy.xingtubot.common.handler.MessageHandler;
+import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.handler.BotMessageHandler;
 
 import java.util.function.BiConsumer;
 
@@ -18,28 +18,28 @@ import java.util.function.BiConsumer;
  *       命中后会自动剥掉前缀；留空=所有（经监听模式过滤的）群消息都转发。</li>
  * </ul>
  */
-public class GroupChatHandler implements MessageHandler {
+public class GroupChatHandler implements BotMessageHandler {
 
     /**
      * 广播回调：(event, message) -> 广播进游戏。
      * 由平台侧注入具体实现。
      */
-    private final BiConsumer<BotMessageEvent, String> broadcaster;
+    private final BiConsumer<BotMessageContext, String> broadcaster;
 
     /** 群服互联触发前缀；null/空=不需要前缀（catch-all）。 */
     private final String prefix;
 
-    public GroupChatHandler(BiConsumer<BotMessageEvent, String> broadcaster) {
+    public GroupChatHandler(BiConsumer<BotMessageContext, String> broadcaster) {
         this(broadcaster, null);
     }
 
-    public GroupChatHandler(BiConsumer<BotMessageEvent, String> broadcaster, String prefix) {
+    public GroupChatHandler(BiConsumer<BotMessageContext, String> broadcaster, String prefix) {
         this.broadcaster = broadcaster;
         this.prefix = (prefix == null || prefix.trim().isEmpty()) ? null : prefix.trim();
     }
 
     @Override
-    public boolean matches(String message, BotMessageEvent event) {
+    public boolean matches(String message, BotMessageContext event) {
         if (broadcaster == null) return false;
         if (prefix == null) return true; // catch-all
         return message != null && message.trim().startsWith(prefix);
@@ -59,7 +59,7 @@ public class GroupChatHandler implements MessageHandler {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         String content = message == null ? "" : message.trim();
         if (prefix != null && content.startsWith(prefix)) {
             content = content.substring(prefix.length()).trim();

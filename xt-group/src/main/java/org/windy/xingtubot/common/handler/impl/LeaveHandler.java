@@ -1,8 +1,8 @@
 package org.windy.xingtubot.common.handler.impl;
 
 import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.event.BotMessageEvent;
-import org.windy.xingtubot.common.handler.MessageHandler;
+import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.handler.BotMessageHandler;
 
 import java.util.Set;
 
@@ -14,7 +14,7 @@ import java.util.Set;
  *
  * <p>需要在 QQ 开放平台回调配置中勾选「群成员减少」事件订阅。
  */
-public class LeaveHandler implements MessageHandler {
+public class LeaveHandler implements BotMessageHandler {
 
     private static final String DEFAULT_LEAVE = "{user} 离开了我们";
 
@@ -27,17 +27,17 @@ public class LeaveHandler implements MessageHandler {
     }
 
     @Override
-    public boolean matches(String message, BotMessageEvent event) {
+    public boolean matches(String message, BotMessageContext event) {
         if (!"GROUP_MEMBER_REMOVE".equals(event.getEventType())) return false;
-        return isGroupAllowed(event.getGuildId());
+        return isGroupAllowed(event.getConversationId());
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         String text = leaveMessage;
         if (text == null || text.isEmpty()) return;
         String username = event.getUsername() != null ? event.getUsername() : "群成员";
-        text = text.replace("{bot}", org.windy.xingtubot.common.api.BotIdentity.getName())
+        text = text.replace("{bot}", org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName())
                    .replace("{user}", username);
         event.replyMarkdown(text, null);
     }

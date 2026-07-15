@@ -233,7 +233,7 @@ public class McmodApiService {
     // ==================== 详情（按类型分派） ====================
 
     /** 拉取并发送详情：先发封面图（若有），再发 markdown 卡片。一次抓取，图文一起。 */
-    public void sendDetail(Entry e, org.windy.xingtubot.common.event.BotMessageEvent event) {
+    public void sendDetail(Entry e, org.windy.xingtubot.common.event.BotMessageContext event) {
         debug("抓详情 type=" + e.type.label + " 标题=\"" + e.title + "\" → " + e.url);
         String html = fetch(e.url, "https://search.mcmod.cn/");
         if (html == null) {
@@ -677,7 +677,7 @@ public class McmodApiService {
 
     /** 调试日志：仅当框架调试模式（核心 config 的 debug）开启时输出，跟随框架开关。 */
     private void debug(String msg) {
-        if (logger != null && org.windy.xingtubot.common.api.DebugFlag.isOn()) {
+        if (logger != null && org.windy.xingtubot.common.runtime.BotRuntimeState.isDebugEnabled()) {
             logger.info("[MCMOD][debug] " + msg);
         }
     }

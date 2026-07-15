@@ -1,7 +1,7 @@
 package org.windy.xingtubot.velocity;
 
 import com.velocitypowered.api.proxy.ProxyServer;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.reply.PlaceholderResolver;
 
 import java.text.SimpleDateFormat;
@@ -26,7 +26,7 @@ public class VelocityPlaceholders implements PlaceholderResolver {
     }
 
     @Override
-    public void resolve(String text, BotMessageEvent event, java.util.function.Consumer<String> callback) {
+    public void resolve(String text, BotMessageContext event, java.util.function.Consumer<String> callback) {
         String builtin = resolveBuiltin(text, event);
         if (bridge != null && builtin.contains("%")) {
             String player = boundPlayer(event);
@@ -39,11 +39,11 @@ public class VelocityPlaceholders implements PlaceholderResolver {
     }
 
     /** 发送者绑定的玩家名——绑定解析由 xt-auth 的 PlaceholderResolver 处理，此处只用 event username。 */
-    private String boundPlayer(BotMessageEvent event) {
+    private String boundPlayer(BotMessageContext event) {
         return null; // xt-auth 注册的 PlaceholderResolver 会覆盖 {sender}
     }
 
-    private String resolveBuiltin(String text, BotMessageEvent event) {
+    private String resolveBuiltin(String text, BotMessageContext event) {
         if (text == null || text.isEmpty()) return text;
         String r = text;
         if (r.contains("{online}")) {

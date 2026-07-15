@@ -42,26 +42,10 @@ public class XingtuBotServiceImpl implements XingtuBotService {
     }
 
     @Override
-    public void registerHandler(org.windy.xingtubot.common.handler.MessageHandler handler) {
-        org.windy.xingtubot.common.handler.HandlerRegistry r = this.registry;
-        if (r != null && handler != null) {
-            r.register(handler);
-        }
-    }
-
-    @Override
     public void registerMessageHandler(org.windy.xingtubot.common.handler.BotMessageHandler handler) {
         org.windy.xingtubot.common.handler.HandlerRegistry r = this.registry;
         if (r != null && handler != null) {
             r.register(handler);
-        }
-    }
-
-    @Override
-    public void registerCommand(org.windy.xingtubot.common.command.GroupCommand command) {
-        org.windy.xingtubot.common.handler.HandlerRegistry r = this.registry;
-        if (r != null && command != null) {
-            r.register(command);
         }
     }
 

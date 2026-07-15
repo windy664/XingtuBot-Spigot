@@ -2,7 +2,7 @@ package org.windy.xingtubot.common.handler;
 
 /**
  * 帮助菜单的一条动态条目。core 自有的中立类型，不依赖任何具体功能。
- * 供 {@link MessageHandler#menuEntries()} 返回，由 {@link HandlerRegistry#buildMenu} 统一收集渲染。
+ * 供 {@link BotMessageHandler#menuEntries()} 返回，由 {@link HandlerRegistry#buildMenu} 统一收集渲染。
  */
 public final class MenuEntry {
 

@@ -1,7 +1,7 @@
 package org.windy.xingtubot.common.command.impl;
 
-import org.windy.xingtubot.common.command.GroupCommand;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.command.BotCommand;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.util.Md;
 
 import java.security.MessageDigest;
@@ -17,7 +17,7 @@ import java.util.concurrent.ThreadLocalRandom;
  *   <li>「选择 A 还是 B」：从候选里随机挑一个。</li>
  * </ul>
  */
-public class FortuneCommand implements GroupCommand {
+public class FortuneCommand implements BotCommand {
 
     private static final String[] LEVELS = {
             "大吉", "中吉", "小吉", "吉", "末吉", "凶", "大凶"
@@ -35,10 +35,10 @@ public class FortuneCommand implements GroupCommand {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         if (message.equals("运势")) {
             // 多字段 → Markdown 卡片
-            event.replyMarkdown(fortuneCard(event.getFormId()), null);
+            event.replyMarkdown(fortuneCard(event.getSenderId()), null);
         } else if (message.equals("骰子") || message.equalsIgnoreCase("roll")) {
             // 一行话 → 纯文本
             event.reply("🎲 你掷出了 " + (ThreadLocalRandom.current().nextInt(100) + 1) + " 点");

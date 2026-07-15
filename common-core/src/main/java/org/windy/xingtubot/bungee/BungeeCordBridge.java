@@ -40,10 +40,6 @@ public class BungeeCordBridge implements Listener {
         proxy.getPluginManager().registerListener(plugin, this);
     }
 
-    /** @deprecated 昵称统一走 {@link org.windy.xingtubot.common.api.BotIdentity}，不再生效。 */
-    @Deprecated
-    public void setBotName(String botName) { /* no-op */ }
-
     public void setRedisChannel(CrossServerChannel redisChannel) {
         this.redisChannel = redisChannel;
         // 订阅 Redis：收到子服经 Redis 上报的消息，复用与 PluginMessage 同一套处理；应答走 Redis 广播。

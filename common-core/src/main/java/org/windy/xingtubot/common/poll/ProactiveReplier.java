@@ -1,7 +1,7 @@
 package org.windy.xingtubot.common.poll;
 
 import org.windy.xingtubot.common.qq.QqOpenApiClient;
-import org.windy.xingtubot.common.event.BotReplier;
+import org.windy.xingtubot.common.event.MessageReply;
 import org.windy.xingtubot.common.platform.PlatformAdapter;
 
 /**
@@ -9,9 +9,9 @@ import org.windy.xingtubot.common.platform.PlatformAdapter;
  * （{@code INTERACTION_CREATE}）回应后给群/单聊发回复。
  *
  * <p>走 OpenAPI 主动消息接口（需机器人具备主动消息权限）。富媒体（图片/语音/视频/ark）
- * 主动通道这里不展开，按 {@link BotReplier} 默认降级为文本。
+ * 主动通道这里不展开，按 {@link MessageReply} 默认降级为文本。
  */
-public class ProactiveReplier implements BotReplier {
+public class ProactiveReplier implements MessageReply {
 
     private final QqOpenApiClient api;
     private final PlatformAdapter adapter;

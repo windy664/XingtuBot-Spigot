@@ -137,7 +137,7 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
                 if (gw != null) {
                     qqBot = gw.bot;
                     gatewayClient = gw.gatewayClient;
-                    // 机器人昵称由 QQ API 自动写入 BotIdentity（QQGatewayClient 内部已处理）；此处仅记日志
+                    // 机器人昵称由 QQ API 自动写入 BotRuntimeState（QQGatewayClient 内部已处理）；此处仅记日志
                     gatewayClient.setOnBotNameResolved(name ->
                             adapter.log("✅ 机器人昵称已自动获取: " + name));
                     gatewayClient.start();

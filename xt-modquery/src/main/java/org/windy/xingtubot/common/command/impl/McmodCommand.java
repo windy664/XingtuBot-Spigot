@@ -1,7 +1,7 @@
 package org.windy.xingtubot.common.command.impl;
 
-import org.windy.xingtubot.common.command.GroupCommand;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.command.BotCommand;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.service.McmodApiService;
 import org.windy.xingtubot.common.service.McmodApiService.Entry;
 import org.windy.xingtubot.common.service.McmodApiService.Page;
@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit;
  * </ul>
  * 全部走回调按钮（INTERACTION_CREATE 合成命令）：详情 {@code /mcd N}、翻页 {@code /mcp P}。
  */
-public class McmodCommand implements GroupCommand {
+public class McmodCommand implements BotCommand {
 
     private static final long SESSION_TTL = 300_000;
     private static final String DETAIL = "/mcd ";
@@ -66,8 +66,8 @@ public class McmodCommand implements GroupCommand {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
-        String formId = event.getFormId();
+    public void handle(String message, BotMessageContext event) {
+        String formId = event.getSenderId();
         String msg = message.trim();
         String lower = msg.toLowerCase();
 
@@ -129,7 +129,7 @@ public class McmodCommand implements GroupCommand {
         doSearch(kw, type, 1, formId, event);
     }
 
-    private void doSearch(String keyword, Type type, int page, String formId, BotMessageEvent event) {
+    private void doSearch(String keyword, Type type, int page, String formId, BotMessageContext event) {
         Page p = api.search(keyword, type, page);
         if (p.entries.isEmpty()) {
             // 优先级兜底：仅 /mod 第一页搜空时，自动转 Modrinth（mcmod > modrinth）
@@ -167,7 +167,7 @@ public class McmodCommand implements GroupCommand {
     }
 
     /** Modrinth 兜底渲染：MCMOD 没结果时改用 Modrinth 结果（按钮 → /mcd N → Modrinth 详情）。 */
-    private void renderModrinth(String keyword, List<SearchResult> results, String formId, BotMessageEvent event) {
+    private void renderModrinth(String keyword, List<SearchResult> results, String formId, BotMessageContext event) {
         sessions.remove(formId);
         mrSessions.put(formId, results);
         sessionTime.put(formId, System.currentTimeMillis());

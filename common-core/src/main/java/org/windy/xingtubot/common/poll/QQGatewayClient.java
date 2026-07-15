@@ -423,7 +423,7 @@ public class QQGatewayClient {
                 String desc = me.has("desc") ? me.get("desc").getAsString() : "";
                 String avatar = me.has("avatar") ? me.get("avatar").getAsString() : "";
 
-                // 机器人昵称单一真源：直接写入 BotIdentity（取代旧的 config bot-name 回写）。
+                // 机器人昵称单一真源：直接写入 BotRuntimeState（取代旧的 config bot-name 回写）。
                 if (!"?".equals(botName)) {
                     org.windy.xingtubot.common.runtime.BotRuntimeState.setBotName(botName);
                 }

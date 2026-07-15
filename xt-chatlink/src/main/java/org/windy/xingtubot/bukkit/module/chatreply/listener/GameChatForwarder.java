@@ -37,7 +37,7 @@ public class GameChatForwarder implements Listener {
     // 群服互联目标群（复用 allowed-groups）：空/含"*"=未指定具体群。
     private volatile Set<String> allowedGroups = Collections.singleton("*");
     // game→QQ 聊天行 markdown 模板（占位符 {player}/{message}）。
-    private volatile String gameFormat = org.windy.xingtubot.common.util.ChatlinkFormat.DEFAULT;
+    private volatile String gameFormat = org.windy.xingtubot.chatlink.util.ChatlinkFormat.DEFAULT;
 
     public GameChatForwarder(PlayerLockManager lockState) {
         this.lockState = lockState;
@@ -66,7 +66,7 @@ public class GameChatForwarder implements Listener {
     /** 设置 game→QQ 聊天行 markdown 模板（占位符 {player}/{message}；空/null 用默认）。 */
     public void setGameFormat(String format) {
         this.gameFormat = (format == null || format.trim().isEmpty())
-                ? org.windy.xingtubot.common.util.ChatlinkFormat.DEFAULT : format;
+                ? org.windy.xingtubot.chatlink.util.ChatlinkFormat.DEFAULT : format;
     }
 
     /** game→QQ 的目标群：allowed-groups 里的全部具体群（排除 "*"）。无具体群时返回空。 */
@@ -101,8 +101,8 @@ public class GameChatForwarder implements Listener {
             }
         }
         // 主动推送走 markdown（加粗名等修饰生效）；队列兜底走纯文本（被动通道会再统一转义）
-        final String md = org.windy.xingtubot.common.util.ChatlinkFormat.markdown(gameFormat, player.getName(), message);
-        final String plain = org.windy.xingtubot.common.util.ChatlinkFormat.plain(gameFormat, player.getName(), message);
+        final String md = org.windy.xingtubot.chatlink.util.ChatlinkFormat.markdown(gameFormat, player.getName(), message);
+        final String plain = org.windy.xingtubot.chatlink.util.ChatlinkFormat.plain(gameFormat, player.getName(), message);
 
         // 广播到每个具体群：尽力先主动消息，失败回退被动队列
         final ProactiveSender s = sender();

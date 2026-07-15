@@ -6,7 +6,7 @@ import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.event.ChatEvent;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.event.EventHandler;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.module.capability.ProactiveSender;
 import org.windy.xingtubot.common.poll.OpenidNameCache;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
@@ -24,7 +24,8 @@ public class BungeeCordGroupChatLink implements Listener {
     private final ProxyServer proxy;
     private final String chatFormat;
     // game→QQ 聊天行 markdown 模板（占位符 {player}/{message}）。
-    private volatile String gameFormat = org.windy.xingtubot.common.util.ChatlinkFormat.DEFAULT;
+    private static final String DEFAULT_GAME_FORMAT = "💬 **{player}**：{message}";
+    private volatile String gameFormat = DEFAULT_GAME_FORMAT;
     // 主动消息能力：存「取 sender 的供给器」而非 sender 本身，每次发送时现取。
     // 避免在本插件 onEnable 那一刻核心还没 registerService(ProactiveSender) → 缓存了 null 且永不自愈。
     private volatile java.util.function.Supplier<ProactiveSender> senderSupplier;
@@ -35,9 +36,9 @@ public class BungeeCordGroupChatLink implements Listener {
     private final AtomicReference<Holder> lastGroupMsg = new AtomicReference<>();
 
     private static final class Holder {
-        final BotMessageEvent event;
+        final BotMessageContext event;
         final long expireAt;
-        Holder(BotMessageEvent event) {
+        Holder(BotMessageContext event) {
             this.event = event;
             this.expireAt = System.currentTimeMillis() + 5 * 60 * 1000;
         }
@@ -58,11 +59,10 @@ public class BungeeCordGroupChatLink implements Listener {
 
     /** 设置 game→QQ 聊天行 markdown 模板（占位符 {player}/{message}；空/null 用默认）。 */
     public void setGameFormat(String format) {
-        this.gameFormat = (format == null || format.trim().isEmpty())
-                ? org.windy.xingtubot.common.util.ChatlinkFormat.DEFAULT : format;
+        this.gameFormat = (format == null || format.trim().isEmpty()) ? DEFAULT_GAME_FORMAT : format;
     }
 
-    /** 注入调试日志器（仅 DebugFlag 开启时打点；传 null 关闭）。 */
+    /** 注入调试日志器（仅核心调试开关开启时打点；传 null 关闭）。 */
     public void setLogger(org.windy.xingtubot.common.platform.BotLogger logger) { this.logger = logger; }
 
     /** 现取主动发送器（供给器为 null 或取出 null 都返回 null,由调用方回退队列）。 */
@@ -71,7 +71,7 @@ public class BungeeCordGroupChatLink implements Listener {
         return sp != null ? sp.get() : null;
     }
 
-    /** 调试日志：有 logger 且 DebugFlag 开启才输出（实时跟随 /xtb debug）。 */
+    /** 调试日志：有 logger 且核心调试开关开启才输出（实时跟随 /xtb debug）。 */
     private void debug(String msg) {
         org.windy.xingtubot.common.platform.BotLogger l = this.logger;
         if (l != null && org.windy.xingtubot.common.runtime.BotRuntimeState.isDebugEnabled()) l.info(msg);
@@ -122,7 +122,7 @@ public class BungeeCordGroupChatLink implements Listener {
         return gid != null && (allowedGroups.contains("*") || allowedGroups.contains(gid));
     }
 
-    public void onGroupMessage(BotMessageEvent event, String sender, String content) {
+    public void onGroupMessage(BotMessageContext event, String sender, String content) {
         content = OpenidNameCache.getInstance().resolveMentions(content);
         content = filterChatlink(content);
         if (event.getConversationId() != null && !event.getConversationId().isEmpty()) {
@@ -157,8 +157,8 @@ public class BungeeCordGroupChatLink implements Listener {
         String name = player.getName();
         final String body = filterChatlink(event.getMessage());
         // 主动推送走 markdown（加粗名等修饰生效）；队列兜底走纯文本（被动通道会再统一转义）
-        final String md = org.windy.xingtubot.common.util.ChatlinkFormat.markdown(gameFormat, name, body);
-        final String plain = org.windy.xingtubot.common.util.ChatlinkFormat.plain(gameFormat, name, body);
+        final String md = formatMarkdown(gameFormat, name, body);
+        final String plain = formatPlain(gameFormat, name, body);
 
         final ProactiveSender s = sender();
         final boolean ready = s != null && s.isReady();
@@ -192,5 +192,22 @@ public class BungeeCordGroupChatLink implements Listener {
         } else {
             PendingMessageQueue.getInstance().offer(message);
         }
+    }
+
+    private static String formatMarkdown(String template, String player, String message) {
+        return template(template)
+                .replace("{player}", org.windy.xingtubot.common.util.Md.plain(player == null ? "" : player))
+                .replace("{message}", org.windy.xingtubot.common.util.Md.plain(message == null ? "" : message));
+    }
+
+    private static String formatPlain(String template, String player, String message) {
+        return template(template)
+                .replace("**", "")
+                .replace("{player}", player == null ? "" : player)
+                .replace("{message}", message == null ? "" : message);
+    }
+
+    private static String template(String template) {
+        return template == null || template.trim().isEmpty() ? DEFAULT_GAME_FORMAT : template;
     }
 }

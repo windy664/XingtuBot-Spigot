@@ -4,7 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.windy.xingtubot.common.qq.QqOpenApiClient;
 import org.windy.xingtubot.common.event.BotMessageEvent;
-import org.windy.xingtubot.common.event.BotReplier;
+import org.windy.xingtubot.common.event.MessageReply;
 import org.windy.xingtubot.common.platform.PlatformAdapter;
 
 import java.util.Collections;
@@ -210,7 +210,7 @@ public class QqBot {
 
             // 全能回复器：文本/图片/Markdown/Ark 都走 OpenAPI 被动回复（群/单聊各走对应接口）
             // 用命名静态内部类代替匿名内部类，避免 NeoForge shadow jar relocate 导致 NoClassDefFoundError
-            BotReplier replier = new OpenApiBotReplier(api, adapter, seq,
+            MessageReply replier = new OpenApiBotReplier(api, adapter, seq,
                     fGroup, fUser, fMsgId, fEventId, isGroup);
 
             // 复用现有事件模型：guildId 放会话标识（群/用户 openid），formId 放发送者
@@ -275,7 +275,7 @@ public class QqBot {
         final String fGroup = groupOpenid;
         final String fUser = userOpenid;
         final boolean isGroup = fGroup != null;
-        BotReplier replier = new ProactiveReplier(api, adapter, fGroup, fUser, isGroup);
+        MessageReply replier = new ProactiveReplier(api, adapter, fGroup, fUser, isGroup);
         String guildId = isGroup ? fGroup : fUser;
         BotMessageEvent event = new BotMessageEvent(
                 guildId, fUser, buttonData.trim(), replier, null, "INTERACTION_CREATE");

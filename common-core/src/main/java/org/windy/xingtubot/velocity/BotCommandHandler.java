@@ -3,6 +3,7 @@ package org.windy.xingtubot.velocity;
 import com.velocitypowered.api.proxy.ProxyServer;
 import net.kyori.adventure.text.Component;
 import org.windy.xingtubot.common.config.BotConfig;
+import org.windy.xingtubot.common.event.BotMessage;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.handler.AbstractCommandHandler;
 import org.windy.xingtubot.common.handler.impl.OpenIdCaptureHandler;
@@ -35,12 +36,11 @@ public class BotCommandHandler extends AbstractCommandHandler {
         openIdCapture.setConsoleLogger(m -> proxy.getConsoleCommandSource().sendMessage(Component.text(m)));
         getRegistry().register(openIdCapture);
 
-        // GameChatBridge
-        getHost().registerService(GameChatBridge.class, (GameChatBridge) (event, content) -> {
+        getHost().registerService("xingtubot.chatlink.gameBridge",
+                (java.util.function.BiConsumer<org.windy.xingtubot.common.event.BotMessageContext, String>) (event, content) -> {
             GroupChatLink gcl = getHost().getService(GroupChatLink.class);
             if (gcl != null) {
-                String withImg = org.windy.xingtubot.common.util.ChatImageCode.appendTo(
-                        content, event.getImageUrls(), event.getUsername());
+                String withImg = appendImageUrls(content, event.getImageUrls());
                 gcl.onGroupMessage(event, senderNameOf(event), withImg);
             }
         });
@@ -70,7 +70,19 @@ public class BotCommandHandler extends AbstractCommandHandler {
         handle(event, getPermission().isAdmin(event.getSenderId()));
     }
 
-    private String senderNameOf(BotMessageEvent event) {
+    private String senderNameOf(BotMessage event) {
         return senderNameOf(event, config.getString("entries-Empty", "群成员"));
+    }
+
+    private static String appendImageUrls(String content, java.util.List<String> urls) {
+        String base = content == null ? "" : content;
+        if (urls == null || urls.isEmpty()) return base;
+        StringBuilder sb = new StringBuilder(base);
+        for (String url : urls) {
+            if (url == null || url.trim().isEmpty()) continue;
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(url.trim());
+        }
+        return sb.toString();
     }
 }

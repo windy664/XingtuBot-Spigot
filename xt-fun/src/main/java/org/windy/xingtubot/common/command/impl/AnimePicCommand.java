@@ -1,8 +1,8 @@
 package org.windy.xingtubot.common.command.impl;
 
-import org.windy.xingtubot.common.command.GroupCommand;
-import org.windy.xingtubot.common.command.HttpUtil;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.command.BotCommand;
+import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.util.Http;
 
 /**
  * 随机二次元图片：「来张图」「随机图片」「来点图」「二次元」。
@@ -10,7 +10,7 @@ import org.windy.xingtubot.common.event.BotMessageEvent;
  * <p>直接使用第三方图源 URL。如果 QQ 服务器无法下载（防盗链/不可达），
  * 图片发送会失败并提示用户稍后重试。
  */
-public class AnimePicCommand implements GroupCommand {
+public class AnimePicCommand implements BotCommand {
 
     // 随机二次元图源（须返回 jpg/png，QQ 不支持 webp）。dmoe 返回 jpeg。
     private static final String[] APIS = {
@@ -28,10 +28,11 @@ public class AnimePicCommand implements GroupCommand {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         for (String api : APIS) {
             try {
-                String imageUrl = HttpUtil.resolveRedirect(api);
+                String imageUrl = Http.head(api).userAgent("XingtuBot").timeout(8000, 8000)
+                        .followRedirects(false).resolveRedirect();
                 event.replyImage(imageUrl, "🖼 来啦~");
                 return;
             } catch (Exception ignored) {

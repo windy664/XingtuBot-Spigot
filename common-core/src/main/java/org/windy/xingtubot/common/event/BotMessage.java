@@ -18,4 +18,20 @@ public interface BotMessage {
     List<String> getImageUrls();
 
     BotMessageType getMessageType();
+
+    /**
+     * Raw transport event type when available.
+     */
+    default String getEventType() {
+        return null;
+    }
+
+    default boolean isGroupAtMessage() {
+        return getMessageType() == BotMessageType.GROUP_AT;
+    }
+
+    default boolean isGroupMessage() {
+        BotMessageType type = getMessageType();
+        return type == BotMessageType.GROUP_AT || type == BotMessageType.GROUP;
+    }
 }

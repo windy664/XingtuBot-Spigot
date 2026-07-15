@@ -1,14 +1,14 @@
 package org.windy.xingtubot.common.command.impl;
 
-import org.windy.xingtubot.common.command.GroupCommand;
-import org.windy.xingtubot.common.command.HttpUtil;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.command.BotCommand;
+import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.util.Http;
 import org.windy.xingtubot.common.util.Md;
 
 /**
  * 天气查询：「天气 北京」。用 wttr.in（免密钥、中文、国内可达性一般，失败给提示）。
  */
-public class WeatherCommand implements GroupCommand {
+public class WeatherCommand implements BotCommand {
 
     @Override
     public boolean matches(String message) {
@@ -16,7 +16,7 @@ public class WeatherCommand implements GroupCommand {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         String city = message.substring("天气".length()).trim();
         if (city.isEmpty()) {
             event.reply("用法：天气 城市名，例如「天气 北京」");
@@ -24,9 +24,11 @@ public class WeatherCommand implements GroupCommand {
         }
         try {
             // 各字段分开取，便于排成 Markdown 卡片
-            String fmt = HttpUtil.enc("%C|%t|%f|%h|%w|%p");
-            String url = "https://wttr.in/" + HttpUtil.enc(city) + "?format=" + fmt + "&lang=zh&m";
-            String raw = HttpUtil.get(url);
+            String fmt = Http.enc("%C|%t|%f|%h|%w|%p");
+            String url = "https://wttr.in/" + Http.enc(city) + "?format=" + fmt + "&lang=zh&m";
+            Http.Response response = Http.get(url).userAgent("XingtuBot").timeout(8000, 10000).send();
+            if (response.code >= 400) throw new RuntimeException("HTTP " + response.code);
+            String raw = response.body.trim();
             if (raw.isEmpty() || raw.toLowerCase().contains("unknown") || !raw.contains("|")) {
                 event.reply("没查到「" + city + "」的天气，换个城市名试试~");
                 return;

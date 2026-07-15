@@ -7,7 +7,6 @@ import org.windy.xingtubot.common.command.impl.ModrinthCommand;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ModuleContext;
-import org.windy.xingtubot.common.module.capability.GameEcho;
 import org.windy.xingtubot.common.module.capability.ProactiveSender;
 import org.windy.xingtubot.common.service.BaiduTranslateService;
 import org.windy.xingtubot.common.service.McmodApiService;
@@ -100,10 +99,9 @@ public final class ModqueryModule implements BotModule {
             if (mcmod != null) modUpdate.setMcmodApi(mcmod);
             ProactiveSender sender = ctx.getService(ProactiveSender.class);
             if (sender != null) modUpdate.setProactiveSender(sender);
-            // GameEcho 由 xt-chatlink 注册：惰性解析（按回显时取），避免与本扩展加载顺序耦合
+            // 游戏回显服务由 xt-chatlink 注册：惰性解析（按回显时取），避免与本扩展加载顺序耦合
             modUpdate.setGameEcho(text -> {
-                GameEcho e = ctx.getService(GameEcho.class);
-                if (e != null) e.echo(text);
+                echoToGame(ctx, text);
             });
             modUpdate.start();
             ctx.registry().register(new ModWatchCommand(modUpdate));
@@ -117,6 +115,14 @@ public final class ModqueryModule implements BotModule {
         if (modUpdate != null) {
             modUpdate.stop();
             modUpdate = null;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void echoToGame(ModuleContext ctx, String text) {
+        Object echo = ctx.getServiceObject("xingtubot.chatlink.gameEcho");
+        if (echo instanceof java.util.function.Consumer) {
+            ((java.util.function.Consumer<String>) echo).accept(text);
         }
     }
 }

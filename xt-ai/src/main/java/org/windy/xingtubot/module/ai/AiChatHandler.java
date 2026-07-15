@@ -3,9 +3,9 @@ package org.windy.xingtubot.module.ai;
 import org.windy.xingtubot.common.ai.AiService;
 import org.windy.xingtubot.common.handler.PermissionChecker;
 import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.handler.HandlerContext;
-import org.windy.xingtubot.common.handler.MessageHandler;
+import org.windy.xingtubot.common.handler.BotMessageHandler;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.service.SensitiveFilter;
 
@@ -34,7 +34,7 @@ import java.util.function.BiPredicate;
  *   <li>输入截断 → 超长消息截到300字</li>
  * </ul>
  */
-public final class AiChatHandler implements MessageHandler {
+public final class AiChatHandler implements BotMessageHandler {
 
     private static final String NO_REPLY = "NO_REPLY";
     private static final int MAX_INPUT_LENGTH = 300;
@@ -44,7 +44,7 @@ public final class AiChatHandler implements MessageHandler {
     private final BotConfig config;
     private final BotLogger logger;
     private final SensitiveFilter sensitiveFilter;
-    private final BiPredicate<String, BotMessageEvent> commandMatcher;
+    private final BiPredicate<String, BotMessageContext> commandMatcher;
     private final PermissionChecker permission;
     private final AiChatMemory replyMemory = new AiChatMemory();
     private final GroupContextMemory groupContext = new GroupContextMemory();
@@ -65,13 +65,13 @@ public final class AiChatHandler implements MessageHandler {
     private final ConcurrentHashMap<String, ChimeInCadence> chimeInCadenceByGroup = new ConcurrentHashMap<>();
 
     public AiChatHandler(AiService aiService, BotConfig config, BotLogger logger,
-                         BiPredicate<String, BotMessageEvent> commandMatcher, PermissionChecker permission,
+                         BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
                          java.io.File dataDir) {
         this(aiService, null, config, logger, commandMatcher, permission, dataDir);
     }
 
     public AiChatHandler(AiService aiService, AiService chimeInJudgeService, BotConfig config, BotLogger logger,
-                         BiPredicate<String, BotMessageEvent> commandMatcher, PermissionChecker permission,
+                         BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
                          java.io.File dataDir) {
         this.aiService = aiService;
         this.chimeInJudgeService = chimeInJudgeService;
@@ -89,13 +89,13 @@ public final class AiChatHandler implements MessageHandler {
     public void init(HandlerContext ctx) {}
 
     @Override
-    public boolean matches(String message, BotMessageEvent event) {
+    public boolean matches(String message, BotMessageContext event) {
         if (message == null) return false;
         String et = event.getEventType();
         if (et != null && et.contains("MEMBER")) return false;
 
         // 群聊白名单：不在白名单里的群，旁听和回复都跳过
-        if (event.isGroupMessage() && !isGroupAllowed(event.getGuildId())) {
+        if (event.isGroupMessage() && !isGroupAllowed(event.getConversationId())) {
             return false;
         }
 
@@ -107,11 +107,11 @@ public final class AiChatHandler implements MessageHandler {
         // 旁听：白名单内的群消息记录到群上下文（不消耗API，只记内存）
         if (event.isGroupMessage()) {
             String username = event.getUsername() != null ? event.getUsername() : "群友";
-            groupContext.record(event.getGuildId(), username, msg);
+            groupContext.record(event.getConversationId(), username, msg);
 
-            if (permission != null && permission.isAdmin(event.getFormId())) {
-                recordAdminName(event.getGuildId(), username);
-                adminStance.record(event.getGuildId(), msg);
+            if (permission != null && permission.isAdmin(event.getSenderId())) {
+                recordAdminName(event.getConversationId(), username);
+                adminStance.record(event.getConversationId(), msg);
             }
         }
 
@@ -127,12 +127,12 @@ public final class AiChatHandler implements MessageHandler {
 
         // 触发条件2：自主参与
         if (event.isGroupMessage() && !event.isGroupAtMessage()) {
-            if (permission != null && permission.isAdmin(event.getFormId())) return false;
+            if (permission != null && permission.isAdmin(event.getSenderId())) return false;
             if (!checkHourlyBudget()) return false;
-            recordChimeInCandidate(event.getGuildId());
-            JudgeDecision decision = judgeChimeIn(msg, event.getGuildId());
+            recordChimeInCandidate(event.getConversationId());
+            JudgeDecision decision = judgeChimeIn(msg, event.getConversationId());
             if (!decision.shouldReply()) return false;
-            if (!decision.isAdminAttack() && !canCasuallyChimeIn(event.getGuildId())) return false;
+            if (!decision.isAdminAttack() && !canCasuallyChimeIn(event.getConversationId())) return false;
             pendingJudgeDecisions.put(decisionKey(event, msg), decision);
             return true;
         }
@@ -153,7 +153,7 @@ public final class AiChatHandler implements MessageHandler {
         return false;
     }
 
-    private boolean isRegisteredCommand(String msg, BotMessageEvent event) {
+    private boolean isRegisteredCommand(String msg, BotMessageContext event) {
         if (commandMatcher == null) return false;
         try {
             return commandMatcher.test(msg, event);
@@ -276,9 +276,9 @@ public final class AiChatHandler implements MessageHandler {
         return value.toLowerCase(Locale.ROOT).replaceAll("[\\s\\p{Punct}]", "").trim();
     }
 
-    private static String decisionKey(BotMessageEvent event, String msg) {
-        String guild = event.getGuildId() == null ? "" : event.getGuildId();
-        String sender = event.getFormId() == null ? "" : event.getFormId();
+    private static String decisionKey(BotMessageContext event, String msg) {
+        String guild = event.getConversationId() == null ? "" : event.getConversationId();
+        String sender = event.getSenderId() == null ? "" : event.getSenderId();
         return guild + "#" + sender + "#" + (msg == null ? 0 : msg.hashCode());
     }
 
@@ -370,12 +370,12 @@ public final class AiChatHandler implements MessageHandler {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         String rawMsg = message.trim();
         String msg = rawMsg;
         boolean isDirectAt = event.isGroupAtMessage();
-        String guildId = event.getGuildId();
-        String senderId = event.getFormId();
+        String guildId = event.getConversationId();
+        String senderId = event.getSenderId();
         boolean senderIsAdmin = permission != null && permission.isAdmin(senderId);
 
         // 输入截断
@@ -491,7 +491,7 @@ public final class AiChatHandler implements MessageHandler {
             }
         }
 
-        String botName = org.windy.xingtubot.common.api.BotIdentity.getName();
+        String botName = org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName();
         groupContext.record(guildId, botName, out);
         if (isDirectAt) {
             List<Map<String, String>> history = replyMemory.getMessages(memKey);

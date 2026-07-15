@@ -571,7 +571,7 @@ public class ModrinthApiService {
      * 从而既不丢内容、也不会因单条超 QQ 硬限而整条发送失败。
      * markdown 关时降级为纯文本框线 + 去 markdown 正文。
      */
-    public void sendDetail(org.windy.xingtubot.common.event.BotMessageEvent event,
+    public void sendDetail(org.windy.xingtubot.common.event.BotMessageContext event,
                            ProjectDetail d, boolean markdownEnabled) {
         // 1. 元数据卡（图标已嵌进卡片首行的 markdown，带尺寸，不再单独发图片）
         if (markdownEnabled) {

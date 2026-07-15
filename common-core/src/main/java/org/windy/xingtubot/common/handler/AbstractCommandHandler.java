@@ -2,6 +2,7 @@ package org.windy.xingtubot.common.handler;
 
 import org.windy.xingtubot.common.runtime.XingtuBotServiceImpl;
 import org.windy.xingtubot.common.config.BotConfig;
+import org.windy.xingtubot.common.event.BotMessage;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.image.TextImageRenderer;
 import org.windy.xingtubot.common.module.ModuleContextImpl;
@@ -116,7 +117,7 @@ public abstract class AbstractCommandHandler {
      * 惰性获取发送者名：从服务总线反射查 BindingRepository（由 xt-auth 注册）。
      * 三端共用，避免 Velocity/BungeeCord 各抄一份。
      */
-    protected String senderNameOf(BotMessageEvent event, String defaultSender) {
+    protected String senderNameOf(BotMessage event, String defaultSender) {
         try {
             Object bs = moduleCtx.getServiceObject(Class.forName("org.windy.xingtubot.common.binding.BindingService"));
             if (bs != null && event.getSenderId() != null) {

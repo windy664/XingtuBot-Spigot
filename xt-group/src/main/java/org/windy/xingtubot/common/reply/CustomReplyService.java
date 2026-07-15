@@ -1,6 +1,6 @@
 package org.windy.xingtubot.common.reply;
 
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.image.TextImageRenderer;
 import org.yaml.snakeyaml.Yaml;
 
@@ -34,9 +34,9 @@ public class CustomReplyService {
     private final Consumer<String> logger;
     // {menu} 占位符提供者：把自定义回复内容里的 {menu} 展开成「全部命令」菜单。
     // 由平台侧注入（背后是 HandlerRegistry.buildMenu，含权限分组）。null = 不展开。
-    private java.util.function.Function<BotMessageEvent, String> menuProvider;
+    private java.util.function.Function<BotMessageContext, String> menuProvider;
     // {menu} 菜单的按钮键盘提供者（按发送者是否超管自动生成命令按钮）。null=只发文字菜单不带按钮。
-    private java.util.function.Function<BotMessageEvent, String> menuKeyboardProvider;
+    private java.util.function.Function<BotMessageContext, String> menuKeyboardProvider;
 
     public CustomReplyService(File repliesFile, File imagesDir, TextImageRenderer textImage,
                               PlaceholderResolver resolver, Consumer<String> logger) {
@@ -146,7 +146,7 @@ public class CustomReplyService {
     }
 
     /** 纯查询：是否有匹配的 trigger（不发送消息）。 */
-    public boolean canHandle(BotMessageEvent event) {
+    public boolean canHandle(BotMessageContext event) {
         String msg = event.getMessage() == null ? "" : event.getMessage().trim();
         if (msg.isEmpty()) return false;
         for (CustomReply r : replies) {
@@ -156,7 +156,7 @@ public class CustomReplyService {
     }
 
     /** 匹配并发送回复。命中返回 true。 */
-    public boolean tryHandle(BotMessageEvent event) {
+    public boolean tryHandle(BotMessageContext event) {
         String msg = event.getMessage() == null ? "" : event.getMessage().trim();
         if (msg.isEmpty()) return false;
 
@@ -173,7 +173,7 @@ public class CustomReplyService {
         return false;
     }
 
-    private void dispatch(CustomReply r, BotMessageEvent event) throws Exception {
+    private void dispatch(CustomReply r, BotMessageContext event) throws Exception {
         // 图片纯走文件，不需要占位符
         if (r.type == CustomReply.Type.IMAGE) {
             File img = new File(imagesDir, r.file);
@@ -227,7 +227,7 @@ public class CustomReplyService {
      * 注入 {menu} 占位符提供者。内容里出现 {menu} 时，展开为「全部命令」菜单
      * （由 HandlerRegistry.buildMenu 生成，按分类 + 权限分组）。
      */
-    public void setMenuProvider(java.util.function.Function<BotMessageEvent, String> menuProvider) {
+    public void setMenuProvider(java.util.function.Function<BotMessageContext, String> menuProvider) {
         this.menuProvider = menuProvider;
     }
 
@@ -235,11 +235,11 @@ public class CustomReplyService {
      * 注入 {menu} 菜单的按钮键盘提供者。内容含 {menu} 的回复发送时，
      * 会自动把全部命令渲染成可点按钮（无参一键执行、带参填草稿）附在菜单下方。
      */
-    public void setMenuKeyboardProvider(java.util.function.Function<BotMessageEvent, String> provider) {
+    public void setMenuKeyboardProvider(java.util.function.Function<BotMessageContext, String> provider) {
         this.menuKeyboardProvider = provider;
     }
 
-    private void resolve(String text, BotMessageEvent event, java.util.function.Consumer<String> cb) {
+    private void resolve(String text, BotMessageContext event, java.util.function.Consumer<String> cb) {
         if (text == null) { cb.accept(""); return; }
         // 先展开 {menu}（自定义回复即菜单：内容里写 {menu} 就替换成全部命令清单）
         if (menuProvider != null && text.contains("{menu}")) {

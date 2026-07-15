@@ -2,14 +2,14 @@ package org.windy.xingtubot.common.handler.impl;
 
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.demo.RichReplyDemo;
-import org.windy.xingtubot.common.event.BotMessageEvent;
-import org.windy.xingtubot.common.handler.MessageHandler;
+import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.handler.BotMessageHandler;
 
 /**
  * 富消息 demo（发「测试」或「/demo」触发）。
  * 包装 {@link RichReplyDemo}，priority=90。
  */
-public class RichReplyDemoHandler implements MessageHandler {
+public class RichReplyDemoHandler implements BotMessageHandler {
 
     private final BotConfig config;
 
@@ -18,13 +18,13 @@ public class RichReplyDemoHandler implements MessageHandler {
     }
 
     @Override
-    public boolean matches(String message, BotMessageEvent event) {
+    public boolean matches(String message, BotMessageContext event) {
         String msg = message.trim();
         return msg.equals("测试") || msg.equalsIgnoreCase("/demo");
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         RichReplyDemo.run(event, config);
     }
 

@@ -41,6 +41,8 @@ public interface ModuleContext {
      */
     void registerService(Class<?> type, Object instance);
 
+    void registerService(String key, Object instance);
+
     /**
      * 获取其他模块注册的共享服务。未注册返回 null。
      */
@@ -53,4 +55,6 @@ public interface ModuleContext {
      * 可通过 {@code Class.forName(...)} 反射获取 Class 对象后调用本方法。
      */
     Object getServiceObject(Class<?> type);
+
+    Object getServiceObject(String key);
 }

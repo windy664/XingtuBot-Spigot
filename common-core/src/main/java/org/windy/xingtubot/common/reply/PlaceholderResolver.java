@@ -1,6 +1,6 @@
 package org.windy.xingtubot.common.reply;
 
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 
 /**
  * 占位符解析接口：把模板里的 {online}/{sender}/{date}… 以及（二期）PAPI 的 %xxx%
@@ -16,5 +16,5 @@ public interface PlaceholderResolver {
      * 内置占位符同步替换；含 PAPI %xxx% 且发送者绑定+在线时异步解析，否则原样。
      * 回调一定会被调用一次。
      */
-    void resolve(String text, BotMessageEvent event, java.util.function.Consumer<String> callback);
+    void resolve(String text, BotMessageContext event, java.util.function.Consumer<String> callback);
 }

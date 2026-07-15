@@ -146,45 +146,6 @@ public class PendingMessageQueue {
         return sb.toString();
     }
 
-    /**
-     * 取出所有挂起消息（全局 + 所有定向），合并为一条返回。
-     * 向后兼容旧代码。
-     *
-     * @deprecated 请使用 {@link #drainForGroup(String)} 按群消费
-     */
-    @Deprecated
-    public String drainAll() {
-        List<String> msgs = new ArrayList<>();
-
-        for (Map.Entry<String, Queue<String>> entry : targetedQueue.entrySet()) {
-            Queue<String> q = entry.getValue();
-            String msg;
-            while ((msg = q.poll()) != null) {
-                msgs.add(msg);
-            }
-        }
-
-        String msg;
-        while ((msg = globalQueue.poll()) != null) {
-            msgs.add(msg);
-        }
-
-        if (msgs.isEmpty()) return null;
-
-        flushToDisk();
-
-        if (msgs.size() == 1) return msgs.get(0);
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("📢 你有 ").append(msgs.size()).append(" 条待推送消息\n");
-        sb.append("══════════════\n");
-        for (int i = 0; i < msgs.size(); i++) {
-            if (i > 0) sb.append("\n────────────\n");
-            sb.append(msgs.get(i));
-        }
-        return sb.toString();
-    }
-
     /** 清空所有队列（测试/重置用）。 */
     public void clear() {
         globalQueue.clear();

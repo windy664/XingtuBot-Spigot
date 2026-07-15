@@ -2,8 +2,8 @@ package org.windy.xingtubot.common.handler.impl;
 
 import org.windy.xingtubot.common.binding.BindingEntry;
 import org.windy.xingtubot.common.binding.BindingRepository;
-import org.windy.xingtubot.common.event.BotMessageEvent;
-import org.windy.xingtubot.common.handler.MessageHandler;
+import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.handler.BotMessageHandler;
 import org.windy.xingtubot.common.util.Md;
 import org.windy.xingtubot.common.whitelist.LockMessages;
 
@@ -25,7 +25,7 @@ import java.util.function.Supplier;
  * 大脑模式由 AuthModule 注册到服务总线），注册进共享 {@code HandlerRegistry} 后两种部署通用。
  * 回复统一走 markdown 卡片，与绑定/登录成功卡片同一审美。
  */
-public class BindingAdminHandler implements MessageHandler {
+public class BindingAdminHandler implements BotMessageHandler {
 
     private static final int LIST_LIMIT = 40; // 列表最多展示条数，超出给出提示
 
@@ -36,7 +36,7 @@ public class BindingAdminHandler implements MessageHandler {
     }
 
     @Override
-    public boolean matches(String message, BotMessageEvent event) {
+    public boolean matches(String message, BotMessageContext event) {
         String m = message.trim();
         String list = LockMessages.get("admin-trigger-list");
         String query = LockMessages.get("admin-trigger-query");
@@ -45,7 +45,7 @@ public class BindingAdminHandler implements MessageHandler {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         String m = message.trim();
         String list = LockMessages.get("admin-trigger-list");
         String query = LockMessages.get("admin-trigger-query");
@@ -67,7 +67,7 @@ public class BindingAdminHandler implements MessageHandler {
         });
     }
 
-    private void listAll(BindingRepository store, BotMessageEvent event) {
+    private void listAll(BindingRepository store, BotMessageContext event) {
         List<BindingEntry> all = store.all();
         String title = LockMessages.get("admin-card-title-list");
         if (all == null || all.isEmpty()) {
@@ -89,7 +89,7 @@ public class BindingAdminHandler implements MessageHandler {
         event.replyMarkdown(card.build(), null);
     }
 
-    private void query(BindingRepository store, BotMessageEvent event, String arg) {
+    private void query(BindingRepository store, BotMessageContext event, String arg) {
         if (arg.isEmpty()) {
             event.replyMarkdown(Md.card("🔎", LockMessages.get("admin-card-title-query"))
                     .quote(LockMessages.get("admin-query-usage")).build(), null);
@@ -111,7 +111,7 @@ public class BindingAdminHandler implements MessageHandler {
                 .build(), null);
     }
 
-    private void unbind(BindingRepository store, BotMessageEvent event, String player) {
+    private void unbind(BindingRepository store, BotMessageContext event, String player) {
         if (player.isEmpty()) {
             event.replyMarkdown(Md.card("🔓", LockMessages.get("admin-card-title-unbind"))
                     .quote(LockMessages.get("admin-unbind-usage")).build(), null);

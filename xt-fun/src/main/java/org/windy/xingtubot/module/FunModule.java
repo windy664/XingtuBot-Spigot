@@ -40,14 +40,14 @@ public final class FunModule implements BotModule {
     }
 
     private void regIf(ModuleContext ctx, String key, boolean def,
-                       java.util.function.Supplier<org.windy.xingtubot.common.handler.MessageHandler> supplier) {
+                       java.util.function.Supplier<org.windy.xingtubot.common.handler.BotMessageHandler> supplier) {
         if (ctx.config().getBoolean(key, def)) {
             ctx.registry().register(supplier.get());
         }
     }
 
     private void regIfCmd(ModuleContext ctx, String key, boolean def,
-                          java.util.function.Supplier<org.windy.xingtubot.common.command.GroupCommand> supplier) {
+                          java.util.function.Supplier<org.windy.xingtubot.common.command.BotCommand> supplier) {
         if (ctx.config().getBoolean(key, def)) {
             ctx.registry().register(supplier.get());
         }

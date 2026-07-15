@@ -81,11 +81,11 @@ public class ChatlinkVelocityPlugin {
         if (config.getBoolean("chatreply-enable", true) && host != null) {
             groupChatLink = new GroupChatLink(proxy, this,
                     config.getString("chat-format", "§b[QQ群] §f"));
-            // 注入调试日志器：DebugFlag 开启时在群服互联两条链路入口/兜底打点
+            // 注入调试日志器：核心调试开关开启时在群服互联两条链路入口/兜底打点
             groupChatLink.setLogger(botLogger);
             // game→QQ 聊天行 markdown 模板（{player}/{message}）
             groupChatLink.setGameFormat(config.getString("chatlink-format",
-                    org.windy.xingtubot.common.util.ChatlinkFormat.DEFAULT));
+                    org.windy.xingtubot.chatlink.util.ChatlinkFormat.DEFAULT));
             // 主动消息能力：传「供给器」每次发送时现取核心的 ProactiveSender service。
             // 不能在此处一次性 getService 缓存——本扩展 onEnable 时核心可能还没注册 → 缓存 null 且永不自愈。
             groupChatLink.setSender(

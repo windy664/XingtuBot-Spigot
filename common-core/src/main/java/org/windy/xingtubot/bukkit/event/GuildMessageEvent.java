@@ -4,7 +4,6 @@ import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
 import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.event.BotMessageType;
-import org.windy.xingtubot.common.event.BotReplier;
 import org.windy.xingtubot.common.event.MessageReply;
 
 import java.util.Collections;
@@ -14,9 +13,8 @@ import java.util.function.Consumer;
 /**
  * Bukkit event bridged from {@code BotMessageEvent}.
  *
- * <p>Legacy accessors such as {@code getGuildId()} and {@code getFormId()} are
- * kept for existing modules. New code should prefer the {@link BotMessageContext}
- * accessors when it only needs a conversation id or sender id.</p>
+ * <p>Use {@link BotMessageContext} accessors when modules need a conversation
+ * id or sender id.</p>
  */
 public class GuildMessageEvent extends Event implements BotMessageContext {
     private static final HandlerList handlers = new HandlerList();
@@ -24,28 +22,28 @@ public class GuildMessageEvent extends Event implements BotMessageContext {
     private final String guildId;
     private final String formId;
     private final String message;
-    private final BotReplier replier;
+    private final MessageReply replier;
     private final String username;
     private final String eventType;
     private List<String> imageUrls = Collections.emptyList();
 
     /** Compatibility constructor for simple text replies. */
     public GuildMessageEvent(String guildId, String formId, String message, Consumer<String> replyCallback) {
-        this(guildId, formId, message, replyCallback == null ? null : (BotReplier) replyCallback::accept, null);
+        this(guildId, formId, message, replyCallback == null ? null : (MessageReply) replyCallback::accept, null);
     }
 
     /** Constructor with the richer reply capability used by OpenAPI transports. */
-    public GuildMessageEvent(String guildId, String formId, String message, BotReplier replier) {
+    public GuildMessageEvent(String guildId, String formId, String message, MessageReply replier) {
         this(guildId, formId, message, replier, null);
     }
 
     /** Constructor carrying the QQ display name when available. */
-    public GuildMessageEvent(String guildId, String formId, String message, BotReplier replier, String username) {
+    public GuildMessageEvent(String guildId, String formId, String message, MessageReply replier, String username) {
         this(guildId, formId, message, replier, username, null);
     }
 
     /** Full constructor carrying the raw QQ event type for message classification. */
-    public GuildMessageEvent(String guildId, String formId, String message, BotReplier replier,
+    public GuildMessageEvent(String guildId, String formId, String message, MessageReply replier,
                              String username, String eventType) {
         this.guildId = guildId;
         this.formId = formId;
@@ -74,27 +72,9 @@ public class GuildMessageEvent extends Event implements BotMessageContext {
         return eventType;
     }
 
-    /** Legacy context id accessor. */
-    /**
-     * @deprecated Use {@link #getConversationId()}.
-     */
-    @Deprecated
-    public String getGuildId() {
-        return guildId;
-    }
-
     /** Transport-neutral conversation id. Prefer this in new code. */
     public String getConversationId() {
         return guildId;
-    }
-
-    /** Legacy sender id accessor. */
-    /**
-     * @deprecated Use {@link #getSenderId()}.
-     */
-    @Deprecated
-    public String getFormId() {
-        return formId;
     }
 
     /** Transport-neutral sender id. Prefer this in new code. */
@@ -111,16 +91,6 @@ public class GuildMessageEvent extends Event implements BotMessageContext {
         return BotMessageType.fromRawEventType(eventType);
     }
 
-    /** Legacy reply capability accessor. */
-    /**
-     * @deprecated Use {@link #getReply()}.
-     */
-    @Deprecated
-    public BotReplier getReplier() {
-        return replier;
-    }
-
-    /** Reply capability. Prefer this name in new code. */
     public MessageReply getReply() {
         return replier;
     }

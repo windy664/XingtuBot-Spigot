@@ -1,7 +1,7 @@
 package org.windy.xingtubot.common.demo;
 
 import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 
 /**
  * 富消息 demo：群里发「测试」时，把 QQ 支持的各消息类型尽量各回一遍。
@@ -19,7 +19,7 @@ public final class RichReplyDemo {
     }
 
     /** 若消息是触发词则执行 demo 并返回 true；否则返回 false。 */
-    public static boolean maybeHandle(BotMessageEvent event, BotConfig config) {
+    public static boolean maybeHandle(BotMessageContext event, BotConfig config) {
         String msg = event.getMessage() == null ? "" : event.getMessage().trim();
         if (!msg.equals("测试") && !msg.equalsIgnoreCase("/demo")) {
             return false;
@@ -28,7 +28,7 @@ public final class RichReplyDemo {
         return true;
     }
 
-    public static void run(BotMessageEvent event, BotConfig config) {
+    public static void run(BotMessageContext event, BotConfig config) {
         // 图片地址：配了用配的；未配则跳过图片 demo
         String imageUrl = config.getString("demo-image-url", "");
         String voiceUrl = config.getString("demo-voice-url", "");

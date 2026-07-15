@@ -1,8 +1,8 @@
 package org.windy.xingtubot.common.handler.impl;
 
 import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.event.BotMessageEvent;
-import org.windy.xingtubot.common.handler.MessageHandler;
+import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.handler.BotMessageHandler;
 
 import java.util.Set;
 
@@ -14,7 +14,7 @@ import java.util.Set;
  *
  * <p>需要在 QQ 开放平台回调配置中勾选「群成员增加」事件订阅。
  */
-public class WelcomeHandler implements MessageHandler {
+public class WelcomeHandler implements BotMessageHandler {
 
     private static final String DEFAULT_WELCOME = "欢迎新成员！我是 {bot}，有什么需要帮忙的随时 @我~";
 
@@ -27,16 +27,16 @@ public class WelcomeHandler implements MessageHandler {
     }
 
     @Override
-    public boolean matches(String message, BotMessageEvent event) {
+    public boolean matches(String message, BotMessageContext event) {
         if (!"GROUP_MEMBER_ADD".equals(event.getEventType())) return false;
-        return isGroupAllowed(event.getGuildId());
+        return isGroupAllowed(event.getConversationId());
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         String text = welcomeMessage;
         if (text == null || text.isEmpty()) return;
-        text = text.replace("{bot}", org.windy.xingtubot.common.api.BotIdentity.getName());
+        text = text.replace("{bot}", org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName());
         event.replyMarkdown(text, null);
     }
 

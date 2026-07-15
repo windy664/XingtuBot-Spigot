@@ -81,7 +81,7 @@ public class SpigotCommandHandler extends AbstractCommandHandler implements List
         if (msg == null) msg = "";
         BotMessageEvent botEvent = new BotMessageEvent(
                 event.getConversationId(), event.getSenderId(), msg,
-                event.getReplier(), event.getUsername(), event.getEventType());
+                event.getReply(), event.getUsername(), event.getEventType());
         botEvent.setImageUrls(event.getImageUrls());
         handle(botEvent, getPermission().isAdmin(event.getSenderId()));
     }

@@ -2,7 +2,7 @@ package org.windy.xingtubot.bukkit;
 
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.reply.PlaceholderResolver;
 import org.windy.xingtubot.bukkit.util.PapiResolver;
 
@@ -27,7 +27,7 @@ public class SpigotPlaceholders implements PlaceholderResolver {
     }
 
     @Override
-    public void resolve(String text, BotMessageEvent event, java.util.function.Consumer<String> callback) {
+    public void resolve(String text, BotMessageContext event, java.util.function.Consumer<String> callback) {
         if (text == null || text.isEmpty()) {
             callback.accept(text);
             return;
@@ -49,7 +49,7 @@ public class SpigotPlaceholders implements PlaceholderResolver {
 
     /** 查询发送者绑定的玩家名（反射调用 bindingStore.getPlayersByOpenid）。 */
     @SuppressWarnings("unchecked")
-    private String boundPlayer(BotMessageEvent event) {
+    private String boundPlayer(BotMessageContext event) {
         if (event.getSenderId() == null || bindingStore == null) return null;
         try {
             List<String> players = (List<String>) bindingStore.getClass()
@@ -63,7 +63,7 @@ public class SpigotPlaceholders implements PlaceholderResolver {
 
     // ==================== 内置占位符 ====================
 
-    private String resolveBuiltin(String text, BotMessageEvent event) {
+    private String resolveBuiltin(String text, BotMessageContext event) {
         String r = text;
 
         if (r.contains("{online}")) {
@@ -94,7 +94,7 @@ public class SpigotPlaceholders implements PlaceholderResolver {
         return r;
     }
 
-    private String senderName(BotMessageEvent event) {
+    private String senderName(BotMessageContext event) {
         if (event.getSenderId() != null) {
             String player = boundPlayer(event);
             if (player != null) return player;

@@ -1,12 +1,11 @@
 package org.windy.xingtubot.module;
 
-import org.windy.xingtubot.common.api.BotIdentity;
 import org.windy.xingtubot.common.handler.impl.GroupChatHandler;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ModuleContext;
-import org.windy.xingtubot.common.module.capability.GameChatBridge;
-import org.windy.xingtubot.common.module.capability.GameEcho;
 
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
@@ -25,6 +24,9 @@ import java.util.function.Consumer;
  * <p>可选软依赖 xt-auth 的 LockState（白名单锁联动，Bukkit 侧由 ChatlinkBukkitPlugin 获取）。
  */
 public final class ChatlinkModule implements BotModule {
+
+    public static final String GAME_ECHO_SERVICE = "xingtubot.chatlink.gameEcho";
+    public static final String GAME_BRIDGE_SERVICE = "xingtubot.chatlink.gameBridge";
 
     private final Object platformPlugin; // Bukkit JavaPlugin 或 Velocity ProxyServer
 
@@ -69,14 +71,20 @@ public final class ChatlinkModule implements BotModule {
         }
 
         // ===== QQ→游戏 兜底 handler =====
-        GameChatBridge bridge = ctx.getService(GameChatBridge.class);
-        if (bridge != null) {
+        Object bridge = ctx.getServiceObject(GAME_BRIDGE_SERVICE);
+        if (bridge instanceof BiConsumer) {
+            BiConsumer<BotMessageContext, String> gameBridge = gameBridge(bridge);
             String prefix = ctx.config().getString("startsWith", "");
             ctx.registry().register(new GroupChatHandler(
-                    (event, content) -> bridge.broadcastToGame(event, content), prefix));
+                    gameBridge::accept, prefix));
         }
 
         ctx.logger().info("[Chatlink] 群服互联已加载");
+    }
+
+    @SuppressWarnings("unchecked")
+    private BiConsumer<BotMessageContext, String> gameBridge(Object bridge) {
+        return (BiConsumer<BotMessageContext, String>) bridge;
     }
 
     /**
@@ -85,10 +93,10 @@ public final class ChatlinkModule implements BotModule {
      * <p>覆盖两条回显路径，注册进核心同一总线（{@code ctx.registry()}/{@code ctx.registerService}）：
      * <ul>
      *   <li>{@link org.windy.xingtubot.common.handler.HandlerRegistry#setGameEcho} —— 命令回复回显；</li>
-     *   <li>{@link GameEcho} 服务 —— xt-github / xt-modquery 等主动通知回显。</li>
+     *   <li>{@code xingtubot.chatlink.gameEcho} 服务 —— xt-github / xt-modquery 等主动通知回显。</li>
      * </ul>
      *
-     * <p>{@code echo-format} 支持 {@code {bot}} 占位符（替换为机器人昵称 {@link BotIdentity#getName()}），
+     * <p>{@code echo-format} 支持 {@code {bot}} 占位符（替换为机器人昵称），
      * 在<b>每次回显时</b>解析，故 bot 连接拿到真实昵称后立刻生效。
      */
     private void wireGameEcho(ModuleContext ctx) {
@@ -98,14 +106,14 @@ public final class ChatlinkModule implements BotModule {
         final String fmt = ctx.config().getString("echo-format", "§b[{bot}] §f");
         Consumer<String> echo = text -> {
             if (text == null || text.trim().isEmpty()) return;
-            String prefix = fmt.replace("{bot}", BotIdentity.getName());
+            String prefix = fmt.replace("{bot}", org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName());
             for (String line : text.split("\n")) {
                 if (line.trim().isEmpty()) continue;
                 bc.accept(prefix + line);
             }
         };
         ctx.registry().setGameEcho(echo);
-        ctx.registerService(GameEcho.class, (GameEcho) echo::accept);
+        ctx.registerService(GAME_ECHO_SERVICE, echo);
         ctx.logger().info("[Chatlink] 机器人消息回显到游戏已启用");
     }
 }

@@ -2,9 +2,9 @@ package org.windy.xingtubot.common.handler.impl;
 
 import org.windy.xingtubot.common.binding.BindingService;
 import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.handler.HandlerContext;
-import org.windy.xingtubot.common.handler.MessageHandler;
+import org.windy.xingtubot.common.handler.BotMessageHandler;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -14,7 +14,7 @@ import java.util.concurrent.CompletableFuture;
  * 依赖 BindingService（仅 Velocity 大脑端启用时生效）。
  * priority=10，仅次于 openid 捕获。
  */
-public class WhitelistHandler implements MessageHandler {
+public class WhitelistHandler implements BotMessageHandler {
 
     private final BindingService bindingService;
     private final String loginPrompt;
@@ -27,7 +27,7 @@ public class WhitelistHandler implements MessageHandler {
     }
 
     @Override
-    public boolean matches(String message, BotMessageEvent event) {
+    public boolean matches(String message, BotMessageContext event) {
         if (bindingService == null) return false;
         String trimmed = message.trim();
         // 登录/绑定=精确关键词。不命中则不 match：既不回噪声也不吞消息，其它功能照常。
@@ -35,9 +35,9 @@ public class WhitelistHandler implements MessageHandler {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         String trimmed = message.trim();
-        String openid = event.getFormId();
+        String openid = event.getSenderId();
         if (loginPrompt.equals(trimmed)) {
             // 来源是不是群里的「登录」按钮点击（INTERACTION_CREATE）。
             boolean fromButton = "INTERACTION_CREATE".equals(event.getEventType());
@@ -56,7 +56,7 @@ public class WhitelistHandler implements MessageHandler {
     }
 
     /** 成功卡片走 markdown 通道（不转义），其余文本照常。 */
-    private static void reply(BotMessageEvent event, BindingService.Result r) {
+    private static void reply(BotMessageContext event, BindingService.Result r) {
         if (r.markdown) {
             event.replyMarkdown(r.message, null);
         } else {

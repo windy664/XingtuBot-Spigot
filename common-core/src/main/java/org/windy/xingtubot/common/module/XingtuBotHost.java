@@ -35,6 +35,8 @@ public interface XingtuBotHost {
     /** 注册一个共享服务实例（如翻译/AI），供其他模块/扩展经 {@link #getService(Class)} 获取。 */
     void registerService(Class<?> type, Object instance);
 
+    void registerService(String key, Object instance);
+
     /** 获取核心或其他扩展注册的共享服务。未注册返回 null。 */
     <T> T getService(Class<T> type);
 
@@ -45,6 +47,8 @@ public interface XingtuBotHost {
      * 可通过 {@code Class.forName(...)} 反射获取 Class 对象后调用本方法。
      */
     Object getServiceObject(Class<?> type);
+
+    Object getServiceObject(String key);
 
     /** 超管权限服务。 */
     PermissionChecker permission();

@@ -36,14 +36,14 @@ public final class ChatlinkBukkitPlugin extends JavaPlugin {
         // QQ→游戏：注册 GameChatBridge（用 xt-chatlink 自己的 GuildMessageListener，带 group openid 拼回复按钮）。
         // 必须在 ExtensionBootstrap.enable 之前注册——ChatlinkModule.onEnable 会 getService(GameChatBridge) 拿它。
         if (host != null) {
-            host.registerService(org.windy.xingtubot.common.module.capability.GameChatBridge.class,
-                    (org.windy.xingtubot.common.module.capability.GameChatBridge) (botEvent, content) ->
+            host.registerService(ChatlinkModule.GAME_BRIDGE_SERVICE,
+                    (java.util.function.BiConsumer<org.windy.xingtubot.common.event.BotMessageContext, String>) (botEvent, content) ->
                             org.windy.xingtubot.bukkit.module.chatreply.listener.GuildMessageListener.broadcastToGame(
-                                    this, botEvent.getFormId(), botEvent.getUsername(),
+                                    this, botEvent.getSenderId(), botEvent.getUsername(),
                                     // 群图片 → ChatImage 码：装 mod 的玩家看到图，没装的看到文本，游戏照常
-                                    org.windy.xingtubot.common.util.ChatImageCode.appendTo(
+                                    org.windy.xingtubot.chatlink.util.ChatImageCode.appendTo(
                                             content, botEvent.getImageUrls(), botEvent.getUsername()),
-                                    botEvent.getGuildId(),
+                                    botEvent.getConversationId(),
                                     ChatreplyModule.getSensitiveFilter(),
                                     openid -> {
                                         org.windy.xingtubot.common.binding.BindingRepository repo =
@@ -73,7 +73,7 @@ public final class ChatlinkBukkitPlugin extends JavaPlugin {
             chatreplyModule.getGameChatForwarder().setAllowedGroups(config.getStringList("allowed-groups"));
             // game→QQ 聊天行 markdown 模板（{player}/{message}）
             chatreplyModule.getGameChatForwarder().setGameFormat(config.getString("chatlink-format",
-                    org.windy.xingtubot.common.util.ChatlinkFormat.DEFAULT));
+                    org.windy.xingtubot.chatlink.util.ChatlinkFormat.DEFAULT));
             // 传「供给器」每次发送时现取——不能一次性 getService 缓存（onEnable 时核心可能还没注册 → 缓存 null 永不自愈）。
             chatreplyModule.setProactiveSender(
                     () -> host.getService(org.windy.xingtubot.common.module.capability.ProactiveSender.class));

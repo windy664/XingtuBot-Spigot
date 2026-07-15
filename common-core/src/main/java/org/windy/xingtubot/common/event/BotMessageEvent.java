@@ -17,28 +17,28 @@ public class BotMessageEvent implements BotMessageContext {
     private final String guildId;
     private final String formId;
     private final String message;
-    private final BotReplier replier;
+    private final MessageReply replier;
     private final String username;
     private final String eventType;
     private List<String> imageUrls = Collections.emptyList();
 
     /** Compatibility constructor for simple text replies. */
     public BotMessageEvent(String guildId, String formId, String message, Consumer<String> replyCallback) {
-        this(guildId, formId, message, replyCallback == null ? null : (BotReplier) replyCallback::accept, null, null);
+        this(guildId, formId, message, replyCallback == null ? null : (MessageReply) replyCallback::accept, null, null);
     }
 
     /** Constructor with the richer reply capability used by OpenAPI transports. */
-    public BotMessageEvent(String guildId, String formId, String message, BotReplier replier) {
+    public BotMessageEvent(String guildId, String formId, String message, MessageReply replier) {
         this(guildId, formId, message, replier, null, null);
     }
 
     /** Constructor carrying the QQ display name when available. */
-    public BotMessageEvent(String guildId, String formId, String message, BotReplier replier, String username) {
+    public BotMessageEvent(String guildId, String formId, String message, MessageReply replier, String username) {
         this(guildId, formId, message, replier, username, null);
     }
 
     /** Full constructor carrying the raw QQ event type for message classification. */
-    public BotMessageEvent(String guildId, String formId, String message, BotReplier replier,
+    public BotMessageEvent(String guildId, String formId, String message, MessageReply replier,
                            String username, String eventType) {
         this.guildId = guildId;
         this.formId = formId;
@@ -58,35 +58,11 @@ public class BotMessageEvent implements BotMessageContext {
     }
 
     /**
-     * Legacy context id accessor.
-     *
-     * <p>For QQ channel events this maps naturally to the official guild
-     * terminology. For QQ group/C2C events this field is the conversation id
-     * kept under the old name for compatibility.</p>
-     */
-    /**
-     * @deprecated Use {@link #getConversationId()}.
-     */
-    @Deprecated
-    public String getGuildId() {
-        return guildId;
-    }
-
-    /**
      * Transport-neutral conversation id. Prefer this in new common code when
      * the exact QQ protocol field is not important.
      */
     public String getConversationId() {
         return guildId;
-    }
-
-    /** Legacy sender id accessor. The name is kept for binary/source compatibility. */
-    /**
-     * @deprecated Use {@link #getSenderId()}.
-     */
-    @Deprecated
-    public String getFormId() {
-        return formId;
     }
 
     /** Transport-neutral sender id. Prefer this in new common code. */
@@ -124,16 +100,6 @@ public class BotMessageEvent implements BotMessageContext {
         return message;
     }
 
-    /** Legacy reply capability accessor. */
-    /**
-     * @deprecated Use {@link #getReply()}.
-     */
-    @Deprecated
-    public BotReplier getReplier() {
-        return replier;
-    }
-
-    /** Reply capability. Prefer this name in new code. */
     public MessageReply getReply() {
         return replier;
     }

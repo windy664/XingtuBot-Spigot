@@ -68,10 +68,10 @@ public final class GroupFeaturesModule implements BotModule {
             // {menu} 占位符 → 全部命令菜单（自定义回复即菜单：replies.yml 里写 content: "{menu}"）。
             // 背后走 HandlerRegistry.buildMenu，按发送者是否超管分组渲染。
             customReply.setMenuProvider(event -> ctx.registry().buildMenu(
-                    ctx.permission() != null && ctx.permission().isAdmin(event.getFormId())));
+                    ctx.permission() != null && ctx.permission().isAdmin(event.getSenderId())));
             // {menu} 菜单自动附命令按钮：无参一键执行、带参点了只填草稿（不自动发）、超管命令仅管理员可点
             customReply.setMenuKeyboardProvider(event -> ctx.registry().buildMenuKeyboard(
-                    ctx.permission() != null && ctx.permission().isAdmin(event.getFormId())));
+                    ctx.permission() != null && ctx.permission().isAdmin(event.getSenderId())));
             if (customReply.count() > 0) {
                 ctx.registry().register(new CustomReplyHandler(customReply));
             }
