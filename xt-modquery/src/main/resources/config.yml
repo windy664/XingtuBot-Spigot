@@ -36,10 +36,12 @@ modwatch-list: []
 # 3. 新模组发现（自动推送新出 / 新支持目标版本的模组）
 # ==========================================
 modwatch-feed-enable: true
-# 关注的 MC 版本和加载器（逗号分隔多个）
-modwatch-feed-versions: "26.2"
-modwatch-feed-categories: "neoforge"
-# 每次拉取条数 + 检查间隔（分钟）
+# 启用来源，逗号分隔；当前支持：modrinth, mcmod；也可填 all。
+modwatch-feed-sources: "modrinth,mcmod"
+# 关注目标；Modrinth 和 MC百科共用，MC百科会按 loader 自动选择内部 api。
+modwatch-feed-version: "26.2"
+modwatch-feed-loader: "neoforge"
+# 每次每个来源拉取条数 + 检查间隔（分钟）
 modwatch-feed-limit: 20
 modwatch-feed-interval-minutes: 120
 

@@ -85,6 +85,22 @@ public class McmodApiService {
         }
     }
 
+    public static class LatestModEntry {
+        public final String classId;
+        public final String url;
+        public final String name;
+        public final String ename;
+        public final String intro;
+
+        public LatestModEntry(String classId, String url, String name, String ename, String intro) {
+            this.classId = classId;
+            this.url = url;
+            this.name = name;
+            this.ename = ename;
+            this.intro = intro;
+        }
+    }
+
     /** 一页搜索结果 + 翻页信息。 */
     public static class Page {
         public final List<Entry> entries;
@@ -135,6 +151,68 @@ public class McmodApiService {
             warn("搜索失败: " + e.getMessage());
         }
         return new Page(out, page, hasNext, type, keyword);
+    }
+
+    /**
+     * 抓取 MC百科模组检索页中按最后编辑时间排序的结果。
+     * 调用方按 classId 去重，首次运行只建立基线。
+     */
+    public List<LatestModEntry> listLatestMods(String mcver, int platform, int api, int limit) {
+        List<LatestModEntry> out = new ArrayList<>();
+        if (limit < 1) limit = 1;
+        try {
+            StringBuilder url = new StringBuilder("https://www.mcmod.cn/modlist.html?sort=lastedittime");
+            if (mcver != null && !mcver.trim().isEmpty()) {
+                url.append("&mcver=").append(URLEncoder.encode(mcver.trim(), "UTF-8"));
+            }
+            if (platform > 0) url.append("&platform=").append(platform);
+            if (api > 0) url.append("&api=").append(api);
+
+            String html = fetch(url.toString(), "https://www.mcmod.cn/modlist.html");
+            if (html == null) return out;
+
+            Document doc = Jsoup.parse(html);
+            for (Element block : doc.select("div.modlist-block")) {
+                Element link = block.selectFirst("div.title p.name a[href^=/class/]");
+                if (link == null) continue;
+
+                String href = link.attr("href").trim();
+                String classId = href.replaceAll("^.*/class/(\\d+)\\.html.*$", "$1");
+                if (classId.isEmpty() || classId.equals(href)) continue;
+
+                String name = link.text().trim();
+                String ename = "";
+                Element en = block.selectFirst("div.title p.ename a");
+                if (en != null) ename = en.text().replace('\u00A0', ' ').trim();
+
+                String intro = "";
+                Element introEl = block.selectFirst("a.intro-content span");
+                if (introEl != null) intro = introEl.text().trim();
+
+                out.add(new LatestModEntry(classId, normalize(href), name, ename, intro));
+                if (out.size() >= limit) break;
+            }
+        } catch (Exception e) {
+            warn("模组列表抓取失败: " + e.getMessage());
+        }
+        return out;
+    }
+
+    /** 详情页简介补全：仅建议在列表页简介为空的新发现条目上调用。 */
+    public String fetchModIntroSummary(String url, int maxLen) {
+        try {
+            String html = fetch(url, "https://www.mcmod.cn/modlist.html");
+            if (html == null) return "";
+            Document doc = Jsoup.parse(html);
+            Element intro = doc.selectFirst("li.text-area.common-text.font14");
+            if (intro == null) return "";
+            intro.select("script,style").remove();
+            String text = intro.text().replace('\u00A0', ' ').replaceAll("\\s+", " ").trim();
+            return trim(text, maxLen);
+        } catch (Exception e) {
+            warn("详情简介抓取失败: " + e.getMessage());
+            return "";
+        }
     }
 
     /** 分页块里是否存在 page > 当前页的链接。 */

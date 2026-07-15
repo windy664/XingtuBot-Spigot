@@ -68,9 +68,17 @@ public final class ModqueryModule implements BotModule {
         // "_uuid=...; MCMOD_SEED=..."），机器人带 cookie + 浏览器头即可跨 IP 直连爬取（已实测可行）。
         // 先注册 → 抢到 /mod、/pack（中文原生免翻译）；并独占 /item、/tutorial。
         // /mod 搜空时自动兜底到 Modrinth（优先级 mcmod > modrinth）。
-        if (mcmodEnable) {
-            McmodApiService mcmod = new McmodApiService(ctx.logger());
+        String feedSources = config.getString("modwatch-feed-sources", "modrinth").toLowerCase();
+        boolean mcmodFeedEnable = config.getBoolean("modwatch-enable", true)
+                && config.getBoolean("modwatch-feed-enable", false)
+                && ("all".equals(feedSources.trim())
+                || ("," + feedSources.replace(" ", "") + ",").contains(",mcmod,"));
+        McmodApiService mcmod = null;
+        if (mcmodEnable || mcmodFeedEnable) {
+            mcmod = new McmodApiService(ctx.logger());
             mcmod.setCookie(config.getString("mcmod-cookie", ""));
+        }
+        if (mcmodEnable) {
             McmodCommand mcmodCmd = new McmodCommand(mcmod);
             // mcmod 详情卡恒走 markdown（无开关）——产品定位 markdown-only。
             if (modrinthApi != null) mcmodCmd.setModrinthFallback(modrinthApi); // 恒非 null（上面已解耦）
@@ -89,6 +97,7 @@ public final class ModqueryModule implements BotModule {
         if (config.getBoolean("modwatch-enable", true)) {
             modUpdate = new ModUpdateService(config, ctx.logger(), null, translator);
             modUpdate.setDataDir(ctx.dataFolder());
+            if (mcmod != null) modUpdate.setMcmodApi(mcmod);
             ProactiveSender sender = ctx.getService(ProactiveSender.class);
             if (sender != null) modUpdate.setProactiveSender(sender);
             // GameEcho 由 xt-chatlink 注册：惰性解析（按回显时取），避免与本扩展加载顺序耦合

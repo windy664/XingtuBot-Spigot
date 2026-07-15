@@ -66,12 +66,21 @@ public class ModUpdateService {
     // ==================== Feed 模式（新模组发现） ====================
     private boolean feedEnabled = false;
     private long feedIntervalMinutes = 120;
+    private String feedSources = "modrinth";
+    private boolean feedModrinthEnabled = true;
+    private boolean feedMcmodEnabled = false;
     private String feedCategories = "neoforge";
     private String feedVersions = "26.2";
     private int feedLimit = 20;
+    private String mcmodFeedMcver = "26.2";
+    private int mcmodFeedPlatform = 1;
+    private int mcmodFeedApi = 13;
+    private int mcmodFeedLimit = 20;
+    private McmodApiService mcmodApi;
 
     /** 已见过的 Modrinth project_id 集合（Feed 去重用） */
     private final Set<String> seenFeedProjectIds = ConcurrentHashMap.newKeySet();
+    private final Set<String> seenMcmodClassIds = ConcurrentHashMap.newKeySet();
     /** 首次运行标记：首次只收集不通知 */
     private volatile boolean feedInitialized = false;
     /** feed 检查计数器（用于控制 feed 检查频率） */
@@ -131,6 +140,10 @@ public class ModUpdateService {
         this.dataDir = dataDir;
     }
 
+    public void setMcmodApi(McmodApiService mcmodApi) {
+        this.mcmodApi = mcmodApi;
+    }
+
     // ==================== 持久化方法 ====================
 
     private static final String FEED_STATE_FILE = "modwatch_feed_state.json";
@@ -142,7 +155,10 @@ public class ModUpdateService {
      */
     /** Modrinth 发现筛选签名：feed-versions + feed-categories。变化即视为换了关注目标，需重置发现基线。 */
     private String feedFilterSig() {
-        return (feedVersions == null ? "" : feedVersions) + "|" + (feedCategories == null ? "" : feedCategories);
+        return "sources=" + (feedSources == null ? "" : feedSources)
+                + "|mr=" + (feedVersions == null ? "" : feedVersions)
+                + "/" + (feedCategories == null ? "" : feedCategories)
+                + "|mcmod=" + mcmodFeedMcver + "/" + mcmodFeedPlatform + "/" + mcmodFeedApi;
     }
 
     private void loadFeedState() {
@@ -167,6 +183,13 @@ public class ModUpdateService {
                     seenFeedProjectIds.add(id);
                 }
             }
+            if (root.has("seenMcmodClasses")) {
+                JsonArray arr = root.getAsJsonArray("seenMcmodClasses");
+                for (int i = 0; i < arr.size(); i++) {
+                    String id = arr.get(i).getAsString();
+                    seenMcmodClassIds.add(id);
+                }
+            }
 
             // 加载初始化标记
             if (root.has("feedInit")) {
@@ -178,9 +201,10 @@ public class ModUpdateService {
             String savedSig = root.has("feedFilterSig") ? root.get("feedFilterSig").getAsString() : null;
             if (savedSig != null && !savedSig.equals(feedFilterSig())) {
                 seenFeedProjectIds.clear();
+                seenMcmodClassIds.clear();
                 feedInitialized = false;
                 info("[Feed] 筛选条件变化(" + savedSig + " → " + feedFilterSig()
-                        + ")，已重置 Modrinth 发现基线");
+                        + ")，已重置新模组发现基线");
             }
 
             info("已加载 feed 状态: " + seenFeedProjectIds.size() + " 个已知模组");
@@ -204,6 +228,12 @@ public class ModUpdateService {
             projects.add(id);
         }
         root.add("seenProjects", projects);
+
+        JsonArray mcmodClasses = new JsonArray();
+        for (String id : seenMcmodClassIds) {
+            mcmodClasses.add(id);
+        }
+        root.add("seenMcmodClasses", mcmodClasses);
 
         // 初始化标记
         root.addProperty("feedInit", feedInitialized);
@@ -288,7 +318,7 @@ public class ModUpdateService {
         info("模组更新监控已启动，监控 " + watchList.size() + " 个模组，间隔 "
                 + checkIntervalMinutes + " 分钟");
         if (feedEnabled) {
-            info("新模组发现已启用: " + feedCategories + " / " + feedVersions
+            info("新模组发现已启用: " + feedSourceSummary()
                     + "，间隔 " + feedIntervalMinutes + " 分钟");
         }
         if (!notifyTargetGroups.isEmpty()) {
@@ -432,6 +462,8 @@ public class ModUpdateService {
 
     /** Feed 发现的新模组数据项 */
     public static class FeedItem {
+        public final String source;
+        public final String sourceLabel;
         public final String projectId;
         public final String title;
         public final String slug;
@@ -439,10 +471,19 @@ public class ModUpdateService {
         public final String description;
         public final int downloads;
         public final String dateModified;
+        public final String url;
         public final long discoveredAt;
 
         public FeedItem(String projectId, String title, String slug, String author,
                         String description, int downloads, String dateModified) {
+            this("modrinth", "Modrinth", projectId, title, slug, author, description, downloads,
+                    dateModified, slug == null || slug.isEmpty() ? "" : "https://modrinth.com/mod/" + slug);
+        }
+
+        public FeedItem(String source, String sourceLabel, String projectId, String title, String slug, String author,
+                        String description, int downloads, String dateModified, String url) {
+            this.source = source;
+            this.sourceLabel = sourceLabel;
             this.projectId = projectId;
             this.title = title;
             this.slug = slug;
@@ -450,6 +491,7 @@ public class ModUpdateService {
             this.description = description;
             this.downloads = downloads;
             this.dateModified = dateModified;
+            this.url = url;
             this.discoveredAt = System.currentTimeMillis();
         }
     }
@@ -524,7 +566,7 @@ public class ModUpdateService {
      */
     public int checkFeedNow() {
         if (!feedEnabled) return -1;
-        return checkModrinthFeed();
+        return checkFeeds();
     }
 
     /**
@@ -544,23 +586,32 @@ public class ModUpdateService {
             if (d.length() > 120) d = d.substring(0, 120) + "…";
             descs.add(d);
         }
-        if (translator != null && translator.isEnabled()) {
+        boolean translateDescriptions = true;
+        for (FeedItem item : lastFeedResults) {
+            if ("mcmod".equals(item.source)) {
+                translateDescriptions = false;
+                break;
+            }
+        }
+        if (translateDescriptions && translator != null && translator.isEnabled()) {
             descs = translator.batchTranslateEnToZh(descs);
         }
 
         org.windy.xingtubot.common.util.Md card = org.windy.xingtubot.common.util.Md
                 .card("🆕", "最近发现的新模组（" + lastFeedResults.size() + " 个）")
-                .subtitle("筛选：" + feedCategories + " / " + feedVersions);
+                .subtitle(feedSourceSummary());
         for (int i = 0; i < lastFeedResults.size(); i++) {
             FeedItem item = lastFeedResults.get(i);
             String title = (item.title == null || item.title.isEmpty()) ? item.slug : item.title;
             StringBuilder line = new StringBuilder();
             line.append(i + 1).append(". ");
-            if (item.slug != null && !item.slug.isEmpty()) {
-                line.append("[**").append(title).append("**](https://modrinth.com/mod/")
-                        .append(item.slug).append(")");
+            if (item.url != null && !item.url.isEmpty()) {
+                line.append("[**").append(title).append("**](").append(item.url).append(")");
             } else {
                 line.append("**").append(title).append("**");
+            }
+            if (item.sourceLabel != null && !item.sourceLabel.isEmpty()) {
+                line.append(" `").append(item.sourceLabel).append("`");
             }
             if (item.author != null && !item.author.isEmpty()) {
                 line.append("　`").append(item.author).append("`");
@@ -579,7 +630,159 @@ public class ModUpdateService {
      *
      * @return 本次发现的新模组数量
      */
-    private int checkModrinthFeed() {
+    private int checkFeeds() {
+        boolean initializing = !feedInitialized;
+        int total = 0;
+
+        if (feedModrinthEnabled) {
+            total += checkModrinthFeed(initializing);
+        }
+        if (feedMcmodEnabled) {
+            total += checkMcmodFeed(initializing);
+        }
+
+        if (initializing) {
+            feedInitialized = true;
+            saveFeedState();
+            info("[Feed] 首次初始化完成，Modrinth 已知 " + seenFeedProjectIds.size()
+                    + " 个，MC百科已知 " + seenMcmodClassIds.size() + " 个");
+            return 0;
+        }
+        return total;
+    }
+
+    private int checkMcmodFeed(boolean initializing) {
+        if (mcmodApi == null) {
+            warn("[Feed/MCMOD] 未配置 MC百科服务，已跳过");
+            return 0;
+        }
+        try {
+            List<McmodApiService.LatestModEntry> entries = mcmodApi.listLatestMods(
+                    mcmodFeedMcver, mcmodFeedPlatform, mcmodFeedApi, mcmodFeedLimit);
+            if (entries.isEmpty()) {
+                info("[Feed/MCMOD] 搜索结果为空");
+                return 0;
+            }
+
+            List<FeedItem> newItems = new ArrayList<>();
+            for (McmodApiService.LatestModEntry e : entries) {
+                if (e.classId == null || e.classId.isEmpty()) continue;
+                if (seenMcmodClassIds.contains(e.classId)) continue;
+                seenMcmodClassIds.add(e.classId);
+
+                String title = e.name;
+                if (e.ename != null && !e.ename.isEmpty()) {
+                    title = title + " (" + e.ename + ")";
+                }
+                String intro = e.intro == null ? "" : e.intro.trim();
+                if (intro.isEmpty()) {
+                    intro = mcmodApi.fetchModIntroSummary(e.url, 180);
+                }
+
+                newItems.add(new FeedItem(
+                        "mcmod",
+                        "MC百科",
+                        e.classId,
+                        title,
+                        e.classId,
+                        "",
+                        intro,
+                        0,
+                        "",
+                        e.url
+                ));
+            }
+
+            if (initializing) {
+                info("[Feed/MCMOD] 首次初始化，已记录 " + seenMcmodClassIds.size() + " 个现有模组");
+                return 0;
+            }
+
+            if (newItems.isEmpty()) {
+                info("[Feed/MCMOD] 无新模组（已知 " + seenMcmodClassIds.size() + " 个）");
+                return 0;
+            }
+
+            lastFeedResults.addAll(0, newItems);
+            while (lastFeedResults.size() > 50) {
+                lastFeedResults.remove(lastFeedResults.size() - 1);
+            }
+
+            org.windy.xingtubot.common.util.Md card = org.windy.xingtubot.common.util.Md
+                    .card("🆕", "MC百科 新模组发现（" + newItems.size() + " 个）")
+                    .subtitle(feedSourceSummary());
+            appendFeedItems(card, newItems, false);
+            card.quote("使用 /modwatch feed 查看详情");
+
+            notifyTargets(card.build(), feedNotifyTargets);
+            saveFeedState();
+            info("[Feed/MCMOD] 发现 " + newItems.size() + " 个新模组，已投递通知");
+            return newItems.size();
+        } catch (Exception e) {
+            warn("[Feed/MCMOD] 检查失败: " + e.getMessage());
+            return 0;
+        }
+    }
+
+    private String feedSourceSummary() {
+        List<String> parts = new ArrayList<>();
+        if (feedModrinthEnabled) {
+            parts.add("Modrinth: " + feedCategories + " / " + feedVersions);
+        }
+        if (feedMcmodEnabled) {
+            parts.add("MC百科: " + mcmodFeedMcver + " / " + firstFeedLoader());
+        }
+        return parts.isEmpty() ? "来源：未配置" : "来源：" + String.join("；", parts);
+    }
+
+    private void appendFeedItems(org.windy.xingtubot.common.util.Md card, List<FeedItem> items,
+                                 boolean showDownloads) {
+        List<String> descs = new ArrayList<>();
+        for (FeedItem item : items) {
+            String d = item.description != null ? item.description : "";
+            d = d.replace("\n", " ").replace("\r", "");
+            if (d.length() > 120) d = d.substring(0, 120) + "…";
+            descs.add(d);
+        }
+        boolean translateDescriptions = true;
+        for (FeedItem item : items) {
+            if ("mcmod".equals(item.source)) {
+                translateDescriptions = false;
+                break;
+            }
+        }
+        if (translateDescriptions && translator != null && translator.isEnabled()) {
+            descs = translator.batchTranslateEnToZh(descs);
+        }
+
+        for (int i = 0; i < items.size(); i++) {
+            FeedItem item = items.get(i);
+            String title = (item.title == null || item.title.isEmpty()) ? item.slug : item.title;
+            StringBuilder line = new StringBuilder();
+            line.append(i + 1).append(". ");
+            if (item.url != null && !item.url.isEmpty()) {
+                line.append("[**").append(title).append("**](").append(item.url).append(")");
+            } else {
+                line.append("**").append(title).append("**");
+            }
+            if (item.sourceLabel != null && !item.sourceLabel.isEmpty()) {
+                line.append(" `").append(item.sourceLabel).append("`");
+            }
+            if (item.author != null && !item.author.isEmpty()) {
+                line.append("　`").append(item.author).append("`");
+            }
+            if (showDownloads && item.downloads > 0) {
+                line.append("　⬇").append(item.downloads);
+            }
+            card.line(line.toString());
+            String desc = (i < descs.size() && descs.get(i) != null) ? descs.get(i) : "";
+            if (!desc.isEmpty()) {
+                card.line("　　" + desc);
+            }
+        }
+    }
+
+    private int checkModrinthFeed(boolean initializing) {
         try {
             String facets = buildFeedFacets();
             String url = MODRINTH_API + "/search?query=&index=updated"
@@ -615,10 +818,8 @@ public class ModUpdateService {
                 newItems.add(item);
             }
 
-            if (!feedInitialized) {
+            if (initializing) {
                 // 首次运行：只收集，不通知
-                feedInitialized = true;
-                saveFeedState();
                 info("[Feed] 首次初始化完成，已记录 " + seenFeedProjectIds.size() + " 个现有模组");
                 return 0;
             }
@@ -651,18 +852,19 @@ public class ModUpdateService {
             // 生成通知消息（markdown 卡片，与 mcmod / github 通知同一套审美）
             org.windy.xingtubot.common.util.Md card = org.windy.xingtubot.common.util.Md
                     .card("🆕", "Modrinth 新模组发现（" + newItems.size() + " 个）")
-                    .subtitle("筛选：" + feedCategories + " / " + feedVersions);
+                    .subtitle(feedSourceSummary());
             for (int i = 0; i < newItems.size(); i++) {
                 FeedItem item = newItems.get(i);
                 String title = (item.title == null || item.title.isEmpty()) ? item.slug : item.title;
                 StringBuilder line = new StringBuilder();
                 line.append(i + 1).append(". ");
-                // 标题带 Modrinth 项目链接（有 slug 时）
-                if (item.slug != null && !item.slug.isEmpty()) {
-                    line.append("[**").append(title).append("**](https://modrinth.com/mod/")
-                            .append(item.slug).append(")");
+                if (item.url != null && !item.url.isEmpty()) {
+                    line.append("[**").append(title).append("**](").append(item.url).append(")");
                 } else {
                     line.append("**").append(title).append("**");
+                }
+                if (item.sourceLabel != null && !item.sourceLabel.isEmpty()) {
+                    line.append(" `").append(item.sourceLabel).append("`");
                 }
                 if (item.author != null && !item.author.isEmpty()) {
                     line.append("　`").append(item.author).append("`");
@@ -868,7 +1070,7 @@ public class ModUpdateService {
             if (tick >= feedEvery) {
                 feedTickCounter.set(0);
                 info("[Feed] 开始检查新模组...");
-                int newCount = checkModrinthFeed();
+                int newCount = checkFeeds();
                 if (newCount > 0) {
                     info("[Feed] 发现 " + newCount + " 个新模组");
                 }
@@ -1422,11 +1624,22 @@ public class ModUpdateService {
         // Feed 模式配置
         feedEnabled = config.getBoolean("modwatch-feed-enable", false);
         feedIntervalMinutes = config.getInt("modwatch-feed-interval-minutes", 120);
-        feedCategories = config.getString("modwatch-feed-categories", "neoforge");
-        feedVersions = config.getString("modwatch-feed-versions", "26.2");
+        feedSources = config.getString("modwatch-feed-sources", "modrinth").trim().toLowerCase();
+        feedModrinthEnabled = hasFeedSource("modrinth");
+        feedMcmodEnabled = hasFeedSource("mcmod");
+        feedCategories = config.getString("modwatch-feed-loader",
+                config.getString("modwatch-feed-categories", "neoforge")).trim().toLowerCase();
+        feedVersions = config.getString("modwatch-feed-version",
+                config.getString("modwatch-feed-versions", "26.2")).trim();
         feedLimit = config.getInt("modwatch-feed-limit", 20);
         if (feedLimit < 1) feedLimit = 1;
         if (feedLimit > 100) feedLimit = 100;
+        mcmodFeedMcver = config.getString("modwatch-feed-mcmod-mcver", feedVersions).trim();
+        mcmodFeedPlatform = config.getInt("modwatch-feed-mcmod-platform", 1);
+        mcmodFeedApi = config.getInt("modwatch-feed-mcmod-api", mcmodApiFromLoader(feedCategories));
+        mcmodFeedLimit = config.getInt("modwatch-feed-mcmod-limit", feedLimit);
+        if (mcmodFeedLimit < 1) mcmodFeedLimit = 1;
+        if (mcmodFeedLimit > 100) mcmodFeedLimit = 100;
 
         // Feed 通知定向
         List<String> rawFeedNotify = config.getStringList("modwatch-feed-notify");
@@ -1550,6 +1763,39 @@ public class ModUpdateService {
     private static String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
         return s.substring(0, 1).toUpperCase() + s.substring(1);
+    }
+
+    private boolean hasFeedSource(String source) {
+        if (feedSources == null || feedSources.trim().isEmpty()) return false;
+        for (String raw : feedSources.split(",")) {
+            String s = raw.trim().toLowerCase();
+            if ("all".equals(s) || source.equals(s)) return true;
+        }
+        return false;
+    }
+
+    private int mcmodApiFromLoader(String loaderConfig) {
+        String loader = loaderConfig == null ? "" : loaderConfig.trim().toLowerCase();
+        int comma = loader.indexOf(',');
+        if (comma >= 0) loader = loader.substring(0, comma).trim();
+        switch (loader) {
+            case "forge":
+                return 1;
+            case "fabric":
+                return 2;
+            case "quilt":
+                return 11;
+            case "neoforge":
+            default:
+                return 13;
+        }
+    }
+
+    private String firstFeedLoader() {
+        if (feedCategories == null || feedCategories.trim().isEmpty()) return "neoforge";
+        String loader = feedCategories.trim();
+        int comma = loader.indexOf(',');
+        return comma >= 0 ? loader.substring(0, comma).trim() : loader;
     }
 
     private void info(String msg) {
