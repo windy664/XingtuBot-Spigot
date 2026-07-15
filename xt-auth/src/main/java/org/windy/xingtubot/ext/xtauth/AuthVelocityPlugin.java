@@ -220,7 +220,6 @@ public class AuthVelocityPlugin {
         } else if (svc.isLoggedInSession(player)) {
             // 本会话已登录（跨子服切换）：静默解锁，不打扰群。
             lockManager.unlock(player);
-            directAuth.login(player);
         } else if (lockManager.autoLoginAllowed(player, currentIp(player))) {
             // IP 绑定的自动登录：同 IP 且在信任期内重进 → 免密自动登录。
             lockManager.unlock(player);

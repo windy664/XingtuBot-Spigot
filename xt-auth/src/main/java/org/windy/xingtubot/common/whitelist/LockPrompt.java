@@ -43,11 +43,19 @@ public final class LockPrompt {
     }
 
     /**
-     * 把一行文案按首个 {@code " · "} 拆成 title 的主/副标题；无分隔符则副标题为空。
+     * 把文案拆成 title 的主/副标题；优先按换行拆，其次按首个 {@code " · "} 拆；无分隔符则副标题为空。
      * @return {@code [main, sub]}
      */
     public static String[] titleParts(String text) {
         if (text == null) return new String[]{"", ""};
+        int nl = text.indexOf('\n');
+        if (nl >= 0) {
+            String main = text.substring(0, nl);
+            String sub = text.substring(nl + 1);
+            if (main.endsWith("\r")) main = main.substring(0, main.length() - 1);
+            if (sub.startsWith("\r")) sub = sub.substring(1);
+            return new String[]{main, sub};
+        }
         int i = text.indexOf(" · ");
         if (i < 0) return new String[]{text, ""};
         return new String[]{text.substring(0, i), text.substring(i + 3)};
