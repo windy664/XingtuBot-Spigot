@@ -1,7 +1,7 @@
 package org.windy.xingtubot.common.poll;
 
 import com.google.gson.JsonObject;
-import org.windy.xingtubot.common.api.QqOpenApiClient;
+import org.windy.xingtubot.common.qq.QqOpenApiClient;
 import org.windy.xingtubot.common.event.BotReplier;
 import org.windy.xingtubot.common.platform.PlatformAdapter;
 

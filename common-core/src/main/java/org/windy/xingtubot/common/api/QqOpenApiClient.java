@@ -21,6 +21,12 @@ import java.io.IOException;
  *
  * <p>与 {@code AiService} 一致：请求走统一的 {@link Http}，兼容 Java 8，零额外依赖。
  */
+/**
+ * @deprecated QQ-specific transport code should use
+ * {@link org.windy.xingtubot.common.qq.QqOpenApiClient}. This class remains
+ * as the compatibility implementation during API migration.
+ */
+@Deprecated
 public class QqOpenApiClient {
 
     /** 拿凭证（access_token）的固定地址，与接口域名不同。 */

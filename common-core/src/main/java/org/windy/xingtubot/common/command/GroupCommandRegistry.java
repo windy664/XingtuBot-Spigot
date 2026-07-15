@@ -45,6 +45,11 @@ public class GroupCommandRegistry {
         return this;
     }
 
+    public GroupCommandRegistry register(BotCommand cmd) {
+        if (cmd == null) return this;
+        return register(new BotCommandAdapter(cmd));
+    }
+
     /**
      * 尝试分发一条群消息。命中返回 true（已提交到专属线程池异步处理），否则 false。
      */
@@ -61,7 +66,7 @@ public class GroupCommandRegistry {
             }
             if (hit) {
                 // 权限检查：管理类指令仅超管可用
-                if (cmd.adminOnly() && !permission.isAdmin(event.getFormId())) {
+                if (cmd.adminOnly() && !permission.isAdmin(event.getSenderId())) {
                     event.reply("⛔ 该指令仅管理员可用");
                     return true;
                 }
@@ -129,5 +134,58 @@ public class GroupCommandRegistry {
 
     private void log(String m) {
         if (logger != null) logger.accept(m);
+    }
+
+    private static class BotCommandAdapter implements GroupCommand {
+        private final BotCommand cmd;
+
+        BotCommandAdapter(BotCommand cmd) {
+            this.cmd = cmd;
+        }
+
+        @Override
+        public boolean matches(String message) {
+            return cmd.matches(message);
+        }
+
+        @Override
+        public void handle(String message, BotMessageEvent event) {
+            cmd.handle(message, event);
+        }
+
+        @Override
+        public String name() {
+            return cmd.name();
+        }
+
+        @Override
+        public boolean adminOnly() {
+            return cmd.adminOnly();
+        }
+
+        @Override
+        public boolean adminFor(String message) {
+            return cmd.adminFor(message);
+        }
+
+        @Override
+        public java.util.List<String> triggers() {
+            return cmd.triggers();
+        }
+
+        @Override
+        public String usage() {
+            return cmd.usage();
+        }
+
+        @Override
+        public String description() {
+            return cmd.description();
+        }
+
+        @Override
+        public String category() {
+            return cmd.category();
+        }
     }
 }

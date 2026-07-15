@@ -6,7 +6,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
-import org.windy.xingtubot.common.api.QqOpenApiClient;
+import org.windy.xingtubot.common.qq.QqOpenApiClient;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 
 import java.util.ArrayList;
@@ -154,7 +154,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
         sender.sendMessage("§e║ §7部署角色: §f" + role);
 
         // Bot 名称（QQ 官方昵称，连接后自动获取）
-        sender.sendMessage("§e║ §7机器人名: §f" + org.windy.xingtubot.common.api.BotIdentity.getName());
+        sender.sendMessage("§e║ §7机器人名: §f" + org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName());
 
         sender.sendMessage("§e╚══════════════════════════╝");
     }

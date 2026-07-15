@@ -2,9 +2,11 @@ package org.windy.xingtubot.common.handler;
 
 import com.google.gson.JsonObject;
 import org.windy.xingtubot.common.handler.PermissionChecker;
+import org.windy.xingtubot.common.command.BotCommand;
 import org.windy.xingtubot.common.command.GroupCommand;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.event.BotReplier;
+import org.windy.xingtubot.common.event.MessageReply;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -31,7 +33,7 @@ public class HandlerRegistry {
     private final Consumer<String> logger;
     private final PermissionChecker permission;
     private final ThreadPoolExecutor pool;
-    private org.windy.xingtubot.common.api.XingtuBotServiceImpl hookService;
+    private org.windy.xingtubot.common.runtime.XingtuBotServiceImpl hookService;
     private boolean initialized = false;
     private HandlerContext readyCtx; // initAll 后缓存，供第三方延迟注册的 handler 补 init
     // 机器人群消息回显到游戏：非 null 时，命令回复会同时回显进游戏（平台侧注入，关闭则为 null）。
@@ -96,6 +98,15 @@ public class HandlerRegistry {
         return register(new GroupCommandAdapter(cmd));
     }
 
+    public HandlerRegistry register(BotCommand cmd) {
+        return register(new BotCommandAdapter(cmd));
+    }
+
+    public HandlerRegistry register(BotMessageHandler handler) {
+        if (handler == null) return this;
+        return register(new BotMessageHandlerAdapter(handler));
+    }
+
     /**
      * 注册观察者：对每条分发的消息都有机会响应（matches→handle），但<b>不阻断</b>主匹配链，
      * 也不被主匹配链阻断。用于 AI 闲聊这类被动响应器（与命令/群服互联并行，保持原并行监听语义）。
@@ -157,7 +168,7 @@ public class HandlerRegistry {
     }
 
     /** 设置命令 Hook 服务（可选）。 */
-    public void setHookService(org.windy.xingtubot.common.api.XingtuBotServiceImpl hookService) {
+    public void setHookService(org.windy.xingtubot.common.runtime.XingtuBotServiceImpl hookService) {
         this.hookService = hookService;
     }
 
@@ -173,8 +184,10 @@ public class HandlerRegistry {
 
         // 记录已知群：QQ 机器人无法枚举自己加入的群，只能从收到的消息里反推。
         // 落盘后供「推送到全部群（*）」的主动消息使用。非消息事件（入群/退群等）同样带群 openid。
-        if (event.isGroupMessage() && event.getGuildId() != null && !event.getGuildId().isEmpty()) {
-            org.windy.xingtubot.common.queue.KnownGroupStore.getInstance().record(event.getGuildId());
+        if (event.isGroupMessage()
+                && event.getConversationId() != null
+                && !event.getConversationId().isEmpty()) {
+            org.windy.xingtubot.common.queue.KnownGroupStore.getInstance().record(event.getConversationId());
         }
 
         // listen-mode 过滤：mention 模式下，非@的群消息默认门控（跳过）；
@@ -199,12 +212,12 @@ public class HandlerRegistry {
         // 过滤无意义且会误伤（如模组名/简介被打码）。敏感词只作用于群服互联 + AI，
         // 在各自调用点处理。这里只做游戏回显装饰。
         final BotMessageEvent dispatchEvent;
-        BotReplier replier = event.getReplier();
+        MessageReply replier = event.getReply();
         if (replier != null && gameEcho != null) {
             // 必须保留 eventType（用 6 参构造）：否则 handle() 里 isGroupMessage()/isGroupAtMessage() 全失效，
             // 例如 /id 命令会因此拿不到群消息标识而不显示群 ID。
             dispatchEvent = new BotMessageEvent(
-                    event.getGuildId(), event.getFormId(), msg,
+                    event.getConversationId(), event.getSenderId(), msg,
                     new EchoReplier(replier, gameEcho), event.getUsername(), event.getEventType());
         } else {
             dispatchEvent = event;
@@ -247,7 +260,7 @@ public class HandlerRegistry {
                 // 权限检查：按消息粒度判定（adminFor 默认回退 adminOnly；
                 // 自定义命令等可重写为按条目鉴权，core 无需认识具体功能类型）。
                 boolean needAdmin = handler.adminFor(msg);
-                if (needAdmin && !permission.isAdmin(dispatchEvent.getFormId())) {
+                if (needAdmin && !permission.isAdmin(dispatchEvent.getSenderId())) {
                     dispatchEvent.reply("⛔ 该指令仅管理员可用");
                     return true;
                 }
@@ -284,7 +297,7 @@ public class HandlerRegistry {
      * 标题昵称取自 {@link org.windy.xingtubot.common.api.BotIdentity}。
      */
     public String buildMenu(boolean isAdmin) {
-        return buildMenu(isAdmin, org.windy.xingtubot.common.api.BotIdentity.getName());
+        return buildMenu(isAdmin, org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName());
     }
 
     /**
@@ -293,7 +306,7 @@ public class HandlerRegistry {
      */
     @Deprecated
     public String buildMenu(boolean isAdmin, String ignoredBotName) {
-        String botName = org.windy.xingtubot.common.api.BotIdentity.getName();
+        String botName = org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName();
         // 按分类收集条目：category → entries
         java.util.Map<String, StringBuilder> categories = new java.util.LinkedHashMap<>();
         StringBuilder admin = new StringBuilder();
@@ -574,15 +587,151 @@ public class HandlerRegistry {
         }
     }
 
+    private static class BotCommandAdapter implements MessageHandler {
+        private final BotCommand cmd;
+
+        BotCommandAdapter(BotCommand cmd) {
+            this.cmd = cmd;
+        }
+
+        @Override
+        public boolean matches(String message, BotMessageEvent event) {
+            return cmd.matches(message);
+        }
+
+        @Override
+        public void handle(String message, BotMessageEvent event) {
+            cmd.handle(message, event);
+        }
+
+        @Override
+        public String name() {
+            return cmd.name();
+        }
+
+        @Override
+        public int priority() {
+            return 50;
+        }
+
+        @Override
+        public boolean adminOnly() {
+            return cmd.adminOnly();
+        }
+
+        @Override
+        public boolean adminFor(String message) {
+            return cmd.adminFor(message);
+        }
+
+        @Override
+        public java.util.List<String> triggers() {
+            return cmd.triggers();
+        }
+
+        @Override
+        public String usage() {
+            return cmd.usage();
+        }
+
+        @Override
+        public String description() {
+            return cmd.description();
+        }
+
+        @Override
+        public String category() {
+            return cmd.category();
+        }
+    }
+
+    private static class BotMessageHandlerAdapter implements MessageHandler {
+        private final BotMessageHandler handler;
+
+        BotMessageHandlerAdapter(BotMessageHandler handler) {
+            this.handler = handler;
+        }
+
+        @Override
+        public boolean matches(String message, BotMessageEvent event) {
+            return handler.matches(message, event);
+        }
+
+        @Override
+        public void handle(String message, BotMessageEvent event) {
+            handler.handle(message, event);
+        }
+
+        @Override
+        public String name() {
+            return handler.name();
+        }
+
+        @Override
+        public int priority() {
+            return handler.priority();
+        }
+
+        @Override
+        public boolean adminOnly() {
+            return handler.adminOnly();
+        }
+
+        @Override
+        public boolean acceptsWithoutMention() {
+            return handler.acceptsWithoutMention();
+        }
+
+        @Override
+        public boolean adminFor(String message) {
+            return handler.adminFor(message);
+        }
+
+        @Override
+        public java.util.List<String> triggers() {
+            return handler.triggers();
+        }
+
+        @Override
+        public java.util.List<MenuEntry> menuEntries() {
+            return handler.menuEntries();
+        }
+
+        @Override
+        public String usage() {
+            return handler.usage();
+        }
+
+        @Override
+        public String description() {
+            return handler.description();
+        }
+
+        @Override
+        public String category() {
+            return handler.category();
+        }
+
+        @Override
+        public void init(HandlerContext ctx) {
+            handler.init(ctx);
+        }
+
+        @Override
+        public void shutdown() {
+            handler.shutdown();
+        }
+    }
+
     /**
      * 游戏回显装饰器：在把回复发给 QQ 的同时，把文本回显进游戏。
      * markdown 回复会剥离标记转成游戏纯文本；图片/语音/视频回显占位提示；语音/embed/ark 不回显。
      */
     private static class EchoReplier implements BotReplier {
-        private final BotReplier delegate;
+        private final MessageReply delegate;
         private final Consumer<String> echo;
 
-        EchoReplier(BotReplier delegate, Consumer<String> echo) {
+        EchoReplier(MessageReply delegate, Consumer<String> echo) {
             this.delegate = delegate;
             this.echo = echo;
         }

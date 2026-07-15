@@ -162,7 +162,7 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
                     adapter.log("✅ 通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
 
                     // 接线主动消息
-                    org.windy.xingtubot.common.api.QqOpenApiClient apiClient = qqBot.getApi();
+                    org.windy.xingtubot.common.qq.QqOpenApiClient apiClient = qqBot.getApi();
                     if (apiClient != null) {
                         // 模组更新等主动推送：填实惰性句柄（module-modtools 持有同一句柄）。
                         // 群服互联（GroupChatLink）也用同一 ProactiveSender holder——由 xt-chatlink 自己拉取，
@@ -326,7 +326,7 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
                     }
                     final String msg = "🔔 [主动消息] " + content;
                     sender.sendMessage(Component.text("正在发送主动消息到群 " + gid + "..."));
-                    org.windy.xingtubot.common.api.QqOpenApiClient api = qqBot.getApi();
+                    org.windy.xingtubot.common.qq.QqOpenApiClient api = qqBot.getApi();
                     // 异步发送
                     java.util.concurrent.CompletableFuture.runAsync(() -> {
                         try {

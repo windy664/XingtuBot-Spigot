@@ -58,7 +58,7 @@ public class BungeeCordCommandHandler extends AbstractCommandHandler {
     public void startCaptureOpenid() { openIdCapture.enableCapture(); }
 
     public void handle(BotMessageEvent event) {
-        handle(event, getPermission().isAdmin(event.getFormId()));
+        handle(event, getPermission().isAdmin(event.getSenderId()));
     }
 
     private String senderNameOf(BotMessageEvent event) {

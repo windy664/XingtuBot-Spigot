@@ -13,22 +13,22 @@ package org.windy.xingtubot.common.api;
  * <p>API 名字是异步晚到的：连接成功前 {@link #getName()} 返回默认「机器人」，解析后即为真实昵称。
  * 所有读取点都应在<b>使用时</b>读 {@link #getName()}，不要在构造期缓存，否则拿到的是旧默认值。
  */
+/**
+ * @deprecated Use {@link org.windy.xingtubot.common.runtime.BotRuntimeState}.
+ */
+@Deprecated
 public final class BotIdentity {
-
-    private static volatile String name = "机器人";
 
     private BotIdentity() {
     }
 
     /** 当前机器人昵称（默认「机器人」；bot 连接后为 QQ 官方昵称）。 */
     public static String getName() {
-        return name;
+        return org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName();
     }
 
     /** 由 {@code QQGatewayClient} 在解析到 QQ 官方昵称后调用。空/空白忽略。 */
     public static void setName(String n) {
-        if (n != null && !n.trim().isEmpty()) {
-            name = n.trim();
-        }
+        org.windy.xingtubot.common.runtime.BotRuntimeState.setBotName(n);
     }
 }

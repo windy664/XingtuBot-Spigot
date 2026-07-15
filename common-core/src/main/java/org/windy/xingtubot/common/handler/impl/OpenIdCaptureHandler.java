@@ -1,8 +1,8 @@
 package org.windy.xingtubot.common.handler.impl;
 
-import org.windy.xingtubot.common.event.BotMessageEvent;
+import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.handler.HandlerContext;
-import org.windy.xingtubot.common.handler.MessageHandler;
+import org.windy.xingtubot.common.handler.BotMessageHandler;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -11,7 +11,7 @@ import java.util.function.Consumer;
  * openid 捕获：开启后下一条群消息把发送者 openid 打印到控制台并自动关闭。
  * priority=0，最先匹配。
  */
-public class OpenIdCaptureHandler implements MessageHandler {
+public class OpenIdCaptureHandler implements BotMessageHandler {
 
     private final AtomicBoolean capture = new AtomicBoolean(false);
     private Consumer<String> consoleLogger;
@@ -21,14 +21,14 @@ public class OpenIdCaptureHandler implements MessageHandler {
     }
 
     @Override
-    public boolean matches(String message, BotMessageEvent event) {
+    public boolean matches(String message, BotMessageContext event) {
         return capture.get();
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
+    public void handle(String message, BotMessageContext event) {
         capture.set(false);
-        String openid = event.getFormId();
+        String openid = event.getSenderId();
         String who = message.trim();
         String info = "════════ openid 捕获 ════════\n"
                 + "发送者说：" + who + "\n"

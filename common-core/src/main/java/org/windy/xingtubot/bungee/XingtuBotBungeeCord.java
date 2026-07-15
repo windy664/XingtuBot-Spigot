@@ -144,7 +144,7 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
                     adapter.log("✅ 通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
 
                     // 接线主动消息
-                    org.windy.xingtubot.common.api.QqOpenApiClient apiClient = qqBot.getApi();
+                    org.windy.xingtubot.common.qq.QqOpenApiClient apiClient = qqBot.getApi();
                     if (apiClient != null) {
                         // 群服互联（BungeeCordGroupChatLink）与模组通知共用同一 ProactiveSender holder，
                         // 由 xt-chatlink 自己拉取；故 bind 一次即同时就绪，不再 push 给尚未注册的 GroupChatLink。

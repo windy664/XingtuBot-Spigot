@@ -37,6 +37,6 @@ public interface BotConfig {
      */
     default String getStringResolved(String path, String def) {
         String val = getString(path, def);
-        return val.replace("{bot}", org.windy.xingtubot.common.api.BotIdentity.getName());
+        return val.replace("{bot}", org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName());
     }
 }

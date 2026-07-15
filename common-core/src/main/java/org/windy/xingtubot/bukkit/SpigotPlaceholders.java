@@ -50,11 +50,11 @@ public class SpigotPlaceholders implements PlaceholderResolver {
     /** 查询发送者绑定的玩家名（反射调用 bindingStore.getPlayersByOpenid）。 */
     @SuppressWarnings("unchecked")
     private String boundPlayer(BotMessageEvent event) {
-        if (event.getFormId() == null || bindingStore == null) return null;
+        if (event.getSenderId() == null || bindingStore == null) return null;
         try {
             List<String> players = (List<String>) bindingStore.getClass()
                     .getMethod("getPlayersByOpenid", String.class)
-                    .invoke(bindingStore, event.getFormId());
+                    .invoke(bindingStore, event.getSenderId());
             return (players != null && !players.isEmpty()) ? players.get(0) : null;
         } catch (Exception e) {
             return null;
@@ -95,7 +95,7 @@ public class SpigotPlaceholders implements PlaceholderResolver {
     }
 
     private String senderName(BotMessageEvent event) {
-        if (event.getFormId() != null) {
+        if (event.getSenderId() != null) {
             String player = boundPlayer(event);
             if (player != null) return player;
         }
@@ -156,7 +156,7 @@ public class SpigotPlaceholders implements PlaceholderResolver {
                     return "";
                 }
                 case "bot_name":
-                    return org.windy.xingtubot.common.api.BotIdentity.getName();
+                    return org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName();
                 default:
                     return null;
             }

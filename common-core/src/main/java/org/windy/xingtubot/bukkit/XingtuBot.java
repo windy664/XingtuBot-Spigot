@@ -5,7 +5,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
-import org.windy.xingtubot.common.api.QqOpenApiClient;
+import org.windy.xingtubot.common.qq.QqOpenApiClient;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.bot.BotLauncher;
 import org.windy.xingtubot.common.bot.QQOnboard;
@@ -199,19 +199,21 @@ public final class XingtuBot extends JavaPlugin implements Listener {
 
     private void dispatchToBukkit(BotMessageEvent e) {
         // 追踪最近活跃的群（供 /qq 命令 + 游戏聊天转发用）
-        String gid = e.getGuildId();
-        if (isGroupEvent(e) && !isAllowedGroup(gid)) {
+        String gid = e.getConversationId();
+        boolean groupEvent = isGroupEvent(e);
+        if (groupEvent && !isAllowedGroup(gid)) {
             if (getConfig().getBoolean("debug", false)) {
                 getLogger().info("[QQ] Skip non-allowed group event: group=" + gid + " type=" + e.getEventType());
             }
             return;
         }
-        if (gid != null && qqSendCommand != null) {
+        if (groupEvent && gid != null && qqSendCommand != null) {
             qqSendCommand.setDefaultGroupOpenid(gid);
         }
         Bukkit.getScheduler().runTask(this, () -> {
             GuildMessageEvent event = new GuildMessageEvent(
-                    e.getGuildId(), e.getFormId(), e.getMessage(), e.getReplier(), e.getUsername(), e.getEventType());
+                    e.getConversationId(), e.getSenderId(), e.getMessage(),
+                    e.getReplier(), e.getUsername(), e.getEventType());
             event.setImageUrls(e.getImageUrls()); // 透传群图片 URL，供群服互联拼 ChatImage 码
             setLastEvent(event);
             Bukkit.getPluginManager().callEvent(event);
@@ -223,8 +225,8 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         if (type != null && type.startsWith("GROUP_")) {
             return true;
         }
-        String gid = event.getGuildId();
-        String uid = event.getFormId();
+        String gid = event.getConversationId();
+        String uid = event.getSenderId();
         return gid != null && uid != null && !gid.equals(uid);
     }
 

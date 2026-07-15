@@ -26,7 +26,7 @@ import java.util.function.BiPredicate;
  * 调 {@link #registerHandler}/{@link #registerCommand} 注册即可——和昕途内置功能走<b>完全相同</b>的
  * 注册分发路径（参考内置的 WeatherCommand / FortuneCommand 源码就是最好的示例）。
  */
-public interface XingtuBotService {
+public interface XingtuBotService extends CommandRegistrar, MessageSender, CommandHookBus, BotRuntimeInfo {
 
     /**
      * API 版本号。每当接口发生不兼容变更时递增；扩展可在启动时校验
@@ -36,7 +36,7 @@ public interface XingtuBotService {
      *   <li>2 — hook 事件类型化为 {@link BotMessageEvent}；before 改 {@link BiPredicate} 可真正拦截</li>
      * </ul>
      */
-    int API_VERSION = 2;
+    int API_VERSION = 3;
 
     /** 当前实现的 API 版本，便于扩展做兼容性判断。 */
     default int apiVersion() {
@@ -87,13 +87,13 @@ public interface XingtuBotService {
      * <b>返回 {@code true} 放行，返回 {@code false} 拦截</b>（命令不再执行）。
      * 多个 hook 任一返回 false 即拦截。
      */
-    void beforeCommand(BiPredicate<String, BotMessageEvent> hook);
+    void beforeCommand(BiPredicate<String, ? super BotMessageEvent> hook);
 
     /**
      * 注册命令执行<b>后</b>的 Hook。回调参数：(command 名, {@link BotMessageEvent})。
      * 仅当命令实际执行（未被 before hook 拦截）时触发。
      */
-    void afterCommand(BiConsumer<String, BotMessageEvent> hook);
+    void afterCommand(BiConsumer<String, ? super BotMessageEvent> hook);
 
     /** 获取当前机器人使用的开放平台 AppID */
     String getBotAppId();

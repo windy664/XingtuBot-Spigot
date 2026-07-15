@@ -1,7 +1,7 @@
 package org.windy.xingtubot.common.handler.impl;
 
-import org.windy.xingtubot.common.event.BotMessageEvent;
-import org.windy.xingtubot.common.handler.MessageHandler;
+import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.handler.BotMessageHandler;
 
 /**
  * 内置核心诊断命令：返回当前用户 ID（openid）与当前群 ID（group_openid）。
@@ -12,10 +12,10 @@ import org.windy.xingtubot.common.handler.MessageHandler;
  *
  * <p>核心内置（不属于任何附属扩展），由各平台命令处理器直接注册到注册中心。
  */
-public class WhoAmIHandler implements MessageHandler {
+public class WhoAmIHandler implements BotMessageHandler {
 
     @Override
-    public boolean matches(String message, BotMessageEvent event) {
+    public boolean matches(String message, BotMessageContext event) {
         String m = message == null ? "" : message.trim().toLowerCase();
         return m.equals("id") || m.equals("/id")
                 || m.equals("我的id") || m.equals("myid")
@@ -23,9 +23,9 @@ public class WhoAmIHandler implements MessageHandler {
     }
 
     @Override
-    public void handle(String message, BotMessageEvent event) {
-        String userId = event.getFormId();
-        String groupId = event.getGuildId();
+    public void handle(String message, BotMessageContext event) {
+        String userId = event.getSenderId();
+        String groupId = event.getConversationId();
 
         StringBuilder sb = new StringBuilder("## 🪪 ID 信息\n");
         sb.append("**你的用户 ID（openid）**\n");

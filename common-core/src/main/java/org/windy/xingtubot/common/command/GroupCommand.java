@@ -8,6 +8,10 @@ import org.windy.xingtubot.common.event.BotMessageEvent;
  * <p>由 {@link GroupCommandRegistry} 统一分发。实现类只关心「匹配 + 处理」，
  * 不碰平台细节。处理中若需网络请求请自行放异步（注册器会在异步线程调用 handle）。
  */
+/**
+ * @deprecated Use {@link BotCommand} for new extensions.
+ */
+@Deprecated
 public interface GroupCommand {
 
     /** 是否由本指令处理这条消息（通常按前缀/关键词判断）。 */

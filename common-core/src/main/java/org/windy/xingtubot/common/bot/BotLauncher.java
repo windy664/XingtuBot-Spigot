@@ -1,6 +1,6 @@
 package org.windy.xingtubot.common.bot;
 
-import org.windy.xingtubot.common.api.QqOpenApiClient;
+import org.windy.xingtubot.common.qq.QqOpenApiClient;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.platform.PlatformAdapter;
@@ -94,7 +94,7 @@ public final class BotLauncher {
         bot.addMessageListener(listener);
 
         // 框架级调试开关单一来源：绑定后各附属插件（如 MCMOD 爬取）经 DebugFlag.isOn() 实时跟随。
-        org.windy.xingtubot.common.api.DebugFlag.bind(() -> config.getBoolean("debug", false));
+        org.windy.xingtubot.common.runtime.BotRuntimeState.bindDebug(() -> config.getBoolean("debug", false));
 
         // 构建 gateway 客户端（debug 决定是否打逐事件类型日志）
         QQGatewayClient gwClient = new QQGatewayClient(appId, secret,

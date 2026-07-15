@@ -1,6 +1,6 @@
 package org.windy.xingtubot.common.module.capability;
 
-import org.windy.xingtubot.common.api.QqOpenApiClient;
+import org.windy.xingtubot.common.qq.QqOpenApiClient;
 
 /**
  * {@link ProactiveSender} 的惰性实现：平台侧在模块加载前注册本实例，

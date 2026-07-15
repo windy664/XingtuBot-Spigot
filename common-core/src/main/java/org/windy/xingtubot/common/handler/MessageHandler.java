@@ -10,6 +10,10 @@ import org.windy.xingtubot.common.event.BotMessageEvent;
  * GroupCommand 仅覆盖「前缀匹配」型命令；MessageHandler 还支持 catch-all、
  * 优先级排序、生命周期回调。GroupCommand 通过适配器自动兼容。
  */
+/**
+ * @deprecated Use {@link BotMessageHandler} for new extensions.
+ */
+@Deprecated
 public interface MessageHandler {
 
     /** 是否由本处理器处理这条消息。 */

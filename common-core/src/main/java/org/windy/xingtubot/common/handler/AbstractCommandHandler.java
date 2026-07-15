@@ -1,6 +1,6 @@
 package org.windy.xingtubot.common.handler;
 
-import org.windy.xingtubot.common.api.XingtuBotServiceImpl;
+import org.windy.xingtubot.common.runtime.XingtuBotServiceImpl;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.image.TextImageRenderer;
@@ -60,6 +60,10 @@ public abstract class AbstractCommandHandler {
         service.setRegistry(registry);
         registry.setHookService(service);
         moduleCtx.registerService(org.windy.xingtubot.common.api.XingtuBotService.class, service);
+        moduleCtx.registerService(org.windy.xingtubot.common.api.CommandRegistrar.class, service);
+        moduleCtx.registerService(org.windy.xingtubot.common.api.MessageSender.class, service);
+        moduleCtx.registerService(org.windy.xingtubot.common.api.CommandHookBus.class, service);
+        moduleCtx.registerService(org.windy.xingtubot.common.api.BotRuntimeInfo.class, service);
 
         // ===== 初始化 =====
         HandlerContext ctx = new HandlerContext(config, logger, permission, platformContext);
@@ -94,7 +98,7 @@ public abstract class AbstractCommandHandler {
         }
 
         // pending messages
-        String pending = PendingMessageQueue.getInstance().drainForGroup(event.getGuildId());
+        String pending = PendingMessageQueue.getInstance().drainForGroup(event.getConversationId());
         if (pending != null) event.reply(pending);
     }
 
@@ -115,12 +119,12 @@ public abstract class AbstractCommandHandler {
     protected String senderNameOf(BotMessageEvent event, String defaultSender) {
         try {
             Object bs = moduleCtx.getServiceObject(Class.forName("org.windy.xingtubot.common.binding.BindingService"));
-            if (bs != null && event.getFormId() != null) {
+            if (bs != null && event.getSenderId() != null) {
                 Object store = bs.getClass().getMethod("getStore").invoke(bs);
                 if (store != null) {
                     @SuppressWarnings("unchecked")
                     java.util.List<String> players = (java.util.List<String>) store.getClass()
-                            .getMethod("getPlayersByOpenid", String.class).invoke(store, event.getFormId());
+                            .getMethod("getPlayersByOpenid", String.class).invoke(store, event.getSenderId());
                     if (players != null && !players.isEmpty()) return players.get(0);
                 }
             }

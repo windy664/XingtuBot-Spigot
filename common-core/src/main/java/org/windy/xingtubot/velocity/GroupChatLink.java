@@ -102,7 +102,7 @@ public class GroupChatLink {
     /** 调试日志：有 logger 且 DebugFlag 开启才输出（实时跟随 /xtb debug）。 */
     private void debug(String msg) {
         BotLogger l = this.logger;
-        if (l != null && org.windy.xingtubot.common.api.DebugFlag.isOn()) l.info(msg);
+        if (l != null && org.windy.xingtubot.common.runtime.BotRuntimeState.isDebugEnabled()) l.info(msg);
     }
 
     /** 群服互联文本过滤：有 filter 才过，否则原样。 */
@@ -174,8 +174,8 @@ public class GroupChatLink {
         content = OpenidNameCache.getInstance().resolveMentions(content);
         content = filterChatlink(content); // QQ→游戏：群消息进游戏前过滤敏感词
         // 记录群 openid（供主动推送用）
-        if (event.getGuildId() != null && !event.getGuildId().isEmpty()) {
-            lastGroupOpenid = event.getGuildId();
+        if (event.getConversationId() != null && !event.getConversationId().isEmpty()) {
+            lastGroupOpenid = event.getConversationId();
         }
         lastGroupMsg.set(new Holder(event));
         Component line = Component.text(chatFormat + sender + "：" + content);
@@ -183,7 +183,7 @@ public class GroupChatLink {
             p.sendMessage(line);
         }
         debug("[Chatlink] QQ→game 广播：发送者=" + sender
-                + " 群=" + event.getGuildId()
+                + " 群=" + event.getConversationId()
                 + " 在线玩家=" + proxy.getPlayerCount());
     }
 
