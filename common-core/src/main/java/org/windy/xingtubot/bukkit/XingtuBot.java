@@ -18,6 +18,10 @@ import org.windy.xingtubot.common.poll.QqBot;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 import org.windy.xingtubot.common.util.Pretty;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 public final class XingtuBot extends JavaPlugin implements Listener {
 
     private QqBot qqBot;
@@ -196,6 +200,12 @@ public final class XingtuBot extends JavaPlugin implements Listener {
     private void dispatchToBukkit(BotMessageEvent e) {
         // 追踪最近活跃的群（供 /qq 命令 + 游戏聊天转发用）
         String gid = e.getGuildId();
+        if (isGroupEvent(e) && !isAllowedGroup(gid)) {
+            if (getConfig().getBoolean("debug", false)) {
+                getLogger().info("[QQ] Skip non-allowed group event: group=" + gid + " type=" + e.getEventType());
+            }
+            return;
+        }
         if (gid != null && qqSendCommand != null) {
             qqSendCommand.setDefaultGroupOpenid(gid);
         }
@@ -206,6 +216,37 @@ public final class XingtuBot extends JavaPlugin implements Listener {
             setLastEvent(event);
             Bukkit.getPluginManager().callEvent(event);
         });
+    }
+
+    private boolean isGroupEvent(BotMessageEvent event) {
+        String type = event.getEventType();
+        if (type != null && type.startsWith("GROUP_")) {
+            return true;
+        }
+        String gid = event.getGuildId();
+        String uid = event.getFormId();
+        return gid != null && uid != null && !gid.equals(uid);
+    }
+
+    private boolean isAllowedGroup(String gid) {
+        if (gid == null || gid.isEmpty()) {
+            return true;
+        }
+        List<String> configured = getConfig().getStringList("allowed-groups");
+        if (configured == null || configured.isEmpty()) {
+            return true;
+        }
+        Set<String> allowed = new HashSet<>();
+        for (String group : configured) {
+            if (group == null) continue;
+            String trimmed = group.trim();
+            if (trimmed.isEmpty()) continue;
+            if ("*".equals(trimmed)) {
+                return true;
+            }
+            allowed.add(trimmed);
+        }
+        return allowed.isEmpty() || allowed.contains(gid);
     }
 
     private void registerCommands() {
