@@ -158,13 +158,17 @@ public class AuthVelocityPlugin {
     @Subscribe
     public void onServerConnected(ServerPostConnectEvent event) {
         final String name = event.getPlayer().getUsername();
-        // 立即锁定：让包监听器即刻生效——不仅拦移动，还要在后端下发真实背包"之前"就处于锁定态，
-        // 这样 onPacketSend 才能捕获真实背包供解锁恢复。身份判定(绑定/会话/自动登录 → 是否解锁+提示/推按钮)
-        // 延后 500ms 交给 evaluateOnJoin；若判定为免登录会当场 unlock 并恢复背包(仅一瞬遮罩)。
-        if (lockManager != null) lockManager.lock(name);
+        // 未登录会话才立即锁定：让包监听器尽早捕获真实背包，锁期只给客户端显示空背包。
+        // 已登录会话通常是跨子服切换，后端可能已先下发真实背包；这里不再发空背包，避免无缓存可恢复。
+        if (lockManager != null && shouldLockImmediately(name)) lockManager.lock(name);
         proxy.getScheduler().buildTask(this, () -> evaluateOnJoin(name))
                 .delay(500, java.util.concurrent.TimeUnit.MILLISECONDS)
                 .schedule();
+    }
+
+    private boolean shouldLockImmediately(String player) {
+        org.windy.xingtubot.common.binding.BindingService svc = bindingService;
+        return svc == null || !svc.isLoggedInSession(player);
     }
 
     /** 锁定期禁止切服（拓扑级门禁，配合 packetevents 包级拦截，玩家既不能操作也不能切服逃跑）。 */
