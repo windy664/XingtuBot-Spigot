@@ -38,6 +38,9 @@ public final class AiChatHandler implements BotMessageHandler {
 
     private static final String NO_REPLY = "NO_REPLY";
     private static final int MAX_INPUT_LENGTH = 300;
+    private static final List<String> ADMIN_ATTACK_WORDS = Arrays.asList(
+            "傻逼", "sb", "nt", "脑残", "废物", "垃圾", "滚", "闭嘴", "狗管理", "狗群主",
+            "权限狗", "滥权", "独裁", "玩不起", "装什么", "你算什么", "管理员算什么", "群主算什么");
 
     private final AiService aiService;
     private final AiService chimeInJudgeService;
@@ -130,9 +133,18 @@ public final class AiChatHandler implements BotMessageHandler {
             if (permission != null && permission.isAdmin(event.getSenderId())) return false;
             if (!checkHourlyBudget()) return false;
             recordChimeInCandidate(event.getConversationId());
+
+            boolean possibleAdminAttack = mightBeAdminAttackLocally(msg, event.getConversationId());
+            if (!possibleAdminAttack && !canCasuallyChimeIn(event.getConversationId())) {
+                return false;
+            }
+
             JudgeDecision decision = judgeChimeIn(msg, event.getConversationId());
             if (!decision.shouldReply()) return false;
-            if (!decision.isAdminAttack() && !canCasuallyChimeIn(event.getConversationId())) return false;
+            if (!decision.isAdminAttack() && possibleAdminAttack
+                    && !canCasuallyChimeIn(event.getConversationId())) {
+                return false;
+            }
             pendingJudgeDecisions.put(decisionKey(event, msg), decision);
             return true;
         }
@@ -256,6 +268,31 @@ public final class AiChatHandler implements BotMessageHandler {
             if (logger != null) logger.warn("[AI] chime-in judge failed: " + e.getMessage());
             return JudgeDecision.noReply();
         }
+    }
+
+    private boolean mightBeAdminAttackLocally(String msg, String guildId) {
+        if (msg == null || msg.trim().isEmpty()) return false;
+        String lower = msg.toLowerCase(Locale.ROOT);
+
+        boolean hasAttackWord = false;
+        for (String word : ADMIN_ATTACK_WORDS) {
+            if (lower.contains(word.toLowerCase(Locale.ROOT))) {
+                hasAttackWord = true;
+                break;
+            }
+        }
+        if (!hasAttackWord) return false;
+
+        Set<String> names = guildId == null ? null : adminNamesByGroup.get(guildId);
+        if (names != null && !names.isEmpty()) {
+            String normalized = normalizeName(msg);
+            for (String name : names) {
+                if (!name.isEmpty() && normalized.contains(name)) return true;
+            }
+        }
+
+        return lower.contains("管理") || lower.contains("群主") || lower.contains("超管")
+                || lower.contains("admin") || lower.contains("owner");
     }
 
     private void recordAdminName(String guildId, String username) {
