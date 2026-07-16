@@ -99,6 +99,8 @@ public final class ModqueryModule implements BotModule {
             if (mcmod != null) modUpdate.setMcmodApi(mcmod);
             ProactiveSender sender = ctx.getService(ProactiveSender.class);
             if (sender != null) modUpdate.setProactiveSender(sender);
+            modUpdate.setCoreAllowedGroupsSupplier(() ->
+                    org.windy.xingtubot.common.util.GroupTargets.readCoreAllowedGroups(ctx));
             // 游戏回显服务由 xt-chatlink 注册：惰性解析（按回显时取），避免与本扩展加载顺序耦合
             modUpdate.setGameEcho(text -> {
                 echoToGame(ctx, text);

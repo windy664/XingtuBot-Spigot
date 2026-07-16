@@ -31,6 +31,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * 模组更新监控服务（平台无关）。
@@ -103,6 +104,7 @@ public class ModUpdateService {
 
     /** 主动消息推送能力（惰性句柄；未就绪/为 null = 回退到 PendingMessageQueue 被动模式）。 */
     private volatile ProactiveSender sender;
+    private volatile Supplier<List<String>> coreAllowedGroupsSupplier = () -> Collections.singletonList("*");
     // 模组通知回显到游戏：非 null 时通知同步给在线玩家（平台侧注入，关闭则为 null）。
     private volatile Consumer<String> gameEcho;
 
@@ -113,6 +115,11 @@ public class ModUpdateService {
      */
     public void setProactiveSender(ProactiveSender sender) {
         this.sender = sender;
+    }
+
+    public void setCoreAllowedGroupsSupplier(Supplier<List<String>> coreAllowedGroupsSupplier) {
+        this.coreAllowedGroupsSupplier = coreAllowedGroupsSupplier != null
+                ? coreAllowedGroupsSupplier : () -> Collections.singletonList("*");
     }
 
     /** 设置「模组通知回显到游戏」回调（平台侧注入，传 null 关闭）。 */
@@ -510,16 +517,12 @@ public class ModUpdateService {
             } catch (Exception ignored) {
             }
         }
-        List<String> groupIds = resolveTargetGroups(targets);
+        List<String> groupIds = org.windy.xingtubot.common.util.GroupTargets.resolveKnownGroups(
+                coreAllowedGroupsSupplier.get(), resolveTargetGroups(targets));
         ProactiveSender s = this.sender;
         boolean ready = s != null && s.isReady();
 
         // 目标为空（* = 全部群）时，用已知群列表展开为真实目标群清单。
-        if (groupIds.isEmpty()) {
-            groupIds = new ArrayList<>(
-                    org.windy.xingtubot.common.queue.KnownGroupStore.getInstance().all());
-        }
-
         if (ready && !groupIds.isEmpty()) {
             // 主动消息模式：直接推送到各群（默认走 markdown，无原生权限时实现内部回退纯文本）
             for (String groupOpenId : groupIds) {
@@ -533,18 +536,9 @@ public class ModUpdateService {
             return;
         }
 
-        if (ready && groupIds.isEmpty()) {
-            // 主动模式但已知群列表仍为空（机器人尚未收到过任何群消息）→ 回退被动队列
-            PendingMessageQueue.getInstance().offer(message);
-            return;
-        }
-
         // 无主动发送器 → 被动队列（原逻辑）
         for (String groupOpenId : groupIds) {
             PendingMessageQueue.getInstance().offer(groupOpenId, message);
-        }
-        if (groupIds.isEmpty()) {
-            PendingMessageQueue.getInstance().offer(message);
         }
     }
 

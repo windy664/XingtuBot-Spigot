@@ -269,6 +269,8 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         // 部署拓扑由框架在此一次性算定并写入宿主，供附属扩展（xt-auth 等）只读，
         // 杜绝扩展各自用 ProxyDetector 重复判定大脑/手脚。slave 取反即为「是否大脑」。
         spigotCommandHandler.getHost().setBrain(!slave);
+        spigotCommandHandler.getHost().registerService("core.allowed-groups",
+                (java.util.function.Supplier<java.util.List<String>>) () -> getConfig().getStringList("allowed-groups"));
     }
 
     private void printBanner() {

@@ -2,7 +2,6 @@ package org.windy.xingtubot.ext.xtchatlink;
 
 import org.bukkit.plugin.java.JavaPlugin;
 import org.windy.xingtubot.bukkit.module.chatreply.ChatreplyModule;
-import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.config.YamlBotConfig;
 import org.windy.xingtubot.common.lock.PlayerLockManager;
 import org.windy.xingtubot.common.module.BotModule;
@@ -70,7 +69,9 @@ public final class ChatlinkBukkitPlugin extends JavaPlugin {
             chatreplyModule = new ChatreplyModule(this, config, logger, lockState);
 
             // 注入目标群 + 主动发送器（否则 game→QQ 永远不转发：默认 allowedGroups={"*"} 无具体群）
-            chatreplyModule.getGameChatForwarder().setAllowedGroups(config.getStringList("allowed-groups"));
+            java.util.List<String> allowedGroups = org.windy.xingtubot.common.util.GroupTargets
+                    .resolveConcrete(host, config.getStringList("allowed-groups"));
+            chatreplyModule.getGameChatForwarder().setAllowedGroups(allowedGroups);
             // game→QQ 聊天行 markdown 模板（{player}/{message}）
             chatreplyModule.getGameChatForwarder().setGameFormat(config.getString("chatlink-format",
                     org.windy.xingtubot.chatlink.util.ChatlinkFormat.DEFAULT));
@@ -78,18 +79,14 @@ public final class ChatlinkBukkitPlugin extends JavaPlugin {
             chatreplyModule.setProactiveSender(
                     () -> host.getService(org.windy.xingtubot.common.module.capability.ProactiveSender.class));
 
-            warnNoConcreteGroup(config);
+            warnNoConcreteGroup(allowedGroups);
             getLogger().info("[Chatlink] 游戏→QQ 转发 + [点击回复] 已启用");
         }
     }
 
     /** allowed-groups 没有具体群（空或仅 "*"）时，游戏→QQ 无法主动转发，给出明确警告。 */
-    private void warnNoConcreteGroup(BotConfig config) {
-        boolean hasConcrete = false;
-        for (String g : config.getStringList("allowed-groups")) {
-            if (g != null && !"*".equals(g) && !g.trim().isEmpty()) { hasConcrete = true; break; }
-        }
-        if (!hasConcrete) {
+    private void warnNoConcreteGroup(java.util.List<String> groups) {
+        if (groups == null || groups.isEmpty()) {
             getLogger().warning("[Chatlink] allowed-groups 未配置具体群（为空或 \"*\"），游戏聊天将无法主动转发到 QQ 群。");
             getLogger().warning("   请在 XingtuBot-Chatlink/config.yml 把 allowed-groups 配成具体群 openid（群里发「id」可查）。");
         }

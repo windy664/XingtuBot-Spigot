@@ -24,7 +24,8 @@ group-join-url: "https://qm.qq.com/q/FEK78ZAOWY"
 # 进服时在群里发的「登录」按钮卡片相关设置
 # 是否标注玩家省级地区（IP 定位，仅到省份，不显示 IP/城市）
 login-announce-region: false
-# 发往哪些群（"*" 或留空 = 全部已知群）
+# 登录按钮发往哪些群。
+# "*" 或留空 = 继承核心 common-core 的 allowed-groups；填写具体群 = 在核心白名单内再缩小范围。
 allowed-groups:
   - "*"
 

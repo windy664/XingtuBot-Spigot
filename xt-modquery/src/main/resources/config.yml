@@ -46,7 +46,8 @@ modwatch-feed-limit: 20
 modwatch-feed-interval-minutes: 120
 
 # ==========================================
-# 通知目标群（留空 = 全部已知群）
+# 通知目标群。
+# 留空或 "*" = 继承核心 common-core 的 allowed-groups；填写具体群 = 在核心白名单内再缩小范围。
 # ==========================================
 notify-target-groups: []
 modwatch-feed-notify: []

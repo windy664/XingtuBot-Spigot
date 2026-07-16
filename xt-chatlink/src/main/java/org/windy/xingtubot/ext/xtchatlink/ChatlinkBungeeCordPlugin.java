@@ -2,7 +2,6 @@ package org.windy.xingtubot.ext.xtchatlink;
 
 import net.md_5.bungee.api.plugin.Plugin;
 import org.windy.xingtubot.bungee.BungeeCordGroupChatLink;
-import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.config.YamlBotConfig;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ExtensionBootstrap;
@@ -46,7 +45,8 @@ public class ChatlinkBungeeCordPlugin extends Plugin {
             groupChatLink = new BungeeCordGroupChatLink(getProxy(), this,
                     config.getString("chat-format", "§b[QQ群] §f"));
 
-            List<String> allowedGroups = config.getStringList("allowed-groups");
+            List<String> allowedGroups = org.windy.xingtubot.common.util.GroupTargets
+                    .resolveConcrete(host, config.getStringList("allowed-groups"));
             groupChatLink.setAllowedGroups(allowedGroups);
 
             if (config.getBoolean("Enable", true)) {
@@ -67,7 +67,7 @@ public class ChatlinkBungeeCordPlugin extends Plugin {
                     () -> host.getService(org.windy.xingtubot.common.module.capability.ProactiveSender.class));
 
             host.registerService(BungeeCordGroupChatLink.class, groupChatLink);
-            warnNoConcreteGroup(config, logger);
+            warnNoConcreteGroup(allowedGroups, logger);
             logger.info("[Chatlink] 游戏→QQ 转发已启用（BungeeCord）");
         }
     }
@@ -83,13 +83,8 @@ public class ChatlinkBungeeCordPlugin extends Plugin {
         return null;
     }
 
-    private void warnNoConcreteGroup(BotConfig config, BotLogger logger) {
-        List<String> groups = config.getStringList("allowed-groups");
-        boolean hasConcrete = false;
-        for (String g : groups) {
-            if (g != null && !"*".equals(g) && !g.trim().isEmpty()) { hasConcrete = true; break; }
-        }
-        if (!hasConcrete) {
+    private void warnNoConcreteGroup(List<String> groups, BotLogger logger) {
+        if (groups == null || groups.isEmpty()) {
             logger.warn("[Chatlink] allowed-groups 未配置具体群，游戏聊天将无法主动转发到 QQ 群。");
         }
     }

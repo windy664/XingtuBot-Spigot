@@ -6,19 +6,17 @@ import org.windy.xingtubot.common.module.ModuleContext;
 import org.windy.xingtubot.common.module.capability.ProactiveSender;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 import org.windy.xingtubot.common.service.Translator;
+import org.windy.xingtubot.common.util.GroupTargets;
 import org.windy.xingtubot.module.github.GithubMessageBuilder;
 import org.windy.xingtubot.module.github.GithubSeenStore;
 import org.windy.xingtubot.module.github.GithubTrackerService;
 import org.windy.xingtubot.module.github.GithubWatchCommand;
 
 import java.io.File;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
-/**
- * GitHub 项目追踪模块：负责核心生命周期调度和消息分发。
- */
+/** GitHub project tracking module lifecycle and message delivery. */
 public final class GithubModule implements BotModule {
 
     private GithubTrackerService tracker;
@@ -33,7 +31,7 @@ public final class GithubModule implements BotModule {
         BotConfig config = ctx.config();
 
         if (!config.getBoolean("github-watch-enable", true)) {
-            ctx.logger().info("[Github] GitHub 项目追踪已禁用。");
+            ctx.logger().info("[Github] GitHub tracking disabled.");
             return;
         }
 
@@ -41,7 +39,6 @@ public final class GithubModule implements BotModule {
         tracker.setPollIntervalSeconds(config.getInt("github-poll-interval-seconds", 300));
         tracker.setMirrors(config.getStringList("github-mirrors"));
 
-        // DB 持久化（可选，默认 yaml 文件）
         String storageType = config.getString("github-storage-type", "yaml").trim().toLowerCase();
         if ("sqlite".equals(storageType) || "mysql".equals(storageType)) {
             try {
@@ -59,14 +56,13 @@ public final class GithubModule implements BotModule {
                             ctx.logger()::warn);
                 }
                 tracker.setSeenStore(store);
-                ctx.logger().info("[Github] seen state 持久化: " + storageType);
+                ctx.logger().info("[Github] seen state storage: " + storageType);
             } catch (Exception e) {
-                ctx.logger().warn("[Github] 初始化 DB 持久化失败，回退 YAML: " + e.getMessage());
+                ctx.logger().warn("[Github] DB state init failed, fallback to YAML: " + e.getMessage());
             }
         }
 
-        List<String> targetGroups = parseTargetGroups(config.getStringList("allowed-groups"));
-        boolean toAll = config.getStringList("allowed-groups").isEmpty() || config.getStringList("allowed-groups").contains("*");
+        List<String> configuredGroups = config.getStringList("allowed-groups");
 
         ProactiveSender sender = ctx.getService(ProactiveSender.class);
         Translator translator = ctx.getService(Translator.class);
@@ -75,51 +71,37 @@ public final class GithubModule implements BotModule {
         tracker.setChangeListener(new GithubTrackerService.ChangeListener() {
             @Override
             public void onNewRelease(String owner, String repo, String tagName, String name, String url) {
-                push(builder.buildRelease(owner, repo, tagName, name, url), targetGroups, toAll, sender, ctx);
+                push(builder.buildRelease(owner, repo, tagName, name, url), configuredGroups, sender, ctx);
             }
 
             @Override
             public void onNewCommit(String owner, String repo, String sha, String message, String author, String url) {
-                push(builder.buildCommit(owner, repo, sha, message, author, url), targetGroups, toAll, sender, ctx);
+                push(builder.buildCommit(owner, repo, sha, message, author, url), configuredGroups, sender, ctx);
             }
 
             @Override
             public void onNewIssue(String owner, String repo, int number, String title, String action,
                                    String author, String labels, String body, String url) {
                 push(builder.buildIssue(owner, repo, number, title, action, author, labels, body, url),
-                        targetGroups, toAll, sender, ctx);
+                        configuredGroups, sender, ctx);
             }
 
             @Override
             public void onNewPr(String owner, String repo, int number, String title, String action,
                                 String author, String body, String url) {
                 push(builder.buildPr(owner, repo, number, title, action, author, body, url),
-                        targetGroups, toAll, sender, ctx);
+                        configuredGroups, sender, ctx);
             }
         });
 
         tracker.start();
         ctx.registry().register(new GithubWatchCommand(tracker));
 
-        ctx.logger().info("[Github] 项目追踪已加载（推送到 " + (toAll ? "全部已知群" : targetGroups.size() + " 个群") + "）");
+        ctx.logger().info("[Github] tracking loaded.");
     }
 
-    private List<String> parseTargetGroups(List<String> allowed) {
-        List<String> targets = new ArrayList<>();
-        for (String g : allowed) {
-            if (g != null && !g.trim().isEmpty() && !g.trim().equals("*")) {
-                targets.add(g.trim());
-            }
-        }
-        return targets;
-    }
-
-    private void push(String md, List<String> targetGroups, boolean toAll,
-                      ProactiveSender sender, ModuleContext ctx) {
-        List<String> groups = toAll
-                ? new ArrayList<>(org.windy.xingtubot.common.queue.KnownGroupStore.getInstance().all())
-                : targetGroups;
-
+    private void push(String md, List<String> configuredGroups, ProactiveSender sender, ModuleContext ctx) {
+        List<String> groups = GroupTargets.resolveKnownGroups(ctx, configuredGroups);
         if (sender != null && sender.isReady() && !groups.isEmpty()) {
             for (String gid : groups) {
                 if (!sender.sendGroupMarkdown(gid, md)) {
@@ -130,8 +112,6 @@ public final class GithubModule implements BotModule {
             for (String gid : groups) {
                 PendingMessageQueue.getInstance().offer(gid, md);
             }
-        } else {
-            PendingMessageQueue.getInstance().offer(md);
         }
 
         echoToGame(ctx, md);

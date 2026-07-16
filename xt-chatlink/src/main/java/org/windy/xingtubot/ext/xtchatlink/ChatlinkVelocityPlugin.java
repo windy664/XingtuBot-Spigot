@@ -10,7 +10,6 @@ import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import org.slf4j.Logger;
-import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.config.YamlBotConfig;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ExtensionBootstrap;
@@ -92,7 +91,8 @@ public class ChatlinkVelocityPlugin {
                     () -> host.getService(org.windy.xingtubot.common.module.capability.ProactiveSender.class));
 
             // 配置群服互联白名单
-            List<String> allowedGroups = config.getStringList("allowed-groups");
+            List<String> allowedGroups = org.windy.xingtubot.common.util.GroupTargets
+                    .resolveConcrete(host, config.getStringList("allowed-groups"));
             groupChatLink.setAllowedGroups(allowedGroups);
 
             // 配置敏感词过滤器
@@ -107,7 +107,7 @@ public class ChatlinkVelocityPlugin {
             host.registerService(GroupChatLink.class, groupChatLink);
 
             // 警告：未配具体群
-            warnNoConcreteGroup(config, botLogger);
+            warnNoConcreteGroup(allowedGroups, botLogger);
 
             botLogger.info("[Chatlink] 游戏→QQ 转发已启用（Velocity）");
         }
@@ -118,13 +118,8 @@ public class ChatlinkVelocityPlugin {
         ExtensionBootstrap.disable(module);
     }
 
-    private void warnNoConcreteGroup(BotConfig config, BotLogger logger) {
-        List<String> groups = config.getStringList("allowed-groups");
-        boolean hasConcrete = false;
-        for (String g : groups) {
-            if (g != null && !"*".equals(g) && !g.trim().isEmpty()) { hasConcrete = true; break; }
-        }
-        if (!hasConcrete) {
+    private void warnNoConcreteGroup(List<String> groups, BotLogger logger) {
+        if (groups == null || groups.isEmpty()) {
             logger.warn("[Chatlink] allowed-groups 未配置具体群（为空或 \"*\"），游戏聊天将无法主动转发到 QQ 群。");
             logger.warn("   请在 xt-chatlink/config.yml 把 allowed-groups 配成具体群 openid。");
         }

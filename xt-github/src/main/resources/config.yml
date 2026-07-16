@@ -14,8 +14,8 @@ github-poll-interval-seconds: 300
 baidu-translate-appid: "在此填入你的 APPID"
 baidu-translate-appkey: "在此填入你的 密钥"
 
-# 推送目标群（群 openid 列表）
-# "*" 代表推送到机器人已加入的所有群组。
+# 推送目标群（群 openid 列表）。
+# "*" 或留空 = 继承核心 common-core 的 allowed-groups；填写具体群 = 在核心白名单内再缩小范围。
 allowed-groups:
   - "*"
 

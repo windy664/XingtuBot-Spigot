@@ -99,6 +99,8 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
         commandHandler = new BungeeCordCommandHandler(getProxy(), getLogger(), config, bridge, textImage, getDataFolder());
         // 代理端：跑 bot（server-role 非 off）即为大脑。框架一次性写入宿主，供 xt-auth 等扩展只读。
         commandHandler.getHost().setBrain(velocityIsBrain);
+        commandHandler.getHost().registerService("core.allowed-groups",
+                (java.util.function.Supplier<java.util.List<String>>) () -> config.getStringList("allowed-groups"));
         registerCommands();
 
         // 收到消息后的统一处理

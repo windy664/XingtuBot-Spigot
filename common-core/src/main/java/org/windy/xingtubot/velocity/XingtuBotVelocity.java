@@ -115,6 +115,8 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         commandHandler = new BotCommandHandler(proxy, logger, config, bridge, textImage, dataDir);
         // 代理端：跑 bot（server-role 非 off）即为大脑。框架一次性写入宿主，供 xt-auth 等扩展只读。
         commandHandler.getHost().setBrain(velocityIsBrain);
+        commandHandler.getHost().registerService("core.allowed-groups",
+                (java.util.function.Supplier<java.util.List<String>>) () -> config.getStringList("allowed-groups"));
         proxy.getCommandManager().register("vxtb", new VxtbCommand());
         proxy.getCommandManager().register("qq", new QQCommand(config));
 

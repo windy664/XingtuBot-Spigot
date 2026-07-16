@@ -250,7 +250,8 @@ public class AuthVelocityPlugin {
                 host.getService(org.windy.xingtubot.common.module.capability.ProactiveSender.class);
         if (sender == null || !sender.isReady()) return;
 
-        java.util.List<String> groups = resolveGroups(config);
+        java.util.List<String> groups = org.windy.xingtubot.common.util.GroupTargets
+                .resolveKnownGroups(host, config.getStringList("allowed-groups"));
         if (groups.isEmpty()) return;
 
         final String loginWord = config.getString("login-prompt", "登录");
@@ -292,22 +293,6 @@ public class AuthVelocityPlugin {
         sb.append(LockMessages.get("group-login-card-player")).append(player).append("\n");
         sb.append(LockMessages.format("group-login-card-tip", "{login}", loginWord));
         return sb.toString();
-    }
-
-    private static java.util.List<String> resolveGroups(YamlBotConfig config) {
-        java.util.List<String> allowed = config.getStringList("allowed-groups");
-        boolean all = allowed.isEmpty();
-        java.util.List<String> out = new java.util.ArrayList<>();
-        for (String g : allowed) {
-            if (g == null || g.trim().isEmpty()) continue;
-            if ("*".equals(g.trim())) { all = true; continue; }
-            out.add(g.trim());
-        }
-        if (all) {
-            return new java.util.ArrayList<>(
-                    org.windy.xingtubot.common.queue.KnownGroupStore.getInstance().all());
-        }
-        return out;
     }
 
     @Subscribe

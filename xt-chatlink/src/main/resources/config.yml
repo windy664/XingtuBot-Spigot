@@ -18,7 +18,9 @@ entries-Empty: "群成员"
 # 敏感词过滤（作用于群服互联双向）
 sensitive-filter-chatlink: true
 
-# 群聊白名单（群 openid 列表，"*" = 全部群）
+# 群服互联目标群。
+# "*" 或留空 = 继承核心 common-core 的 allowed-groups；填写具体群 = 在核心白名单内再缩小范围。
+# 游戏→QQ 主动转发需要最终解析出具体群；若 core 也是 "*"，请在这里填写具体群 openid。
 allowed-groups:
   - "*"
 

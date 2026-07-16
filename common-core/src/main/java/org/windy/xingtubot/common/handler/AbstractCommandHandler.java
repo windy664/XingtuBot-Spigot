@@ -34,6 +34,7 @@ public abstract class AbstractCommandHandler {
         registry.setListenMode(config.getString("listen-mode", "mention"));
 
         moduleCtx = new ModuleContextImpl(registry, config, logger, null, permission, dataFolder);
+        proactiveSender.setAllowedGroupsSupplier(() -> config.getStringList("allowed-groups"));
 
         // ===== 通用服务注册 =====
         if (dataFolder != null) {
@@ -58,6 +59,7 @@ public abstract class AbstractCommandHandler {
 
         // ===== 对外 API =====
         service = new XingtuBotServiceImpl(null);
+        service.setAllowedGroupsSupplier(() -> config.getStringList("allowed-groups"));
         service.setRegistry(registry);
         registry.setHookService(service);
         moduleCtx.registerService(org.windy.xingtubot.common.api.XingtuBotService.class, service);

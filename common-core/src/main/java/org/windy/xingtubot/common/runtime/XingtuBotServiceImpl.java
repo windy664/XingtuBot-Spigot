@@ -3,10 +3,14 @@ package org.windy.xingtubot.common.runtime;
 import org.windy.xingtubot.common.api.XingtuBotService;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
+import org.windy.xingtubot.common.util.GroupTargets;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 import java.util.function.BiPredicate;
+import java.util.function.Supplier;
 
 /**
  * XingtuBotService 默认实现。
@@ -21,6 +25,7 @@ public class XingtuBotServiceImpl implements XingtuBotService {
     private volatile org.windy.xingtubot.common.qq.QqOpenApiClient apiClient;
     // 注册中心：供第三方 registerHandler/registerCommand 转发（平台侧注入）
     private volatile org.windy.xingtubot.common.handler.HandlerRegistry registry;
+    private volatile Supplier<List<String>> allowedGroupsSupplier = () -> Collections.singletonList("*");
 
     private final CopyOnWriteArrayList<BiPredicate<String, ? super BotMessageEvent>> beforeHooks = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<BiConsumer<String, ? super BotMessageEvent>> afterHooks = new CopyOnWriteArrayList<>();
@@ -64,9 +69,16 @@ public class XingtuBotServiceImpl implements XingtuBotService {
         this.apiClient = apiClient;
     }
 
+    /** Core allowed-groups is the hard boundary for all service sends. */
+    public void setAllowedGroupsSupplier(Supplier<List<String>> allowedGroupsSupplier) {
+        this.allowedGroupsSupplier = allowedGroupsSupplier != null
+                ? allowedGroupsSupplier : () -> Collections.singletonList("*");
+    }
+
     @Override
     public void sendToGroupMarkdown(String groupOpenId, String markdownContent, String keyboardTemplateId) {
         if (groupOpenId == null || markdownContent == null) return;
+        if (!GroupTargets.isAllowedByCore(allowedGroupsSupplier.get(), groupOpenId)) return;
         // 1) 尽力先走主动消息（主动 markdown 不带按钮模板）
         org.windy.xingtubot.common.qq.QqOpenApiClient api = this.apiClient;
         if (api != null) {
