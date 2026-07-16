@@ -4,158 +4,158 @@
 # 未绑定/未登录玩家进服会被登录锁冻结，期间的所有游戏内提示文字在此配置。
 # 三端（Bukkit / Velocity / BungeeCord）通用；改完重启生效。
 #
-# - 支持 § 颜色码（如 §a 绿、§e 黄、§c 红、§f 白）。
-# - bossbar 标题会自动去掉 § 颜色码取纯文本，颜色由阶段自动决定（已绑定=绿 / 未完成=黄）。
+# - 当前已根据要求切换为 & 颜色码。
+# - bossbar 标题会自动去掉 & 颜色码取纯文本，颜色由阶段自动决定（已绑定=绿 / 未完成=黄）。
 # - qr-fallback 支持占位符：{group}=QQ群号、{url}=加群链接。
 
 # 刚进服、还没输 QQ 号（bossbar + 引导）
-await-qq: "§6欢迎 · 请在聊天框输入你的 QQ号 开始白名单绑定"
+await-qq: "&b❖ 请在聊天框输入你的 &eQQ号 &f以启动白名单绑定"
 
 # 已输入 QQ、进入「去群里发绑定」阶段（此时地图二维码已强制放到手上）
-need-bind: "§e就差一步 · 手持地图用手机 QQ 扫码加群，并在群里发送「绑定」完成头像验证"
+need-bind: "&e❖ 仅差一步 &8| &f手持地图使用手机QQ扫码入群，并在群内发送「&e绑定&f」"
 
 # 已绑定、等待在群里点「登录」
-need-login: "§a欢迎回来 · 在群里点机器人发的「登录」按钮完成上线"
+need-login: "&a❖ 欢迎归回 &8| &f请在 QQ 群内点击机器人发送的「&a登录&f」按钮以进入游戏"
 
 # 聊天框输入的不是合法 QQ 号
-qq-invalid: "§c请输入有效的 QQ 号（5-12 位数字）"
+qq-invalid: "&c✖ 请输入有效的 QQ 号（5-12 位数字）"
 
 # 绑定服务尚未就绪
-not-ready: "§c绑定服务未就绪，请稍后再试"
+not-ready: "&c✖ 绑定服务尚未就绪，请稍后再试"
 
 # 登录成功、解锁时的提示
-unlocked: "§a✅ 已登录，祝游戏愉快！"
+unlocked: "&a✅ 验证通过，祝你游玩愉快！"
 
 # 加群二维码兜底文字（仅当 packetevents 运行期不可用、发不了地图时才用；{group}/{url} 为占位符）
-qr-fallback: "§e加入 QQ 群：{group} {url}"
+qr-fallback: "&e❖ 请加入 QQ 群：&f{group} &7({url})"
 
 # ---- 进服欢迎（Bukkit 本地模式）----
 # 下面 welcome-* 是进服瞬间闪一次的 title；用首个 " · " 分隔主标题/副标题。
 
 # 同设备信任期内免密自动登录
-welcome-auto-login: "§a§l欢迎回来 · §f同设备信任期内已自动登录"
-auto-login-msg: "§a✅ 同设备信任期内，已为你自动登录，祝游戏愉快！"
+welcome-auto-login: "&a&l欢迎归回 &8· &f「久在樊笼里，复得返自然」已自动登录"
+auto-login-msg: "&a✅ 已通过设备信任验证，自动为你登录，祝游玩愉快！"
 
 # 已绑定、需登录（{title} = config 的 title-code，通常含 @机器人/命令提示）
-welcome-need-login: "§a§l欢迎回来 · {title}"
+welcome-need-login: "&a&l欢迎归回 &8· &f{title}"
 
 # 已登记 QQ、需在群里发绑定（{bind} = binding-prompt，默认「绑定」）
-welcome-need-bind: "§6§l请完成绑定 · §f在群里发送「{bind}」"
+welcome-need-bind: "&e&l请完成绑定 &8· &f请在群内发送「&e{bind}&f」"
 
 # 全新玩家、需输入 QQ 号
-welcome-await-qq: "§6§l欢迎来到本服 · §f请在聊天框输入 QQ 号开始白名单绑定"
-await-qq-msg: "§e欢迎！请在聊天框输入你的 §bQQ号 §e完成白名单绑定"
+welcome-await-qq: "&b&l欢迎光临 &8· &f请在聊天框输入 &eQQ号 &f开始白名单绑定"
+await-qq-msg: "&b❖ 欢迎！&f请在聊天框输入你的 &eQQ号 &f以完成白名单白登记"
 
 # ---- 绑定/登录反馈 ----
 
 # 输入的 QQ 号格式不对
-qq-format: "§cQQ号格式不正确，请输入 5~15 位数字"
+qq-format: "&c✖ QQ号格式不正确，请输入 5~15 位数字"
 
 # 已绑定过，无需重复
-already-bound: "§e你已绑定过白名单，无需重复绑定"
+already-bound: "&e❖ 你已绑定过白名单，无需重复绑定"
 
 # QQ 头像拉取失败
-qq-avatar-fail: "§c取不到该QQ号的头像，请确认QQ号填写正确、且该QQ已设置头像后重试"
+qq-avatar-fail: "&c✖ 无法获取该 QQ 的头像，请确认号码正确且已设置头像后再试"
 
 # QQ 头像是默认/纯色，无法用于比对
-qq-avatar-unusable: "§c该QQ头像是默认/纯色或无法识别，无法用于绑定。请先在QQ设置一张清晰头像后再绑定"
+qq-avatar-unusable: "&c✖ 该 QQ 头像为默认或纯色，无法用于识别。请先在 QQ 更换清晰头像后再试"
 
 # QQ 已记录，请群里发绑定（{qq}=QQ号, {prompt}=绑定关键词, {group}=群号）
-qq-recorded: "§a已记录QQ §f{qq}§a。\n§a请在 QQ群 §e{group} §a内发送「§e§l{prompt}§a」完成白名单绑定（5分钟内有效）"
+qq-recorded: "&a❖ 已成功记录 QQ：&f{qq}\n&a请在 QQ群 &e{group} &a内发送「&e&l{prompt}&a」完成白名单绑定（5分钟内有效）"
 
 # 绑定成功 title（主标题 / 副标题用 " · " 分隔，此处无分隔所以副标题为空）
-bind-title: "§a§l✅ 绑定成功"
-bind-subtitle: "§f欢迎加入，祝游戏愉快"
+bind-title: "&a&l✅ 绑定成功"
+bind-subtitle: "&f「海内存知己，天涯若比邻」祝你游玩愉快"
 
 # 绑定成功聊天消息
-bind-msg: "§a✅ 绑定成功！已为你注册，可以正常游玩了"
+bind-msg: "&a✅ 绑定成功！已为你开通白名单，可以正常游玩了"
 
 # 登录成功 title
-login-title: "§a§l✅ 登录成功"
-login-subtitle: "§f祝你游戏愉快"
+login-title: "&a&l✅ 登录成功"
+login-subtitle: "&f「轻舟已过万重山」祝你游玩愉快"
 
 # 登录成功聊天消息
-login-msg: "§a✅ 你已通过QQ群登录，祝游戏愉快！"
+login-msg: "&a✅ 你已通过 QQ 群成功登录，祝游玩愉快！"
 
 # 锁定期尝试使用命令
-command-blocked: "§c请先完成绑定/登录后再使用命令"
+command-blocked: "&c✖ 请先完成绑定或登录后再使用命令"
 
 # ---- 群聊侧·绑定/登录错误回复 ----
 # 以下文案在 QQ 群聊中展示（非游戏内），支持 emoji。
 
 # openid 已绑定过
-group-already-bound: "⚠️ 您的QQ已绑定过白名单"
+group-already-bound: "⚠️ 您的 QQ 已绑定过白名单，无需重复操作"
 
 # 匹配尝试次数超限
 group-too-many-attempts: "⚠️ 尝试次数过多，请稍后再试"
 
 # 游戏内还没有人输 QQ 号
-group-no-pending: "⚠️ 当前没有待绑定的记录，请先在游戏内输入你的 QQ 号"
+group-no-pending: "⚠️ 当前没有待绑定的记录，请先在游戏内输入您的 QQ 号"
 
 # openapi-app-id 为空
-group-appid-empty: "⚠️ 绑定服务尚未就绪（openapi-app-id 为空），请稍候重试或联系管理员"
+group-appid-empty: "⚠️ 绑定服务尚未就绪（机器人配置异常），请联系管理员检查"
 
 # openid 头像拉取失败
-group-avatar-fetch-fail: "⚠️ 取不到你的QQ头像，暂时无法绑定，请稍后再试"
+group-avatar-fetch-fail: "⚠️ 无法获取您的 QQ 头像，暂时无法绑定，请稍后重试"
 
 # openid 头像回落成占位图（appId 配错）
-group-avatar-placeholder: "⚠️ 绑定服务未正确配置（管理员请检查 openapi-app-id 是否与机器人一致），暂时无法绑定"
+group-avatar-placeholder: "⚠️ 机器人服务未正确配置（接口异常），暂时无法绑定"
 
 # openid 头像是默认/纯色
-group-avatar-low-info: "⚠️ 你的QQ头像是默认/纯色头像，无法用于绑定，请先在QQ设置一张清晰头像后重试"
+group-avatar-low-info: "⚠️ 您的 QQ 头像是默认或纯色头像，无法进行安全识别，请先在 QQ 设置清晰头像后重试"
 
 # 头像比对未命中
-group-no-match: "⚠️ 没找到与你头像匹配的待绑定记录。请确认：游戏内输入的是【你本人】的QQ号，且与你现在的QQ头像一致"
+group-no-match: "⚠️ 未找到匹配的待绑定记录。\n> **请确认**：您在游戏内输入的 QQ 号是否为您【本人】，且与当前 QQ 头像一致"
 
 # 头像歧义（多条记录过于相似）
-group-avatar-ambiguous: "⚠️ 有多条待绑定记录头像过于相似，无法自动确认，请联系管理员手动绑定"
+group-avatar-ambiguous: "⚠️ 检测到多条过于相似的待绑定记录，系统无法自动确认，请联系管理员手动审核"
 
 # 群里发「登录」但未绑定
-group-not-bound: "⚠️ 您未绑定白名单，请先完成绑定"
+group-not-bound: "⚠️ 您尚未绑定白名单，请先进入游戏完成白名单登记"
 
 # AuthAdapter 未注入
-group-auth-unavailable: "⚠️ 登录服务暂不可用，请稍后再试或联系管理员"
+group-auth-unavailable: "⚠️ 验证服务暂不可用，请稍后再试或联系管理员"
 
 # 玩家不在线（{player}=玩家名）
-group-player-offline: "⚠️ 玩家 {player} 当前不在线，请先进入服务器再登录"
+group-player-offline: "⚠️ 旅者当前不在线。玩家 **{player}** 须先进入游戏服，方可在群内点击登录"
 
 # 重复点登录
-group-already-logged-in: "ℹ️ 你已经登录过了，无需重复登录"
+group-already-logged-in: "ℹ️ 您已经处于登录状态，无需重复登录"
 
 # 绑定成功但玩家不在线的追加提示
-group-bind-offline: "\n> ⏳ 你当前不在线，请重新进服后在群里发送「登录」开始游玩"
+group-bind-offline: "\n> ⏳ 绑定成功！但您当前已下线，请重新进入游戏服并在群内发送「登录」"
 
 # ---- 群聊侧·管理命令（超管群内使用）----
 
 # 绑定库未就绪
-admin-service-unavailable: "白名单未启用，或绑定库尚未就绪"
+admin-service-unavailable: "❌ 白名单未启用，或绑定库尚未就绪"
 
 # 绑定列表为空
-admin-list-empty: "当前还没有任何白名单绑定"
+admin-list-empty: "📂 当前还没有任何白名单绑定记录"
 
 # 列表截断（{limit}=最大条数, {total}=总数）
-admin-list-truncated: "仅显示前 {limit} 条，共 {total} 条。用「查绑定 <玩家/QQ>」精确查询"
+admin-list-truncated: "📊 仅显示前 **{limit}** 条，共 **{total}** 条。请使用 `查绑定 <玩家/QQ>` 进行精确查询"
 
 # 列表底部提示
-admin-list-hint: "查单个：查绑定 <玩家/QQ>　·　解绑：解绑 <玩家>"
+admin-list-hint: "💡 **精确查询**：查绑定 <玩家/QQ> · **移除白名**：解绑 <玩家>"
 
 # 查绑定用法
-admin-query-usage: "用法：查绑定 <玩家名 或 QQ号>"
+admin-query-usage: "💡 **使用方法**：查绑定 <玩家名 或 QQ号>"
 
 # 查绑定未找到
-admin-query-not-found: "没找到该玩家名 / QQ 号的绑定"
+admin-query-not-found: "🔍 未能找到该玩家名或 QQ 号的白名单记录"
 
 # 解绑用法
-admin-unbind-usage: "用法：解绑 <玩家名>"
+admin-unbind-usage: "💡 **使用方法**：解绑 <玩家名>"
 
 # 解绑目标无记录
-admin-unbind-not-found: "该玩家没有绑定记录，无需解绑"
+admin-unbind-not-found: "🔍 该玩家没有绑定记录，无需解绑"
 
 # 解绑成功
-admin-unbind-done: "该玩家下次进服需重新绑定白名单"
+admin-unbind-done: "✅ 该玩家已成功移出白名单，下次进服需重新绑定"
 
 # 解绑失败
-admin-unbind-error: "删除记录时出错，请查看后台日志"
+admin-unbind-error: "❌ 删除记录时出错，请查看后台日志"
 
 # ---- 群聊侧·登录卡片（Velocity 代理模式）----
 
@@ -163,29 +163,29 @@ admin-unbind-error: "删除记录时出错，请查看后台日志"
 group-login-card-title: "## 🔐 登录请求\n"
 
 # 登录请求卡片底部提示（{login}=登录关键词）
-group-login-card-tip: "\n> Tips: 在群里回复「**{login}**」亦可登录 ✅\n"
+group-login-card-tip: "\n> 💡 Tips：在群里回复「**{login}**」亦可授权登录\n"
 
 # 登录请求卡片玩家名标签
-group-login-card-player: "👤 **玩家**　"
+group-login-card-player: "👤 **玩家** "
 
 # ---- 群聊侧·管理命令卡片标题/字段标签 ----
 
 # 卡片标题
 admin-card-title-unavailable: "绑定服务不可用"
-admin-card-title-list: "绑定列表"
-admin-card-title-query: "查绑定"
-admin-card-title-info: "绑定信息"
-admin-card-title-unbind: "解绑"
-admin-card-title-unbound: "已解绑"
-admin-card-title-unbind-fail: "解绑失败"
+admin-card-title-list: "白名单绑定列表"
+admin-card-title-query: "白名单查询结果"
+admin-card-title-info: "白名单详细信息"
+admin-card-title-unbind: "解绑操作"
+admin-card-title-unbound: "已成功解绑"
+admin-card-title-unbind-fail: "解绑操作失败"
 
 # 卡片字段标签
 admin-field-keyword: "关键词"
-admin-field-player: "玩家"
-admin-field-qq: "QQ"
-admin-field-openid: "openid"
-admin-field-bound-at: "绑定于"
-admin-field-original-qq: "原 QQ"
+admin-field-player: "游戏玩家"
+admin-field-qq: "绑定QQ"
+admin-field-openid: "OpenID"
+admin-field-bound-at: "绑定时间"
+admin-field-original-qq: "原始QQ"
 
 # 命令触发词（管理员在群内输入这些词触发对应功能）
 admin-trigger-list: "绑定列表"
@@ -193,22 +193,26 @@ admin-trigger-query: "查绑定"
 admin-trigger-unbind: "解绑"
 
 # 帮助/描述
-admin-category: "👑 管理"
+admin-category: "👑 管理员权限"
 admin-usage: "绑定列表 / 查绑定 <玩家|QQ> / 解绑 <玩家>"
-admin-desc: "白名单绑定管理（列表/查询/解绑）"
+admin-desc: "白名单管理指令（支持列表查看、数据查询与解除绑定）"
 
 # ---- 群聊侧·成功卡片默认模板（config 可覆盖）----
 # 占位符：{player}=玩家名, {qq}=QQ号
 
 card-bind-success: |
-  ## 🎉 绑定成功 · 欢迎加入！
-  👤 **玩家**　{player}
-  🐧 **QQ**　　{qq}
-
-  > 🌟 白名单已开通，进服开启你的冒险吧~
+  # 🎉 白名单绑定成功
+  ---
+  * 👤 **玩家名称**：`{player}`
+  * 🐧 **绑定 QQ**：`{qq}`
+  
+  ---
+  > 呦呦鹿鸣，食野之苹。我有嘉宾，鼓瑟吹笙。 —— 曹操《短歌行》
 
 card-login-success: |
-  ## ✅ 登录成功 · 欢迎回来！
-  👤 **玩家**　{player}
-
-  > 🎮 一切就绪，祝你玩得开心！
+  # ✅ 登录成功 · 欢迎回来
+  ---
+  * 👤 **玩家名称**：`{player}`
+  
+  ---
+  > 桃李春风一杯酒，江湖夜雨十年灯。 —— 黄庭坚《寄黄几复》
