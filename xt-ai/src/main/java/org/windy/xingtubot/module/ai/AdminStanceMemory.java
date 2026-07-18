@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class AdminStanceMemory {
 
     private static final int MAX_PER_GROUP = 10;
+    private static final int MAX_RAW_RECENT = 5;
     private static final Gson GSON = new Gson();
 
     private final ConcurrentHashMap<String, List<String>> stances = new ConcurrentHashMap<>();
@@ -29,7 +30,7 @@ public final class AdminStanceMemory {
     }
 
     /**
-     * 记录一条超管发言（自动持久化）。
+     * 记录一条超管发言（自动持久化，旧消息自动压缩）。
      */
     public void record(String guildId, String content) {
         if (guildId == null || content == null || content.trim().isEmpty()) return;
@@ -38,11 +39,32 @@ public final class AdminStanceMemory {
             // 去重
             if (!list.isEmpty() && list.get(list.size() - 1).equals(content.trim())) return;
             list.add(content.trim());
-            while (list.size() > MAX_PER_GROUP) {
-                list.remove(0);
-            }
+            compress(list);
         }
         save();
+    }
+
+    /**
+     * 压缩：超过 MAX_RAW_RECENT 条时，旧消息合并成一条摘要。
+     * 例如 8 条 → 1 条摘要 + 7 条最近（但总数不超过 MAX_PER_GROUP）。
+     */
+    private void compress(List<String> list) {
+        while (list.size() > MAX_PER_GROUP) {
+            // 需要压缩：把前 (size - MAX_RAW_RECENT + 1) 条合并
+            int mergeCount = list.size() - MAX_RAW_RECENT + 1;
+            if (mergeCount <= 0) break;
+
+            StringBuilder merged = new StringBuilder("[以往观点摘要] ");
+            for (int i = 0; i < mergeCount; i++) {
+                if (i > 0) merged.append("｜");
+                merged.append(list.get(i));
+            }
+            // 移除被合并的，插入摘要
+            for (int i = 0; i < mergeCount; i++) {
+                list.remove(0);
+            }
+            list.add(0, merged.toString());
+        }
     }
 
     /**
