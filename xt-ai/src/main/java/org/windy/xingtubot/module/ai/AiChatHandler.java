@@ -518,6 +518,9 @@ public final class AiChatHandler implements BotMessageHandler {
         String memKey = guildId + "#" + senderId;
         if (isDirectAt) {
             messages.addAll(replyMemory.getMessages(memKey));
+        } else {
+            String autoKey = guildId + "#auto";
+            messages.addAll(replyMemory.getMessages(autoKey));
         }
 
         String userTag = event.getUsername() != null ? event.getUsername() : "群友";
@@ -588,6 +591,12 @@ public final class AiChatHandler implements BotMessageHandler {
             history.add(createMessage("user", userTag + "：" + msg));
             history.add(createMessage("assistant", out));
             replyMemory.setMessages(memKey, history);
+        } else {
+            String autoKey = guildId + "#auto";
+            List<Map<String, String>> autoHistory = replyMemory.getMessages(autoKey);
+            autoHistory.add(createMessage("user", userTag + "：" + msg));
+            autoHistory.add(createMessage("assistant", out));
+            replyMemory.setMessages(autoKey, autoHistory);
         }
     }
 

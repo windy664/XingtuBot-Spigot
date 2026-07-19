@@ -1,4 +1,4 @@
-# XingtuBot-AI: AI 对话配置
+# AI 对话配置
 
 # AI 对话功能开关
 llm-enable: false
@@ -47,9 +47,9 @@ blacklist-users:
 ai-max-calls-per-hour: 60
 
 ##########################################
-# 自主参与判断（傻模型）
+# 自主参与判断是否回复（傻模型）
 ##########################################
-# 普通群消息先由轻量模型判断：ADMIN_ATTACK / CHIME_IN / NO_REPLY
+# 普通群消息先由轻量模型判断
 chime-in-judge-enable: true
 # OpenRouter 兼容 OpenAI 接口；不用 OpenRouter 时改成你的兼容接口地址
 chime-in-judge-base-url: "https://openrouter.ai/api/v1"
@@ -63,9 +63,7 @@ chime-in-max-messages: 9
 # 普通自主插话冷却；攻击超管不受这个冷却限制
 chime-in-cooldown-seconds: 120
 
-# 命令关键词黑名单（消息包含这些词 → 不触发AI，API根本不会调）
-# 已注册的XingtuBot命令前缀会自动过滤，这里补充非前缀型的关键词
-# "登录""绑定""注册""白名单" 硬编码兜底，不需要重复写
+# 关键词黑名单（消息包含这些词 → 不触发AI，API根本不会调）
 blocked-keywords:
   - "天气"
   - "运势"
