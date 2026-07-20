@@ -1,6 +1,7 @@
 package org.windy.xingtubot.module;
 
 import org.windy.xingtubot.common.binding.BindingRepository;
+import org.windy.xingtubot.common.binding.BindingEntry;
 import org.windy.xingtubot.common.command.CustomCommandConfig;
 import org.windy.xingtubot.common.command.impl.CustomCommandHandler;
 import org.windy.xingtubot.common.handler.impl.CustomReplyHandler;
@@ -81,8 +82,12 @@ public final class GroupFeaturesModule implements BotModule {
             CustomCommandConfig cmdConfig = new CustomCommandConfig(m -> ctx.logger().info(m));
             cmdConfig.load(commandsFile);
             if (!cmdConfig.getEntries().isEmpty()) {
+                // openid → 玩家名（查绑定库，运行时获取避免硬依赖）
+                java.util.function.Function<String, String> playerLookup = bindingStore != null
+                        ? openid -> { BindingEntry e = bindingStore.findByOpenid(openid); return e != null ? e.player : null; }
+                        : null;
                 CustomCommandHandler handler = new CustomCommandHandler(
-                        cmdConfig, bindingStore,
+                        cmdConfig, playerLookup,
                         console != null ? (target, cmd, cb) -> console.exec(cmd, cb) : null,
                         player != null ? (target, cmd, cb) -> player.exec(target, cmd, cb) : null,
                         cross != null ? (server, cmd, cb) -> cross.exec(server, cmd, cb) : null);

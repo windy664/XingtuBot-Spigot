@@ -1,5 +1,7 @@
 package org.windy.xingtubot.common.config;
 
+import org.windy.xingtubot.common.runtime.BotRuntimeState;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +39,6 @@ public interface BotConfig {
      */
     default String getStringResolved(String path, String def) {
         String val = getString(path, def);
-        return val.replace("{bot}", org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName());
+        return val.replace("{bot}", BotRuntimeState.getBotName());
     }
 }

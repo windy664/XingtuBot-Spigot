@@ -1,0 +1,12 @@
+# ========================================
+# 昕途机器人 · Spring Boot 独立运行配置
+# ========================================
+
+xingtubot:
+  # 数据目录（config.yml / openid_names.json / 消息队列等持久化文件存放位置）
+  data-dir: ./data
+
+spring:
+  main:
+    # 纯 bot 模式，不启动 web 服务器（无 Tomcat/Jetty/Netty）
+    web-application-type: none

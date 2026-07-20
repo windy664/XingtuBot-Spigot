@@ -34,18 +34,29 @@ public class SensitiveFilter {
 
     private volatile Set<String> allWords = Collections.synchronizedSet(new HashSet<>());
 
+    /**
+     * 从配置创建（顶层键，兼容旧模块各自的 config）。
+     */
     public static SensitiveFilter fromConfig(BotConfig config, BotLogger logger) {
-        boolean enabled = config.getBoolean("Enable", false);
+        return fromConfig(config, "", logger);
+    }
 
-        List<String> localWords = config.getStringList("Local");
+    /**
+     * 从配置创建（带前缀，如 prefix="sensitive-filter" → 读 sensitive-filter.Enable 等）。
+     */
+    public static SensitiveFilter fromConfig(BotConfig config, String prefix, BotLogger logger) {
+        String p = (prefix == null || prefix.isEmpty()) ? "" : prefix + ".";
+        boolean enabled = config.getBoolean(p + "Enable", false);
 
-        boolean cloudEnabled = config.getBoolean("Cloud-Thesaurus.Enabled", false);
-        List<String> cloudIgnored = config.getStringList("Cloud-Thesaurus.Ignored");
-        List<String> cloudUrls = config.getStringList("Cloud-Thesaurus.Urls");
+        List<String> localWords = config.getStringList(p + "Local");
 
-        List<String> ignoredPunctuations = config.getStringList("Ignored-Punctuations");
+        boolean cloudEnabled = config.getBoolean(p + "Cloud-Thesaurus.Enabled", false);
+        List<String> cloudIgnored = config.getStringList(p + "Cloud-Thesaurus.Ignored");
+        List<String> cloudUrls = config.getStringList(p + "Cloud-Thesaurus.Urls");
 
-        String repStr = config.getString("Replacement", "*");
+        List<String> ignoredPunctuations = config.getStringList(p + "Ignored-Punctuations");
+
+        String repStr = config.getString(p + "Replacement", "*");
         char replacement = repStr.isEmpty() ? '*' : repStr.charAt(0);
 
         return new SensitiveFilter(

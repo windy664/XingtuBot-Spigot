@@ -17,12 +17,10 @@ public class BungeeCordPlaceholders implements PlaceholderResolver {
 
     private final ProxyServer proxy;
     private final BungeeCordBridge bridge;
-    private final String defaultSender;
 
-    public BungeeCordPlaceholders(ProxyServer proxy, BungeeCordBridge bridge, String defaultSender) {
+    public BungeeCordPlaceholders(ProxyServer proxy, BungeeCordBridge bridge) {
         this.proxy = proxy;
         this.bridge = bridge;
-        this.defaultSender = defaultSender == null ? "群成员" : defaultSender;
     }
 
     @Override
@@ -42,8 +40,7 @@ public class BungeeCordPlaceholders implements PlaceholderResolver {
             r = r.replace("{online}", String.valueOf(proxy.getOnlineCount()));
         }
         if (r.contains("{sender}")) {
-            String name = event.getUsername();
-            r = r.replace("{sender}", name != null && !name.isEmpty() ? name : defaultSender);
+            r = r.replace("{sender}", event.getUsername());
         }
         if (r.contains("{date}")) {
             r = r.replace("{date}", new SimpleDateFormat("yyyy-MM-dd").format(new Date()));

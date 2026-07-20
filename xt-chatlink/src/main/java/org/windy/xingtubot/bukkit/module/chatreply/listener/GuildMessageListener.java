@@ -52,19 +52,12 @@ public final class GuildMessageListener {
         final String content = resolved;
         if (content.isEmpty()) return;
 
-        // 解析发送者昵称：优先白名单绑定的玩家名，其次 QQ 昵称，最后 entries-Empty 兜底
+        // 解析发送者昵称：优先绑定的玩家名，其次 QQ 昵称
         List<String> players = playerLookup != null
                 ? playerLookup.apply(formId)
                 : Collections.emptyList();
 
-        final String senderName;
-        if (!players.isEmpty()) {
-            senderName = players.get(0);
-        } else if (username != null && !username.isEmpty()) {
-            senderName = username;
-        } else {
-            senderName = plugin.getConfig().getString("entries-Empty", "群成员");
-        }
+        final String senderName = !players.isEmpty() ? players.get(0) : username;
 
         String chatPrefix = plugin.getConfig().getString("chat-format", "🐧§cQQ群 §7| §f");
 

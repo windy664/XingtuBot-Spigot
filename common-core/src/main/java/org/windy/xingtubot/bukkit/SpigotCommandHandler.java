@@ -1,14 +1,19 @@
 package org.windy.xingtubot.bukkit;
 
 import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.EventPriority;
+import org.bukkit.plugin.ServicePriority;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
+import org.windy.xingtubot.bukkit.module.console.CapturingConsoleSender;
+import org.windy.xingtubot.common.api.XingtuBotService;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.handler.AbstractCommandHandler;
 import org.windy.xingtubot.common.module.ModuleContextImpl;
+import org.windy.xingtubot.common.module.XingtuBotHost;
 import org.windy.xingtubot.common.module.capability.*;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.reply.PlaceholderResolver;
@@ -29,13 +34,8 @@ public class SpigotCommandHandler extends AbstractCommandHandler implements List
                 plugin);
         this.plugin = plugin;
 
-        // Bukkit ServicesManager 注册宿主
-        Bukkit.getServicesManager().register(
-                org.windy.xingtubot.common.module.XingtuBotHost.class, getHost(),
-                plugin, org.bukkit.plugin.ServicePriority.Normal);
-        Bukkit.getServicesManager().register(
-                org.windy.xingtubot.common.api.XingtuBotService.class, getService(),
-                plugin, org.bukkit.plugin.ServicePriority.Normal);
+        Bukkit.getServicesManager().register(XingtuBotHost.class, getHost(), plugin, ServicePriority.Normal);
+        Bukkit.getServicesManager().register(XingtuBotService.class, getService(), plugin, ServicePriority.Normal);
 
         Bukkit.getPluginManager().registerEvents(this, plugin);
         plugin.getLogger().info("[核心] 命令中心已就绪（功能由附属扩展插件提供）");
@@ -47,29 +47,37 @@ public class SpigotCommandHandler extends AbstractCommandHandler implements List
         XingtuBot plugin = (XingtuBot) platform;
 
         ctx.registerService(ConsoleExecutor.class, (ConsoleExecutor) (cmd, callback) -> {
-            org.windy.xingtubot.bukkit.module.console.CapturingConsoleSender sender =
-                    new org.windy.xingtubot.bukkit.module.console.CapturingConsoleSender(callback);
+            CapturingConsoleSender sender = new CapturingConsoleSender(callback);
             Bukkit.getScheduler().runTask(plugin, () -> {
-                try { Bukkit.dispatchCommand(sender, cmd); }
-                catch (Exception e) { callback.accept("⚠️ 命令异常: " + e.getMessage()); return; }
+                try {
+                    Bukkit.dispatchCommand(sender, cmd);
+                } catch (Exception e) {
+                    callback.accept("⚠️ 命令异常: " + e.getMessage());
+                    return;
+                }
                 sender.flushDelayed(plugin);
             });
         });
 
         ctx.registerService(PlayerCommandExecutor.class, (PlayerCommandExecutor) (player, cmd, callback) ->
             Bukkit.getScheduler().runTask(plugin, () -> {
-                org.bukkit.entity.Player p = Bukkit.getPlayerExact(player);
+                Player p = Bukkit.getPlayerExact(player);
                 if (p != null && p.isOnline()) {
-                    try { Bukkit.dispatchCommand(p, cmd); callback.accept("✅ 已作为 " + player + " 执行: " + cmd); }
-                    catch (Exception e) { callback.accept("⚠️ 命令异常: " + e.getMessage()); }
-                } else { callback.accept("玩家 " + player + " 不在线"); }
+                    try {
+                        Bukkit.dispatchCommand(p, cmd);
+                        callback.accept("✅ 已作为 " + player + " 执行: " + cmd);
+                    } catch (Exception e) {
+                        callback.accept("⚠️ 命令异常: " + e.getMessage());
+                    }
+                } else {
+                    callback.accept("玩家 " + player + " 不在线");
+                }
             }));
     }
 
     @Override
     protected PlaceholderResolver createPlaceholders(BotConfig config, Object platform) {
-        SpigotPlaceholders ph = new SpigotPlaceholders(
-                null, config.getString("entries-Empty", "群成员"));
+        SpigotPlaceholders ph = new SpigotPlaceholders(null);
         ph.registerPapiExpansion();
         return ph;
     }

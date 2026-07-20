@@ -1,0 +1,6 @@
+name: XingtuBot-MCSM
+version: '${version}'
+main: org.windy.xingtubot.ext.xtmcsm.McsmBukkitPlugin
+authors: [ 风吟 ]
+depend:
+  - XingtuBot

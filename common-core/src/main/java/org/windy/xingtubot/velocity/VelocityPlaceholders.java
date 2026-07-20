@@ -17,12 +17,10 @@ public class VelocityPlaceholders implements PlaceholderResolver {
 
     private final ProxyServer proxy;
     private final VelocityBridge bridge;  // 可为 null（PAPI 跨服解析用）
-    private final String defaultSender;
 
-    public VelocityPlaceholders(ProxyServer proxy, VelocityBridge bridge, String defaultSender) {
+    public VelocityPlaceholders(ProxyServer proxy, VelocityBridge bridge) {
         this.proxy = proxy;
         this.bridge = bridge;
-        this.defaultSender = defaultSender == null ? "群成员" : defaultSender;
     }
 
     @Override
@@ -51,9 +49,7 @@ public class VelocityPlaceholders implements PlaceholderResolver {
         }
         if (r.contains("{sender}")) {
             String player = boundPlayer(event);
-            r = r.replace("{sender}", player != null ? player :
-                    (event.getUsername() != null && !event.getUsername().isEmpty()
-                            ? event.getUsername() : defaultSender));
+            r = r.replace("{sender}", player != null ? player : event.getUsername());
         }
         if (r.contains("{date}")) {
             r = r.replace("{date}", new SimpleDateFormat("yyyy-MM-dd").format(new Date()));

@@ -73,13 +73,13 @@ public final class AiChatHandler implements BotMessageHandler {
 
     public AiChatHandler(AiService aiService, BotConfig config, BotLogger logger,
                          BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
-                         java.io.File dataDir) {
-        this(aiService, null, config, logger, commandMatcher, permission, dataDir);
+                         java.io.File dataDir, SensitiveFilter sensitiveFilter) {
+        this(aiService, null, config, logger, commandMatcher, permission, dataDir, sensitiveFilter);
     }
 
     public AiChatHandler(AiService aiService, AiService chimeInJudgeService, BotConfig config, BotLogger logger,
                          BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
-                         java.io.File dataDir) {
+                         java.io.File dataDir, SensitiveFilter sensitiveFilter) {
         this.aiService = aiService;
         this.chimeInJudgeService = chimeInJudgeService;
         this.config = config;
@@ -87,7 +87,7 @@ public final class AiChatHandler implements BotMessageHandler {
         this.commandMatcher = commandMatcher;
         this.permission = permission;
         this.adminStance = new AdminStanceMemory(dataDir);
-        this.sensitiveFilter = SensitiveFilter.fromConfig(config, logger);
+        this.sensitiveFilter = sensitiveFilter;
         reloadBlockedKeywords();
         reloadGroupWhitelist();
         reloadAttackTargets();
@@ -516,12 +516,7 @@ public final class AiChatHandler implements BotMessageHandler {
         }
 
         String memKey = guildId + "#" + senderId;
-        if (isDirectAt) {
-            messages.addAll(replyMemory.getMessages(memKey));
-        } else {
-            String autoKey = guildId + "#auto";
-            messages.addAll(replyMemory.getMessages(autoKey));
-        }
+        messages.addAll(replyMemory.getMessages(memKey));
 
         String userTag = event.getUsername() != null ? event.getUsername() : "群友";
         if (senderIsAdmin) userTag = "【管理员】" + userTag;
@@ -539,8 +534,9 @@ public final class AiChatHandler implements BotMessageHandler {
 
         if (adminAttack) {
             messages.add(createMessage("system",
-                    "上面这条消息在攻击管理员。帮管理怼回去，像朋友之间吵架一样，吐槽级别就行，别太凶。" +
-                    "简短直接，不要回复 NO_REPLY。"));
+                    "上面这条消息在攻击管理员/群主。你的立场是跟管理一伙的，直接怼回去，语气带刺但不骂脏话。" +
+                    "用反问、嘲讽、归谬让对方哑口无言，像真朋友互怼那样犀利。" +
+                    "简短有力，一两句话扎心就够，不要回复 NO_REPLY。"));
         }
 
         if (!isDirectAt && !adminAttack) {
@@ -586,18 +582,10 @@ public final class AiChatHandler implements BotMessageHandler {
 
         String botName = org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName();
         groupContext.record(guildId, botName, out);
-        if (isDirectAt) {
-            List<Map<String, String>> history = replyMemory.getMessages(memKey);
-            history.add(createMessage("user", userTag + "：" + msg));
-            history.add(createMessage("assistant", out));
-            replyMemory.setMessages(memKey, history);
-        } else {
-            String autoKey = guildId + "#auto";
-            List<Map<String, String>> autoHistory = replyMemory.getMessages(autoKey);
-            autoHistory.add(createMessage("user", userTag + "：" + msg));
-            autoHistory.add(createMessage("assistant", out));
-            replyMemory.setMessages(autoKey, autoHistory);
-        }
+        List<Map<String, String>> history = replyMemory.getMessages(memKey);
+        history.add(createMessage("user", userTag + "：" + msg));
+        history.add(createMessage("assistant", out));
+        replyMemory.setMessages(memKey, history);
     }
 
     private static boolean isNoReply(String s) {
@@ -654,9 +642,9 @@ public final class AiChatHandler implements BotMessageHandler {
 
         sb.append("\n【立场】\n");
         sb.append("10. 你跟服务器管理组是一伙的\n");
-        sb.append("11. 有人骂管理/群主，你帮着怼回去，但别太凶，吐槽级别就够了\n");
+        sb.append("11. 有人骂管理/群主，你帮着怼回去——犀利、带刺、用反问和嘲讽让对方闭嘴，但不骂脏话\n");
         sb.append("12. 提建议、报bug、抱怨服务器问题不算攻击，那是正常反馈，别怼\n");
-        sb.append("13. 不要暴露你在\"维护\"管理，表现得像你自己也这么想\n");
+        sb.append("13. 不要暴露你在\"维护\"管理，表现得像你自己也这么想，是你主动看不惯\n");
 
         sb.append("\n你就是群里的一个人，不要自称AI/机器人/助手，不要用客服话术。");
         sb.append("\n记住这是游戏服务器的群，聊的都是游戏相关的事。");

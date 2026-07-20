@@ -29,7 +29,7 @@ public final class ProxyDetector {
 
     /** @return 本子服是否挂在代理后面。 */
     public static boolean isBehindProxy(Plugin plugin) {
-        // 服务器工作目录即根目录，spigot.yml / paper.yml 在此，paper-global.yml 在 config/ 下
+
         File root = new File(".");
 
         if (readBool(new File(root, "spigot.yml"), "settings.bungeecord")) {
@@ -40,7 +40,7 @@ public final class ProxyDetector {
                 || readBool(paperGlobal, "proxies.bungee-cord.enabled")) {
             return true;
         }
-        // 老 Paper（无 config/ 目录）：paper.yml
+
         if (readBool(new File(root, "paper.yml"), "settings.velocity-support.enabled")) {
             return true;
         }

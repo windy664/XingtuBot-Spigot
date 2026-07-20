@@ -7,6 +7,7 @@ import org.windy.xingtubot.common.platform.PlatformAdapter;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.poll.QQGatewayClient;
 import org.windy.xingtubot.common.poll.QqBot;
+import org.windy.xingtubot.common.runtime.BotRuntimeState;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -38,15 +39,9 @@ public final class BotLauncher {
     }
 
     /**
-     * 本节点是否运行 QQ bot（即是否为大脑），由统一拓扑键 {@code server-role} 决定：
-     * {@code off/none/disable} = 不运行；其余（auto/local/brain/slave/空）= 运行。
-     *
-     * <p>注：Bukkit 子服的「手脚」判定（server-role=slave 或 auto 探测到代理）在平台侧
-     * （XingtuBot.resolveSlave）先行 gate——是手脚就根本不调本方法。故本方法只回答
-     * 「非手脚节点要不要起 bot」：代理端默认起（大脑），单机默认起，填 off 才不起。
-     *
-     * <p>兼容已废弃的 {@code bot-mode}：旧配置里 {@code bot-mode: off} 仍视为关（迁移期，
-     * 新配置请用 server-role；bot-mode 键已从默认 config 移除）。
+     * 本节点是否运行 QQ bot。
+     * Bukkit 端已改为自动探测（ProxyDetector），手脚模式不调本方法。
+     * 仅 {@code server-role=off} 可关闭 bot（代理端/Bukkit 均适用）。
      */
     public static Mode resolveMode(BotConfig config) {
         String role = config.getString("server-role", "auto").trim().toLowerCase();
@@ -94,7 +89,7 @@ public final class BotLauncher {
         bot.addMessageListener(listener);
 
         // 框架级调试开关单一来源：绑定后各附属插件经 BotRuntimeState.isDebugEnabled() 实时跟随。
-        org.windy.xingtubot.common.runtime.BotRuntimeState.bindDebug(() -> config.getBoolean("debug", false));
+        BotRuntimeState.bindDebug(() -> config.getBoolean("debug", false));
 
         // 构建 gateway 客户端（debug 决定是否打逐事件类型日志）
         QQGatewayClient gwClient = new QQGatewayClient(appId, secret,

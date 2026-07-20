@@ -1,5 +1,6 @@
 package org.windy.xingtubot.common.runtime;
 
+import org.windy.xingtubot.common.api.BotRuntimeInfo;
 import org.windy.xingtubot.common.api.XingtuBotService;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
@@ -17,6 +18,19 @@ import java.util.function.Supplier;
  * 由平台侧（Spigot/Velocity）构造并注入依赖。
  */
 public class XingtuBotServiceImpl implements XingtuBotService {
+
+    private static volatile XingtuBotServiceImpl instance;
+
+    /** 获取全局实例（core 内部统一入口，无需经过服务总线）。 */
+    public static XingtuBotServiceImpl getInstance() {
+        return instance;
+    }
+
+    /** 获取运行时信息（core 内部用，避免直接碰 BotRuntimeState）。 */
+    public static BotRuntimeInfo runtime() {
+        XingtuBotServiceImpl inst = instance;
+        return inst != null ? inst : BotRuntimeStateFallback.INSTANCE;
+    }
 
     // Markdown 发送器：(groupOpenId, content, keyboardId) -> 实际发送
     // markdown-only：群消息一律走 markdown，无纯文本发送器。
@@ -37,6 +51,7 @@ public class XingtuBotServiceImpl implements XingtuBotService {
 
     public XingtuBotServiceImpl(GroupMarkdownSender markdownSender) {
         this.markdownSender = markdownSender;
+        instance = this;
     }
 
     // ==================== 扩展注册 ====================

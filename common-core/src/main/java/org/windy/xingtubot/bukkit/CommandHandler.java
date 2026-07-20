@@ -8,6 +8,10 @@ import org.bukkit.command.TabCompleter;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
 import org.windy.xingtubot.common.qq.QqOpenApiClient;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
+import org.windy.xingtubot.common.util.Texts;
+import org.windy.xingtubot.common.runtime.BotRuntimeState;
+import org.windy.xingtubot.common.module.XingtuBotHost;
+import org.windy.xingtubot.bukkit.util.ProxyDetector;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -82,22 +86,16 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     private void handleReload(CommandSender sender) {
         plugin.reloadConfig();
 
-        // 热重载各模块的可变配置
         List<String> reloaded = new ArrayList<>();
-
-        // 白名单/绑定由 xt-auth 附属插件管理，其配置热重载在 xt-auth 自身（本命令只重载主插件 config）。
-
-        // 附属扩展插件（xt-chatlink 等）各自管理独立配置，/xtb reload 不影响它们。
-        // 如需重载附属配置，请重启服务器或使用附属自身的命令。
 
         sender.sendMessage("§a主插件配置已重新加载，已刷新: §f" + String.join(", ", reloaded));
         sender.sendMessage("§7附属扩展插件（xt-*）各自独立配置，重启服务器生效");
-        sender.sendMessage("§7以下配置需重启服务器才生效: openapi-app-id, server-role 等");
+        sender.sendMessage("§7以下配置需重启服务器才生效: openapi-app-id 等");
     }
 
     private void handleConnect(CommandSender sender) {
-        sender.sendMessage("§e是否跑 bot 由 config.yml 的 server-role 控制（off=不跑），修改后需重启服务器。");
-        sender.sendMessage("§7当前 server-role: " + plugin.getConfig().getString("server-role", "auto"));
+        sender.sendMessage("§7部署角色自动探测：检测到代理 → 手脚（代理接管），否则 → 本地大脑。");
+        sender.sendMessage("§7设置 server-role=off 可关闭本服 bot，修改后需重启服务器。");
     }
 
     private void handleReply(CommandSender sender, String[] args) {
@@ -116,47 +114,27 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     }
 
     private void handleStatus(CommandSender sender) {
-        sender.sendMessage("§e╔══════════════════════════╗");
-        sender.sendMessage("§e║   §6昕途机器人运行状态   §e║");
-        sender.sendMessage("§e╠══════════════════════════╣");
-
-        // 通信状态
-        String mode = plugin.getConfig().getString("server-role", "auto");
-        String connStatus;
-        if ("off".equalsIgnoreCase(mode) || "none".equalsIgnoreCase(mode)) {
-            connStatus = "§c已关闭";
-        } else {
-            // 仅 gateway 一种真实通信方式（QQ 官方 WebSocket 网关）；webhook/websocket 为旧值兼容，均走 gateway。
-            connStatus = "§aGateway 模式";
-        }
-        sender.sendMessage("§e║ §7通信模式: §f" + mode + " " + connStatus);
-
-        // 在线人数
-        sender.sendMessage("§e║ §7在线玩家: §f" + Bukkit.getOnlinePlayers().size()
-                + "/" + Bukkit.getMaxPlayers());
-
-        // 绑定数据（xt-auth 提供，运行时通过服务总线获取）
+        String boundCount = "—";
         Object store = getBindingStore();
         if (store != null) {
             try {
                 @SuppressWarnings("unchecked")
                 java.util.List<?> all = (java.util.List<?>) store.getClass()
                         .getMethod("all").invoke(store);
-                sender.sendMessage("§e║ §7已绑定: §f" + (all != null ? all.size() : 0) + " 人");
-            } catch (Exception e) {
-                sender.sendMessage("§e║ §7已绑定: §f无法获取");
-            }
+                boundCount = String.valueOf(all != null ? all.size() : 0);
+            } catch (Exception ignored) {}
         }
 
-        // 部署角色（本服 bot 由谁跑：local/slave/auto，与白名单无关；白名单状态见 XingtuBot-Auth）
-        String role = plugin.getConfig().getString("server-role",
-                plugin.getConfig().getString("whitelist-role", "auto"));
-        sender.sendMessage("§e║ §7部署角色: §f" + role);
+        boolean behindProxy = ProxyDetector.isBehindProxy(plugin);
+        String role = behindProxy ? "手脚（代理接管）" : "本地大脑";
 
-        // Bot 名称（QQ 官方昵称，连接后自动获取）
-        sender.sendMessage("§e║ §7机器人名: §f" + org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName());
-
-        sender.sendMessage("§e╚══════════════════════════╝");
+        for (String line : Texts.statusBlock("运行状态",
+                "部署角色", role,
+                "在线玩家", Bukkit.getOnlinePlayers().size() + "/" + Bukkit.getMaxPlayers(),
+                "已绑定", boundCount + " 人",
+                "机器人名", org.windy.xingtubot.common.runtime.XingtuBotServiceImpl.runtime().getBotName())) {
+            sender.sendMessage(line);
+        }
     }
 
     private void handleList(CommandSender sender) {
@@ -199,7 +177,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     }
 
     private void handleDebug(CommandSender sender) {
-        boolean current = plugin.getConfig().getBoolean("debug", false);
+        boolean current = org.windy.xingtubot.common.runtime.XingtuBotServiceImpl.runtime().isDebugEnabled();
         plugin.getConfig().set("debug", !current);
         plugin.saveConfig();
         sender.sendMessage("§a调试模式已" + (!current ? "§c开启" : "§a关闭") + "§a。");
@@ -248,8 +226,8 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     /** 绑定库由 xt-auth 注册到服务总线，通过 Class.forName 反射获取类型，避免编译期依赖 xt-auth。 */
     private Object getBindingStore() {
         try {
-            org.windy.xingtubot.common.module.XingtuBotHost host =
-                    Bukkit.getServicesManager().load(org.windy.xingtubot.common.module.XingtuBotHost.class);
+            XingtuBotHost host =
+                    Bukkit.getServicesManager().load(XingtuBotHost.class);
             if (host == null) return null;
             Class<?> repoClass = Class.forName("org.windy.xingtubot.common.binding.BindingRepository");
             return host.getService(repoClass);

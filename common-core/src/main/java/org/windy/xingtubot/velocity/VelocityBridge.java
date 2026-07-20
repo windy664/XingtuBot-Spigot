@@ -49,7 +49,7 @@ public class VelocityBridge {
         // 应答走 Redis 广播（无 ServerConnection 可回）。子服只认 sourceType 不同的消息，不会回环。
         redisChannel.setMessageHandler((fromServer, data) -> {
             BridgeCodec.Decoded msg = BridgeCodec.decode(data);
-            if (msg != null) handleDecoded(msg, this.redisChannel::broadcast);
+            if (msg != null) handleDecoded(msg, fromServer, this.redisChannel::broadcast);
         });
     }
 
@@ -127,18 +127,21 @@ public class VelocityBridge {
 
         // 应答原路返回：经 PluginMessage 来的就用发起方的 ServerConnection 回。
         final ServerConnection src = (ServerConnection) event.getSource();
-        handleDecoded(msg, resp -> src.sendPluginMessage(channel, resp));
+        final String proxyServerName = src.getServerInfo().getName();
+        handleDecoded(msg, proxyServerName, resp -> src.sendPluginMessage(channel, resp));
     }
 
     /**
      * 统一处理子服上报的消息（PluginMessage 与 Redis 共用）。
      *
-     * @param reply 把应答送回发起方子服的回调（PluginMessage 用 ServerConnection；Redis 用广播）。
+     * @param proxyServerName 子服在代理端的注册名（PluginMessage 从 ServerConnection 获取；Redis 模式可为空）
+     * @param reply           把应答送回发起方子服的回调
      */
-    private void handleDecoded(BridgeCodec.Decoded msg, Consumer<byte[]> reply) {
+    private void handleDecoded(BridgeCodec.Decoded msg, String proxyServerName, Consumer<byte[]> reply) {
         switch (msg.type) {
             case WHO_IS_BOSS:
-                reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS));
+                reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS,
+                        proxyServerName != null ? proxyServerName : ""));
                 break;
 
             case PAPI_RESULT: {

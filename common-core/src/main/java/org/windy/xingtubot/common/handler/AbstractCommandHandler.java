@@ -11,6 +11,15 @@ import org.windy.xingtubot.common.module.capability.ProactiveSender;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 import org.windy.xingtubot.common.reply.PlaceholderResolver;
+import org.windy.xingtubot.common.handler.impl.WhoAmIHandler;
+import org.windy.xingtubot.common.handler.impl.ExecCommand;
+import org.windy.xingtubot.common.module.capability.ConsoleExecutor;
+import org.windy.xingtubot.common.module.capability.CrossServerConsole;
+import org.windy.xingtubot.common.api.XingtuBotService;
+import org.windy.xingtubot.common.api.CommandRegistrar;
+import org.windy.xingtubot.common.api.MessageSender;
+import org.windy.xingtubot.common.api.CommandHookBus;
+import org.windy.xingtubot.common.api.BotRuntimeInfo;
 
 import java.io.File;
 
@@ -49,7 +58,11 @@ public abstract class AbstractCommandHandler {
         registerPlatformServices(moduleCtx, config, logger, dataFolder, platformContext);
 
         // ===== 内置 handler =====
-        registry.register(new org.windy.xingtubot.common.handler.impl.WhoAmIHandler());
+        registry.register(new WhoAmIHandler());
+        // 超管远程执行命令（依赖平台注册的 ConsoleExecutor / CrossServerConsole）
+        ConsoleExecutor consoleExec = moduleCtx.getService(ConsoleExecutor.class);
+        CrossServerConsole crossExec = moduleCtx.getService(CrossServerConsole.class);
+        registry.register(new ExecCommand(consoleExec, crossExec));
 
         // ===== Placeholder =====
         PlaceholderResolver placeholders = createPlaceholders(config, platformContext);
@@ -62,11 +75,11 @@ public abstract class AbstractCommandHandler {
         service.setAllowedGroupsSupplier(() -> config.getStringList("allowed-groups"));
         service.setRegistry(registry);
         registry.setHookService(service);
-        moduleCtx.registerService(org.windy.xingtubot.common.api.XingtuBotService.class, service);
-        moduleCtx.registerService(org.windy.xingtubot.common.api.CommandRegistrar.class, service);
-        moduleCtx.registerService(org.windy.xingtubot.common.api.MessageSender.class, service);
-        moduleCtx.registerService(org.windy.xingtubot.common.api.CommandHookBus.class, service);
-        moduleCtx.registerService(org.windy.xingtubot.common.api.BotRuntimeInfo.class, service);
+        moduleCtx.registerService(XingtuBotService.class, service);
+        moduleCtx.registerService(CommandRegistrar.class, service);
+        moduleCtx.registerService(MessageSender.class, service);
+        moduleCtx.registerService(CommandHookBus.class, service);
+        moduleCtx.registerService(BotRuntimeInfo.class, service);
 
         // ===== 初始化 =====
         HandlerContext ctx = new HandlerContext(config, logger, permission, platformContext);
@@ -116,10 +129,9 @@ public abstract class AbstractCommandHandler {
     public void shutdown() { registry.shutdownAll(); }
 
     /**
-     * 惰性获取发送者名：从服务总线反射查 BindingRepository（由 xt-auth 注册）。
-     * 三端共用，避免 Velocity/BungeeCord 各抄一份。
+     * 获取发送者名：优先绑定的玩家名，其次 QQ 昵称。
      */
-    protected String senderNameOf(BotMessage event, String defaultSender) {
+    protected String senderNameOf(BotMessage event) {
         try {
             Object bs = moduleCtx.getServiceObject(Class.forName("org.windy.xingtubot.common.binding.BindingService"));
             if (bs != null && event.getSenderId() != null) {
@@ -133,7 +145,7 @@ public abstract class AbstractCommandHandler {
             }
         } catch (Exception ignored) {
         }
-        if (event.getUsername() != null && !event.getUsername().isEmpty()) return event.getUsername();
-        return defaultSender;
+        String name = event.getUsername();
+        return name != null ? name : event.getSenderId();
     }
 }

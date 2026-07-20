@@ -1,6 +1,7 @@
 package org.windy.xingtubot.velocity;
 
 import org.windy.xingtubot.common.config.BotConfig;
+import org.windy.xingtubot.common.config.ConfigMerger;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.IOException;
@@ -37,7 +38,7 @@ public class VelocityConfig implements BotConfig {
                 }
             }
             // 合并模板：补缺失键(含嵌套)+注释废弃键+保留注释；仅结构有差异时才重写
-            org.windy.xingtubot.common.config.ConfigMerger.sync(
+            ConfigMerger.sync(
                     file, getClass().getClassLoader(), "config.yml");
             if (Files.exists(file)) {
                 try (InputStream in = Files.newInputStream(file)) {

@@ -10,6 +10,8 @@ import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.module.capability.ProactiveSender;
 import org.windy.xingtubot.common.poll.OpenidNameCache;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
+import org.windy.xingtubot.common.runtime.BotRuntimeState;
+import org.windy.xingtubot.common.util.Md;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -74,7 +76,7 @@ public class BungeeCordGroupChatLink implements Listener {
     /** 调试日志：有 logger 且核心调试开关开启才输出（实时跟随 /xtb debug）。 */
     private void debug(String msg) {
         org.windy.xingtubot.common.platform.BotLogger l = this.logger;
-        if (l != null && org.windy.xingtubot.common.runtime.BotRuntimeState.isDebugEnabled()) l.info(msg);
+        if (l != null && org.windy.xingtubot.common.runtime.XingtuBotServiceImpl.runtime().isDebugEnabled()) l.info(msg);
     }
 
     public void setAllowedGroups(List<String> groups) {
@@ -196,8 +198,8 @@ public class BungeeCordGroupChatLink implements Listener {
 
     private static String formatMarkdown(String template, String player, String message) {
         return template(template)
-                .replace("{player}", org.windy.xingtubot.common.util.Md.plain(player == null ? "" : player))
-                .replace("{message}", org.windy.xingtubot.common.util.Md.plain(message == null ? "" : message));
+                .replace("{player}", Md.plain(player == null ? "" : player))
+                .replace("{message}", Md.plain(message == null ? "" : message));
     }
 
     private static String formatPlain(String template, String player, String message) {

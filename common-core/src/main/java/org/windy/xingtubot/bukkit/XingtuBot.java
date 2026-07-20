@@ -17,6 +17,13 @@ import org.windy.xingtubot.common.poll.QQGatewayClient;
 import org.windy.xingtubot.common.poll.QqBot;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 import org.windy.xingtubot.common.util.Pretty;
+import org.windy.xingtubot.common.util.Texts;
+import org.windy.xingtubot.common.bridge.CrossServerChannelFactory;
+import org.windy.xingtubot.common.bridge.CrossServerChannel;
+import org.windy.xingtubot.common.queue.KnownGroupStore;
+import org.windy.xingtubot.bukkit.util.ProxyDetector;
+import org.windy.xingtubot.common.service.SensitiveFilter;
+import org.windy.xingtubot.common.runtime.BotRuntimeState;
 
 import java.util.HashSet;
 import java.util.List;
@@ -29,19 +36,20 @@ public final class XingtuBot extends JavaPlugin implements Listener {
     private GuildMessageEvent lastEvent;
     private SpigotCommandHandler spigotCommandHandler;
     private QQSendCommand qqSendCommand;
-    private org.windy.xingtubot.common.bridge.CrossServerChannelFactory.Holder redisHolder;
+    private CrossServerChannelFactory.Holder redisHolder;
     private static XingtuBot instance;
 
     @Override
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
+        BotRuntimeState.bindDebug(() -> BotRuntimeState.isDebugEnabled());
         printBanner();
 
         // 初始化消息队列持久化
         PendingMessageQueue.getInstance().init(getDataFolder());
         // 初始化已知群列表持久化（供「推送到全部群」的主动消息使用）
-        org.windy.xingtubot.common.queue.KnownGroupStore.getInstance().init(getDataFolder());
+        KnownGroupStore.getInstance().init(getDataFolder());
 
         // 初始化 OpenID 昵称缓存（L1 内存 + L2 DB）
         initOpenidNameCache();
@@ -57,20 +65,20 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         enableModules(config, slave);
 
         // 跨服 Redis 信道（通用基础设施，配置在核心 config）：核心创建并注册到服务总线，
-        // 供 xt-auth 子服侧 SpigotBridge（slave）取用；无玩家在线也能与代理大脑双向通信。
-        redisHolder = org.windy.xingtubot.common.bridge.CrossServerChannelFactory.create(
+        redisHolder = CrossServerChannelFactory.create(
                 new SpigotConfig(config), true, new SpigotBotLogger(getLogger()));
         if (redisHolder != null && spigotCommandHandler != null) {
             spigotCommandHandler.getHost().registerService(
-                    org.windy.xingtubot.common.bridge.CrossServerChannel.class, redisHolder.channel);
+                    CrossServerChannel.class, redisHolder.channel);
         }
 
         // 接线主动消息
         if (qqBot != null) {
             QqOpenApiClient api = qqBot.getApi();
             if (api != null) {
+
                 if (qqSendCommand != null) qqSendCommand.setApiClient(api);
-                // 主动消息惰性句柄填实（附属插件 ProactiveSender 共享同一句柄）
+
                 if (spigotCommandHandler != null) {
                     spigotCommandHandler.getProactiveSender().bind(api);
                 }
@@ -81,48 +89,35 @@ public final class XingtuBot extends JavaPlugin implements Listener {
             }
         }
 
-        if (config.getBoolean("debug", false)) {
+        if (BotRuntimeState.isDebugEnabled()) {
             printConfigSummary(config, slave);
         }
     }
 
     private void printConfigSummary(FileConfiguration config, boolean slave) {
         boolean botOn = !slave && BotLauncher.resolveMode(new SpigotConfig(config)) != BotLauncher.Mode.OFF;
-        getLogger().info("");
-        getLogger().info(" ██╗  ██╗██╗███╗   ██╗ ██████╗ ████████╗██╗   ██╗██████╗  ██████╗ ████████╗");
-        getLogger().info(" ╚██╗██╔╝██║████╗  ██║██╔════╝ ╚══██╔══╝██║   ██║██╔══██╗██╔═══██╗╚══██╔══╝");
-        getLogger().info("  ╚███╔╝ ██║██╔██╗ ██║██║        ██║   ██║   ██║██████╔╝██║   ██║   ██║   ");
-        getLogger().info("  ██╔██╗ ██║██║╚██╗██║██║        ██║   ██║   ██║██╔══██╗██║   ██║   ██║   ");
-        getLogger().info(" ██╔╝ ██╗██║██║ ╚████║╚██████╗   ██║   ╚██████╔╝██████╔╝╚██████╔╝   ██║   ");
-        getLogger().info(" ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═════╝  ╚═════╝    ╚═╝   ");
-        getLogger().info("");
-        getLogger().info("▌ 昕途机器人 v" + getDescription().getVersion());
-        String roleDesc = slave ? "（手脚）" : (botOn ? "（本地大脑）" : "（off）");
-        getLogger().info("▌ 角色     " + config.getString("server-role", "auto") + roleDesc);
+        for (String line : Texts.banner(
+                getDescription().getVersion(), "Bukkit", "/xtb help")) {
+            getLogger().info(line);
+        }
+        String roleDesc = slave ? "手脚（代理接管）" : (botOn ? "本地大脑" : "已关闭");
+        getLogger().info(Texts.statusLine("角色", roleDesc));
         if (botOn) {
             String appId = config.getString("openapi-app-id", "");
             String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "未配置";
-            getLogger().info("▌ AppID    " + masked);
+            getLogger().info(Texts.statusLine("AppID", masked));
         }
-        getLogger().info("▌ 监听     " + config.getString("listen-mode", "mention"));
-        getLogger().info("▌ 跨服     " + (botOn ? "已启用" : "未启用"));
-        getLogger().info("▌ 存储     JSON");
-        getLogger().info("▌ ✔ 已启动  输入 /xtb help 查看命令");
-        getLogger().info("");
+        getLogger().info(Texts.statusLine("监听", config.getString("listen-mode", "mention")));
+        getLogger().info(Texts.statusLine("跨服", botOn ? "已启用" : "未启用"));
     }
 
 
     /**
-     * 部署拓扑判定：本服 bot 由谁跑（与白名单无关，是「单机/手脚」的拓扑选择）。
-     *   local/standalone = 本机自己跑 bot；slave = 挂代理后由代理大脑统一接管，本机 bot 禁用；
-     *   auto = 探测到代理则 slave，否则 local。兼容旧键 whitelist-role。
+     * 部署拓扑判定：本服是否为「手脚」（挂在代理后面，由代理大脑统一接管 bot）。
+     * 纯自动探测，无需配置。检测到代理（Velocity/BungeeCord）→ 手脚；否则 → 大脑。
      */
     private boolean resolveSlave(FileConfiguration config) {
-        String role = config.getString("server-role",
-                config.getString("whitelist-role", "auto")).trim().toLowerCase();
-        if (role.equals("slave")) return true;
-        if (role.equals("local") || role.equals("standalone")) return false;
-        return org.windy.xingtubot.bukkit.util.ProxyDetector.isBehindProxy(this);
+        return ProxyDetector.isBehindProxy(this);
     }
 
     /**
@@ -192,8 +187,6 @@ public final class XingtuBot extends JavaPlugin implements Listener {
                     getLogger().severe("Gateway 模式配置不全，请检查 openapi-app-id / openapi-client-secret");
                 }
                 return;
-            default:
-                getLogger().severe("未知的 server-role，请检查配置。");
         }
     }
 
@@ -202,7 +195,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         String gid = e.getConversationId();
         boolean groupEvent = isGroupEvent(e);
         if (groupEvent && !isAllowedGroup(gid)) {
-            if (getConfig().getBoolean("debug", false)) {
+            if (BotRuntimeState.isDebugEnabled()) {
                 getLogger().info("[QQ] Skip non-allowed group event: group=" + gid + " type=" + e.getEventType());
             }
             return;
@@ -271,16 +264,19 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         spigotCommandHandler.getHost().setBrain(!slave);
         spigotCommandHandler.getHost().registerService("core.allowed-groups",
                 (java.util.function.Supplier<java.util.List<String>>) () -> getConfig().getStringList("allowed-groups"));
+        // 敏感词过滤（全局单例，供 xt-chatlink / xt-ai 等扩展消费）
+        SensitiveFilter sf =
+                SensitiveFilter.fromConfig(
+                        new SpigotConfig(getConfig()), "sensitive-filter",
+                        new SpigotBotLogger(getLogger()));
+        spigotCommandHandler.getHost().registerService(
+                SensitiveFilter.class, sf);
     }
 
     private void printBanner() {
-        getLogger().info("");
-        getLogger().info(" _|      _|  _|_|_|  _|      _|    _|_|_|  _|_|_|_|_|  _|    _|  ");
-        getLogger().info("   _|  _|      _|    _|_|    _|  _|            _|      _|    _|  ");
-        getLogger().info("     _|        _|    _|  _|  _|  _|  _|_|      _|      _|    _|  ");
-        getLogger().info("   _|  _|      _|    _|    _|_|  _|    _|      _|      _|    _|  ");
-        getLogger().info(" _|      _|  _|_|_|  _|      _|    _|_|_|      _|        _|_|    ");
-        getLogger().info("");
+        for (String line : Texts.banner(getDescription().getVersion(), "Bukkit", "/xtb help")) {
+            getLogger().info(line);
+        }
     }
 
     public GuildMessageEvent getLastEvent() {
@@ -296,7 +292,7 @@ public final class XingtuBot extends JavaPlugin implements Listener {
     }
 
     public void log(String message) {
-        if (getConfig().getBoolean("debug", false)) {
+        if (BotRuntimeState.isDebugEnabled()) {
             getLogger().info("[调试模式] " + message);
         }
     }

@@ -24,14 +24,14 @@ public class ChatreplyModule implements Listener {
     private final GameChatForwarder gameChatForwarder;
     private final ReplyCommand replyCommand;
 
-    public ChatreplyModule(JavaPlugin plugin, BotConfig config, BotLogger logger, PlayerLockManager lockState) {
+    public ChatreplyModule(JavaPlugin plugin, BotConfig config, BotLogger logger,
+                           PlayerLockManager lockState, SensitiveFilter sf) {
         this.plugin = plugin;
         this.config = config;
         this.logger = logger;
         instance = this;
 
-        // 初始化敏感词过滤器
-        sensitiveFilter = SensitiveFilter.fromConfig(config, logger);
+        sensitiveFilter = sf;
 
         // 游戏内聊天 → QQ 群转发
         gameChatForwarder = new GameChatForwarder(lockState);
@@ -42,7 +42,6 @@ public class ChatreplyModule implements Listener {
         plugin.getCommand("messagereply").setExecutor(replyCommand);
 
         plugin.getLogger().info("群服回复模块已启用（双向互联）");
-        sensitiveFilter.reloadCloudWords();
     }
 
     /** 注入主动发送器「供给器」（每次发送时现取）：游戏→QQ 转发 + [点击回复] 共用。 */
@@ -51,9 +50,9 @@ public class ChatreplyModule implements Listener {
         replyCommand.setProactiveSender(senderSupplier);
     }
 
-    /** 兼容旧调用（无 LockState）。 */
+    /** 兼容旧调用（无 LockState、无 SensitiveFilter）。 */
     public ChatreplyModule(JavaPlugin plugin, BotConfig config, BotLogger logger) {
-        this(plugin, config, logger, null);
+        this(plugin, config, logger, null, null);
     }
 
     public static ChatreplyModule getInstance() {
@@ -76,9 +75,10 @@ public class ChatreplyModule implements Listener {
         return gameChatForwarder;
     }
 
-    /** 热重载可变配置（/xtb reload 调用）：重建敏感词过滤器。 */
+    /** 热重载可变配置（/xtb reload 调用）：重载云端词库。 */
     public void reload() {
-        sensitiveFilter = SensitiveFilter.fromConfig(config, logger);
-        sensitiveFilter.reloadCloudWords();
+        if (sensitiveFilter != null) {
+            sensitiveFilter.reloadCloudWords();
+        }
     }
 }

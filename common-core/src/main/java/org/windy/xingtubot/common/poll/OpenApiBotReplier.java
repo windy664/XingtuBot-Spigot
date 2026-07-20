@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import org.windy.xingtubot.common.qq.QqOpenApiClient;
 import org.windy.xingtubot.common.event.MessageReply;
 import org.windy.xingtubot.common.platform.PlatformAdapter;
+import org.windy.xingtubot.common.util.Md;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -44,7 +45,7 @@ public class OpenApiBotReplier implements MessageReply {
     @Override
     public void replyText(String text) {
         // markdown-only：纯文本统一包成 markdown 走 markdown 通道（产品定位要求 bot 具备 markdown 权限）。
-        String md = org.windy.xingtubot.common.util.Md.plain(text);
+        String md = Md.plain(text);
         send(s -> {
             if (fMsgId != null) {
                 if (isGroup) api.sendGroupMarkdown(fGroup, md, null, fMsgId, s);

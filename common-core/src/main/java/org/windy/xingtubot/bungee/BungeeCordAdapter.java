@@ -10,7 +10,8 @@ import java.util.function.BooleanSupplier;
 
 public class BungeeCordAdapter implements PlatformAdapter {
     private final ProxyServer proxy;
-    // adapter.log 是调试通道（原始事件 JSON 等），仅 debug=true 时输出；惰性读 config 支持 /reload 改动。
+
+
     private final BooleanSupplier debugEnabled;
 
     public BungeeCordAdapter(ProxyServer proxy, BooleanSupplier debugEnabled) {
@@ -25,12 +26,12 @@ public class BungeeCordAdapter implements PlatformAdapter {
 
     @Override
     public void runSync(Runnable r) {
-        proxy.getScheduler().runAsync(null, r); // BungeeCord 无主线程概念
+        proxy.getScheduler().runAsync(null, r);
     }
 
     @Override
     public void log(String msg) {
-        // 仅调试模式输出（与 SpigotAdapter 一致）：debug=false 时不打原始事件 JSON 等调试日志。
+
         if (debugEnabled.getAsBoolean()) {
             proxy.getLogger().info(msg);
         }

@@ -21,7 +21,7 @@ public class RedisChannel implements CrossServerChannel {
     private static final String REDIS_CHANNEL = "xingtubot:bridge";
 
     private final RedisManager redis;
-    private final String serverName;
+    private final String fallbackServerName;
     private final byte sourceType; // 0=velocity, 1=spigot
     private final String instanceId;
     private final BotLogger logger;
@@ -33,13 +33,13 @@ public class RedisChannel implements CrossServerChannel {
 
     /**
      * @param redis       Redis 管理器
-     * @param serverName  本服 server-name
+     * @param serverName  本服 server-name（兜底值，握手后通过 BotRuntimeState 自动覆盖）
      * @param isSpigot    true=Spigot(手脚), false=Velocity(大脑)
      * @param logger      日志
      */
     public RedisChannel(RedisManager redis, String serverName, boolean isSpigot, BotLogger logger) {
         this.redis = redis;
-        this.serverName = serverName;
+        this.fallbackServerName = serverName;
         this.sourceType = (byte) (isSpigot ? 1 : 0);
         this.instanceId = UUID.randomUUID().toString().substring(0, 8);
         this.logger = logger;
@@ -115,6 +115,12 @@ public class RedisChannel implements CrossServerChannel {
                 }
             }
         });
+    }
+
+    /** 运行时解析本服名称：优先代理端注册名（握手后可用），回退配置值。 */
+    private String resolveServerName() {
+        String proxy = org.windy.xingtubot.common.runtime.BotRuntimeState.getProxyServerName();
+        return (proxy != null && !proxy.isEmpty()) ? proxy : fallbackServerName;
     }
 
     /**

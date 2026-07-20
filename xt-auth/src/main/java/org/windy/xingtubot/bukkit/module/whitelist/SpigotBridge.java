@@ -36,7 +36,7 @@ public class SpigotBridge implements Listener, PluginMessageListener {
     private final LockState lockState = new LockState();
     private final Set<String> awaitingQQ = ConcurrentHashMap.newKeySet();
     private volatile boolean brainConfirmed = false;
-    private final String serverName;
+    private final String fallbackServerName;
     // Redis 信道（可选，由 AuthModule 注入）
     private CrossServerChannel redisChannel;
     // 跨服绑定查询：requestId -> 回调
@@ -46,7 +46,7 @@ public class SpigotBridge implements Listener, PluginMessageListener {
     public SpigotBridge(XingtuBot plugin) {
         instance = this;
         this.plugin = plugin;
-        this.serverName = plugin.getConfig().getString("server-name", "server");
+        this.fallbackServerName = plugin.getConfig().getString("server-name", "server");
 
         Messenger messenger = plugin.getServer().getMessenger();
         messenger.registerOutgoingPluginChannel(plugin, CH);
@@ -134,6 +134,12 @@ public class SpigotBridge implements Listener, PluginMessageListener {
                     brainConfirmed = true;
                     plugin.getLogger().info("✅ 白名单手脚模式：已连上代理大脑");
                 }
+                // 代理端回复的子服注册名（由 Velocity/BungeeCord 在 I_AM_BOSS 中携带）
+                String proxyName = msg.field(0);
+                if (proxyName != null && !proxyName.isEmpty()) {
+                    org.windy.xingtubot.common.runtime.BotRuntimeState.setProxyServerName(proxyName);
+                    plugin.getLogger().info("✅ 代理端注册名: " + proxyName);
+                }
                 break;
             case NEED_QQ:
                 if (msg.field(0) != null) awaitingQQ.add(msg.field(0));
@@ -190,15 +196,22 @@ public class SpigotBridge implements Listener, PluginMessageListener {
                 String requestId = msg.field(1);
                 String command = msg.field(2);
                 if (target == null || command == null) break;
-                if (!target.equals(serverName) && !"all".equalsIgnoreCase(target)) break;
+                String myName = resolveServerName();
+                if (!target.equals(myName) && !"all".equalsIgnoreCase(target)) break;
                 org.windy.xingtubot.bukkit.module.console.ConsoleExecutor.execute(plugin, command, output ->
                         sendResponse(BridgeCodec.encode(CrossServerProtocol.Type.CONSOLE_RESULT,
-                                requestId, serverName, output)));
+                                requestId, myName, output)));
                 break;
             }
             default:
                 break;
         }
+    }
+
+    /** 运行时解析本服名称：优先代理端注册名（握手后可用），回退配置值。 */
+    private String resolveServerName() {
+        String proxy = org.windy.xingtubot.common.runtime.BotRuntimeState.getProxyServerName();
+        return (proxy != null && !proxy.isEmpty()) ? proxy : fallbackServerName;
     }
 
     private void msgPlayer(String player, String message) {

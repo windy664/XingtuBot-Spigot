@@ -64,13 +64,78 @@ server-role: auto
 # ⚠️ 全网一致：代理大脑与所有 Bukkit 子服必须填【相同】的 cross-server-channel，且连同一台 Redis。
 cross-server-channel: both
 
-# 本服在跨服通信中的名称（用于区分来源 / 控制台定向）。多子服请各自取不同的名字。
-server-name: "server"
-
 # Redis 连接（仅当 cross-server-channel 为 redis / both 且 redis-host 非空时启用）。
 # 大脑与所有子服都要填同一套连接。示例：
 #   redis-host: "127.0.0.1"
 redis-host: "127.0.0.1"
 redis-port: 6379
 redis-password: ""
+
+####################################
+# 敏感词过滤（全局配置，供 xt-chatlink / xt-ai 等扩展共用）
+# 各扩展在自己 config 里用 sensitive-filter-chatlink / sensitive-filter-ai 开关控制是否应用
+####################################
+sensitive-filter:
+  Enable: false
+  Replacement: '*'
+  Local:
+    - NMSL
+    - fuck
+    - shit
+  Cloud-Thesaurus:
+    Enabled: true
+    Ignored: ['nt']
+    Urls:
+      - 'https://raw.githubusercontent.com/Yurinann/Filter-Thesaurus-Cloud/main/database.json'
+  Ignored-Punctuations:
+    - '!'
+    - '.'
+    - ','
+    - '#'
+    - '$'
+    - '%'
+    - '&'
+    - '*'
+    - '('
+    - ')'
+    - '|'
+    - '?'
+    - '/'
+    - '@'
+    - '"'
+    - '\\'
+    - ';'
+    - '['
+    - ']'
+    - '{'
+    - '}'
+    - '+'
+    - '~'
+    - '-'
+    - '_'
+    - '='
+    - '^'
+    - '<'
+    - '>'
+    - ' '
+    - '　'
+    - '！'
+    - '。'
+    - '，'
+    - '￥'
+    - '（'
+    - '）'
+    - '？'
+    - '、'
+    - '"'
+    - "'"
+    - "'"
+    - '；'
+    - '【'
+    - '】'
+    - '——'
+    - '……'
+    - '《'
+    - '》'
+    - '`'
 

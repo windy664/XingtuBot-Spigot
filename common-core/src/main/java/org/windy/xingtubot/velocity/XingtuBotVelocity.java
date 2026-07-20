@@ -20,6 +20,16 @@ import org.windy.xingtubot.common.bridge.CrossServerProtocol;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.poll.QQGatewayClient;
 import org.windy.xingtubot.common.poll.QqBot;
+import org.windy.xingtubot.common.poll.OpenidNameCache;
+import org.windy.xingtubot.common.poll.OpenidNameRepository;
+import org.windy.xingtubot.common.poll.JsonOpenidNameRepository;
+import org.windy.xingtubot.common.queue.PendingMessageQueue;
+import org.windy.xingtubot.common.queue.KnownGroupStore;
+import org.windy.xingtubot.common.bridge.CrossServerChannelFactory;
+import org.windy.xingtubot.common.bot.QQOnboard;
+import org.windy.xingtubot.common.util.Texts;
+import org.windy.xingtubot.common.service.SensitiveFilter;
+import org.windy.xingtubot.common.runtime.BotRuntimeState;
 
 import java.nio.file.Path;
 import java.util.function.Consumer;
@@ -44,7 +54,7 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
     private VelocityAdapter adapter;
     private BotCommandHandler commandHandler;
     private VelocityBridge velocityBridge;
-    private org.windy.xingtubot.common.bridge.CrossServerChannelFactory.Holder redisHolder;
+    private CrossServerChannelFactory.Holder redisHolder;
 
     @Inject
     public XingtuBotVelocity(ProxyServer proxy, Logger logger, @DataDirectory Path dataDir) {
@@ -66,23 +76,24 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         if (redisHolder != null) {
             redisHolder.close();
         }
-        org.windy.xingtubot.common.poll.OpenidNameCache.getInstance().shutdown();
+        OpenidNameCache.getInstance().shutdown();
     }
 
     private void init() {
         config = new VelocityConfig(dataDir);
+        BotRuntimeState.bindDebug(() -> BotRuntimeState.isDebugEnabled());
 
         // 初始化消息队列持久化
-        org.windy.xingtubot.common.queue.PendingMessageQueue.getInstance().init(dataDir.toFile());
+        PendingMessageQueue.getInstance().init(dataDir.toFile());
         // 初始化已知群列表持久化（供「推送到全部群」的主动消息使用）
-        org.windy.xingtubot.common.queue.KnownGroupStore.getInstance().init(dataDir.toFile());
+        KnownGroupStore.getInstance().init(dataDir.toFile());
 
         // 初始化 OpenID 昵称缓存（L1 内存 + L2 DB）
         initOpenidNameCache();
 
         VelocityBotLogger botLogger = new VelocityBotLogger(logger);
 
-        adapter = new VelocityAdapter(proxy, () -> config.getBoolean("debug", false));
+        adapter = new VelocityAdapter(proxy, () -> BotRuntimeState.isDebugEnabled());
 
         // 跨服 Bridge 是通用基础设施（PAPI/控制台/群服互联都走它）：只要代理端跑 bot 就建。
         // auth 逻辑完全由 xt-auth 的 AuthVelocityPlugin 处理（DirectAuthAdapter + packetevents）。
@@ -93,7 +104,7 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
             bridge = new VelocityBridge(proxy, this, bridgeChannel, logger::warn);
             velocityBridge = bridge;
             // 跨服 Redis 信道（通用基础设施，配置在核心 config）：由核心创建并注入到 bridge。
-            redisHolder = org.windy.xingtubot.common.bridge.CrossServerChannelFactory.create(config, false, botLogger);
+            redisHolder = CrossServerChannelFactory.create(config, false, botLogger);
             if (redisHolder != null) {
                 bridge.setRedisChannel(redisHolder.channel);
             }
@@ -113,12 +124,21 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         // 由 BotCommandHandler 经 ModuleLoader 装配（占位符/绑定库/跨服执行经能力服务注入）。
 
         commandHandler = new BotCommandHandler(proxy, logger, config, bridge, textImage, dataDir);
-        // 代理端：跑 bot（server-role 非 off）即为大脑。框架一次性写入宿主，供 xt-auth 等扩展只读。
+        // 代理端默认为大脑。框架一次性写入宿主，供 xt-auth 等扩展只读。
         commandHandler.getHost().setBrain(velocityIsBrain);
         commandHandler.getHost().registerService("core.allowed-groups",
                 (java.util.function.Supplier<java.util.List<String>>) () -> config.getStringList("allowed-groups"));
+        // 敏感词过滤（全局单例，供 xt-chatlink / xt-ai 等扩展消费）
+        SensitiveFilter sf = SensitiveFilter.fromConfig(config, "sensitive-filter", botLogger);
+        commandHandler.getHost().registerService(SensitiveFilter.class, sf);
         proxy.getCommandManager().register("vxtb", new VxtbCommand());
         proxy.getCommandManager().register("qq", new QQCommand(config));
+
+        // 启动字符画 + 配置摘要
+        printBanner();
+        if (BotRuntimeState.isDebugEnabled()) {
+            printDebugInfo();
+        }
 
         // 收到消息后的统一处理（两种模式共用）
         Consumer<BotMessageEvent> listener = event -> {
@@ -135,9 +155,9 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
                 String gwAppId = config.getString("openapi-app-id", "").trim();
                 if (gwAppId.isEmpty()) {
                     adapter.log("未配置 openapi-app-id，启动扫码接入流程...");
-                    org.windy.xingtubot.common.bot.QQOnboard onboard =
-                            new org.windy.xingtubot.common.bot.QQOnboard(new VelocityBotLogger(logger));
-                    org.windy.xingtubot.common.bot.QQOnboard.ScanResult result = onboard.run();
+                    QQOnboard onboard =
+                            new QQOnboard(new VelocityBotLogger(logger));
+                    QQOnboard.ScanResult result = onboard.run();
                     if (result != null) {
                         config.set("openapi-app-id", result.appId);
                         config.set("openapi-client-secret", result.clientSecret);
@@ -180,15 +200,8 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
                     logger.error("[XingtuBot] Gateway 模式配置不全，请检查 openapi-app-id / openapi-client-secret");
                 }
                 return;
-            default:
-                logger.error("[XingtuBot] 未知的 server-role，请检查配置。");
         }
 
-        // 启动字符画 + 配置摘要
-        printBanner();
-        if (config.getBoolean("debug", false)) {
-            printDebugInfo();
-        }
     }
 
     /**
@@ -228,29 +241,21 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         org.windy.xingtubot.common.poll.OpenidNameRepository repo =
                 new org.windy.xingtubot.common.poll.JsonOpenidNameRepository(
                         dataDir.resolve("openid_names.json").toFile(), logger::info);
-        org.windy.xingtubot.common.poll.OpenidNameCache.getInstance().init(repo);
+        OpenidNameCache.getInstance().init(repo);
     }
 
     /** 启动字符画 + 基本信息（无条件显示）。 */
     private void printBanner() {
-        adapter.log("");
-        adapter.log("§b ██╗  ██╗██╗███╗   ██╗ ██████╗ ████████╗██╗   ██╗██████╗  ██████╗ ████████╗");
-        adapter.log("§b ╚██╗██╔╝██║████╗  ██║██╔════╝ ╚══██╔══╝██║   ██║██╔══██╗██╔═══██╗╚══██╔══╝");
-        adapter.log("§b  ╚███╔╝ ██║██╔██╗ ██║██║        ██║   ██║   ██║██████╔╝██║   ██║   ██║   ");
-        adapter.log("§b  ██╔██╗ ██║██║╚██╗██║██║        ██║   ██║   ██║██╔══██╗██║   ██║   ██║   ");
-        adapter.log("§b ██╔╝ ██╗██║██║ ╚████║╚██████╗   ██║   ╚██████╔╝██████╔╝╚██████╔╝   ██║   ");
-        adapter.log("§b ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═════╝  ╚═════╝    ╚═╝   ");
-        adapter.log("");
-        adapter.log("§b▌ §3昕途机器人 §7v" + getClass().getPackage().getImplementationVersion());
-        adapter.log("§b▌ §a✔ 已启动 §7输入 §f/vxtb help §7查看命令");
-        adapter.log("");
+        String version = getClass().getPackage().getImplementationVersion();
+        for (String line : Texts.banner(version, "Velocity", "/vxtb help")) {
+            adapter.log(line);
+        }
     }
 
     /** 详细配置信息（仅 debug 模式）。 */
     private void printDebugInfo() {
         boolean botOn = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
-        String role = config.getString("server-role", "auto");
-        adapter.log("§7[Debug] 角色: " + role + (botOn ? "（大脑）" : "（off）"));
+        adapter.log("§7[Debug] 角色: " + (botOn ? "大脑" : "已关闭"));
         if (botOn) {
             String appId = config.getString("openapi-app-id", "");
             String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "未配置";
@@ -336,7 +341,7 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
                             sender.sendMessage(Component.text("✅ 主动消息发送成功！"));
                         } catch (Exception e) {
                             // 主动消息失败 → 回退到被动队列
-                            org.windy.xingtubot.common.queue.PendingMessageQueue.getInstance()
+                            PendingMessageQueue.getInstance()
                                     .offer(gid, msg);
                             sender.sendMessage(Component.text("⚠️ 主动消息失败（无权限），已回退到被动队列"));
                             sender.sendMessage(Component.text("下次群里有人 @机器人 时会一起发出"));
@@ -372,34 +377,23 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         }
 
         private void handleStatus(CommandSource sender) {
-            sender.sendMessage(Component.text("╔══════════════════════════╗"));
-            sender.sendMessage(Component.text("║   §6昕途机器人运行状态   §r║"));
-            sender.sendMessage(Component.text("╠══════════════════════════╣"));
-
-            // 通信状态
             BotLauncher.Mode mode = BotLauncher.resolveMode(config);
             boolean botOff = mode == BotLauncher.Mode.OFF;
             String connStatus;
             if (botOff) {
-                connStatus = "§c已关闭（server-role=off）";
+                connStatus = "§c已关闭";
             } else {
                 connStatus = (gatewayClient != null && gatewayClient.isRunning()) ? "§a已连接" : "§c未连接";
             }
-            sender.sendMessage(Component.text("║ §7通信: §f" + mode + " " + connStatus));
 
-            // 在线人数
-            sender.sendMessage(Component.text("║ §7在线: §f" + proxy.getPlayerCount() + " 人"));
-
-            // 子服
             StringBuilder servers = new StringBuilder();
             for (com.velocitypowered.api.proxy.server.RegisteredServer rs : proxy.getAllServers()) {
                 if (servers.length() > 0) servers.append(", ");
                 servers.append(rs.getServerInfo().getName())
                         .append("(").append(rs.getPlayersConnected().size()).append(")");
             }
-            sender.sendMessage(Component.text("║ §7子服: §f" + servers));
 
-            // 绑定数据（由 xt-auth 注册为 service，反射访问）
+            String boundCount = "—";
             try {
                 Object bs = getServiceByReflect("org.windy.xingtubot.common.binding.BindingService");
                 if (bs != null) {
@@ -407,13 +401,18 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
                     if (store != null) {
                         @SuppressWarnings("unchecked")
                         java.util.List<?> all = (java.util.List<?>) store.getClass().getMethod("all").invoke(store);
-                        sender.sendMessage(Component.text("║ §7已绑定: §f" + (all != null ? all.size() : 0) + " 人"));
+                        boundCount = String.valueOf(all != null ? all.size() : 0);
                     }
                 }
-            } catch (Exception ignored) {
-            }
+            } catch (Exception ignored) {}
 
-            sender.sendMessage(Component.text("╚══════════════════════════╝"));
+            for (String line : Texts.statusBlock("运行状态",
+                    "通信模式", mode + " " + connStatus,
+                    "在线人数", proxy.getPlayerCount() + " 人",
+                    "子服", servers.toString(),
+                    "已绑定", boundCount + " 人")) {
+                sender.sendMessage(Component.text(line));
+            }
         }
     }
 

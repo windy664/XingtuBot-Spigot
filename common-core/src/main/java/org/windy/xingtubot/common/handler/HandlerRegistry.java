@@ -7,7 +7,7 @@ import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.event.MessageReply;
 import org.windy.xingtubot.common.queue.KnownGroupStore;
-import org.windy.xingtubot.common.runtime.BotRuntimeState;
+import org.windy.xingtubot.common.runtime.XingtuBotServiceImpl;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -224,7 +224,7 @@ public class HandlerRegistry {
     }
 
     public String buildMenu(boolean isAdmin) {
-        String botName = BotRuntimeState.getBotName();
+        String botName = XingtuBotServiceImpl.runtime().getBotName();
         Map<String, StringBuilder> categories = new LinkedHashMap<>();
         StringBuilder admin = new StringBuilder();
 

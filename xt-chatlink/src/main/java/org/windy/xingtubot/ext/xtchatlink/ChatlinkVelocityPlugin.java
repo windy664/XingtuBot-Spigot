@@ -95,12 +95,11 @@ public class ChatlinkVelocityPlugin {
                     .resolveConcrete(host, config.getStringList("allowed-groups"));
             groupChatLink.setAllowedGroups(allowedGroups);
 
-            // 配置敏感词过滤器
-            if (config.getBoolean("Enable", true)) {
-                org.windy.xingtubot.common.service.SensitiveFilter filter =
-                        org.windy.xingtubot.common.service.SensitiveFilter.fromConfig(config, botLogger);
-                filter.reloadCloudWords();
-                groupChatLink.setSensitiveFilter(filter);
+            // 敏感词过滤器：从服务总线获取（core 注册的全局单例）
+            org.windy.xingtubot.common.service.SensitiveFilter sf =
+                    host.getService(org.windy.xingtubot.common.service.SensitiveFilter.class);
+            if (sf != null) {
+                groupChatLink.setSensitiveFilter(sf);
             }
 
             // 注册为服务（主插件 bot-ready 时注入 apiClient）

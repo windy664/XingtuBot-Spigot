@@ -19,11 +19,9 @@ import java.util.List;
 public class SpigotPlaceholders implements PlaceholderResolver {
 
     private final Object bindingStore; // xt-auth BindingRepository，运行时反射访问
-    private final String defaultSender;
 
-    public SpigotPlaceholders(Object bindingStore, String defaultSender) {
+    public SpigotPlaceholders(Object bindingStore) {
         this.bindingStore = bindingStore;
-        this.defaultSender = defaultSender != null ? defaultSender : "群成员";
     }
 
     @Override
@@ -99,10 +97,7 @@ public class SpigotPlaceholders implements PlaceholderResolver {
             String player = boundPlayer(event);
             if (player != null) return player;
         }
-        if (event.getUsername() != null && !event.getUsername().isEmpty()) {
-            return event.getUsername();
-        }
-        return defaultSender;
+        return event.getUsername();
     }
 
     // ==================== PAPI Expansion 注册 ====================
@@ -150,13 +145,13 @@ public class SpigotPlaceholders implements PlaceholderResolver {
                                 return (String) entry.getClass().getField("player").get(entry);
                             }
                         } catch (Exception e) {
-                            // fall through
+
                         }
                     }
                     return "";
                 }
                 case "bot_name":
-                    return org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName();
+                    return org.windy.xingtubot.common.runtime.XingtuBotServiceImpl.runtime().getBotName();
                 default:
                     return null;
             }

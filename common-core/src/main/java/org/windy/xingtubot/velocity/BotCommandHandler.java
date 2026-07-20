@@ -31,7 +31,6 @@ public class BotCommandHandler extends AbstractCommandHandler {
                 dataDir != null ? dataDir.toFile() : null, proxy);
         this.config = config;
 
-        // openid 捕获
         openIdCapture = new OpenIdCaptureHandler();
         openIdCapture.setConsoleLogger(m -> proxy.getConsoleCommandSource().sendMessage(Component.text(m)));
         getRegistry().register(openIdCapture);
@@ -53,25 +52,18 @@ public class BotCommandHandler extends AbstractCommandHandler {
 
         ctx.registerService(ServerQuery.class, new VelocityServerQuery(proxy));
 
-        // CrossServerConsole：经 bridge 跨服执行命令
-        // bridge 在构造时可能还没创建，这里用惰性获取
     }
 
     @Override
     protected PlaceholderResolver createPlaceholders(BotConfig config, Object platform) {
         ProxyServer proxy = (ProxyServer) platform;
-        return new VelocityPlaceholders(proxy, null,
-                config.getString("entries-Empty", "群成员"));
+        return new VelocityPlaceholders(proxy, null);
     }
 
     public void startCaptureOpenid() { openIdCapture.enableCapture(); }
 
     public void handle(BotMessageEvent event) {
         handle(event, getPermission().isAdmin(event.getSenderId()));
-    }
-
-    private String senderNameOf(BotMessage event) {
-        return senderNameOf(event, config.getString("entries-Empty", "群成员"));
     }
 
     private static String appendImageUrls(String content, java.util.List<String> urls) {

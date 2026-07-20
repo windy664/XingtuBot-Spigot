@@ -42,10 +42,12 @@ public class BungeeCordBridge implements Listener {
 
     public void setRedisChannel(CrossServerChannel redisChannel) {
         this.redisChannel = redisChannel;
+
         // 订阅 Redis：收到子服经 Redis 上报的消息，复用与 PluginMessage 同一套处理；应答走 Redis 广播。
+
         redisChannel.setMessageHandler((fromServer, data) -> {
             BridgeCodec.Decoded msg = BridgeCodec.decode(data);
-            if (msg != null) handleDecoded(msg, this.redisChannel::broadcast);
+            if (msg != null) handleDecoded(msg, fromServer, this.redisChannel::broadcast);
         });
     }
 
@@ -112,7 +114,8 @@ public class BungeeCordBridge implements Listener {
 
         // 应答原路返回：经 PluginMessage 来的就用发起方的 Server 回。
         final Object sender = event.getSender();
-        handleDecoded(msg, resp -> {
+        final String proxyServerName = (sender instanceof Server) ? ((Server) sender).getInfo().getName() : null;
+        handleDecoded(msg, proxyServerName, resp -> {
             if (sender instanceof Server) ((Server) sender).sendData(channel, resp);
         });
     }
@@ -120,12 +123,14 @@ public class BungeeCordBridge implements Listener {
     /**
      * 统一处理子服上报的消息（PluginMessage 与 Redis 共用）。
      *
-     * @param reply 把应答送回发起方子服的回调（PluginMessage 用 Server；Redis 用广播）。
+     * @param proxyServerName 子服在代理端的注册名（PluginMessage 从 Server 获取；Redis 从消息头获取）
+     * @param reply           把应答送回发起方子服的回调
      */
-    private void handleDecoded(BridgeCodec.Decoded msg, Consumer<byte[]> reply) {
+    private void handleDecoded(BridgeCodec.Decoded msg, String proxyServerName, Consumer<byte[]> reply) {
         switch (msg.type) {
             case WHO_IS_BOSS:
-                reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS));
+                reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS,
+                        proxyServerName != null ? proxyServerName : ""));
                 break;
 
             case PAPI_RESULT: {

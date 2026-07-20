@@ -1,6 +1,7 @@
 package org.windy.xingtubot.bungee;
 
 import org.windy.xingtubot.common.config.BotConfig;
+import org.windy.xingtubot.common.config.ConfigMerger;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.*;
@@ -15,7 +16,7 @@ import java.util.*;
 public class BungeeCordConfig implements BotConfig {
     private final Path dataDir;
     private final Map<String, Object> data;
-    // 经 set() 改动过、待写回的顶层键。save() 只就地替换这些键所在的行，其余行（含注释/排版/列表块）原样保留。
+
     private final Set<String> dirtyKeys = new HashSet<>();
 
     @SuppressWarnings("unchecked")
@@ -26,13 +27,11 @@ public class BungeeCordConfig implements BotConfig {
             Files.createDirectories(dataDir);
             Path file = dataDir.resolve("config.yml");
             if (!Files.exists(file)) {
-                // 从 jar 内释放默认配置
                 try (InputStream in = getClass().getClassLoader().getResourceAsStream("config.yml")) {
                     if (in != null) Files.copy(in, file);
                 }
             }
-            // 合并模板：补缺失键(含嵌套)+注释废弃键+保留注释；仅结构有差异时才重写
-            org.windy.xingtubot.common.config.ConfigMerger.sync(
+            ConfigMerger.sync(
                     file, getClass().getClassLoader(), "config.yml");
             if (Files.exists(file)) {
                 try (InputStream in = Files.newInputStream(file)) {
@@ -41,7 +40,7 @@ public class BungeeCordConfig implements BotConfig {
                 }
             }
         } catch (IOException e) {
-            // ignore, use defaults
+
         }
         this.data = loaded;
     }

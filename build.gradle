@@ -64,11 +64,10 @@ task buildAll(group: 'build', description: '构建所有模块 jar') {
 
 // 构建完成后把所有 jar 汇总到根 build/libs/
 task collectJars(type: Copy, group: 'build', description: '收集所有模块 jar 到 build/libs/') {
-    from subprojects.collect { it.tasks.matching { t -> t.name == 'shadowJar' || (t.name == 'jar' && !t.enabled == false) } }
+    from subprojects.collect { it.tasks.matching { t -> t.name == 'shadowJar' || t.name == 'bootJar' || (t.name == 'jar' && !t.enabled == false) } }
     into "${rootDir}/build/libs"
-    // 只拿最终产物（跳过空的普通 jar）
     include '*.jar'
-    // shadow jar 替代普通 jar：同名只保留大的
+    exclude '*-shadow.jar'  // 中间产物不输出
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 

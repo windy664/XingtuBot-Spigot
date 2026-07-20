@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.util.Http;
+import org.windy.xingtubot.common.util.Md;
 
 import java.io.IOException;
 
@@ -314,7 +315,7 @@ public class QqOpenApiClient {
      * @return 接口返回的 JSON 字符串
      */
     public String sendProactiveGroupMessage(String groupOpenid, String content) throws IOException {
-        return sendProactiveGroupMarkdown(groupOpenid, org.windy.xingtubot.common.util.Md.plain(content));
+        return sendProactiveGroupMarkdown(groupOpenid, Md.plain(content));
     }
 
     /**
@@ -336,7 +337,7 @@ public class QqOpenApiClient {
     public String sendProactiveGroupMarkdown(String groupOpenid, String markdownContent,
                                              String keyboardJson) throws IOException {
         JsonObject md = new JsonObject();
-        md.addProperty("content", org.windy.xingtubot.common.util.Md.softBreaks(markdownContent));
+        md.addProperty("content", Md.softBreaks(markdownContent));
         JsonObject body = new JsonObject();
         body.addProperty("msg_type", MSG_TYPE_MARKDOWN);
         body.add("markdown", md);
@@ -407,7 +408,7 @@ public class QqOpenApiClient {
 
     private String sendMarkdownByEvent(String path, String markdownContent, String eventId, int msgSeq) throws IOException {
         JsonObject md = new JsonObject();
-        md.addProperty("content", org.windy.xingtubot.common.util.Md.softBreaks(markdownContent));
+        md.addProperty("content", Md.softBreaks(markdownContent));
         JsonObject body = new JsonObject();
         body.addProperty("msg_type", MSG_TYPE_MARKDOWN);
         body.add("markdown", md);
@@ -428,7 +429,7 @@ public class QqOpenApiClient {
         // content 字段群消息必填，用 markdown 的文本内容做兜底
         if (markdown != null && markdown.has("content")) {
             // 统一补软换行（单 \n 会被 QQ 吞成一行）；幂等，模板参数类 markdown 无 content 不受影响
-            String normalized = org.windy.xingtubot.common.util.Md.softBreaks(markdown.get("content").getAsString());
+            String normalized = Md.softBreaks(markdown.get("content").getAsString());
             markdown.addProperty("content", normalized);
             body.addProperty("content", normalized);
             body.add("markdown", markdown);

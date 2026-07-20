@@ -2,7 +2,7 @@
 // 二合一 jar。common-core 走 compileOnly。
 
 dependencies {
-    compileOnly project(':common-core')
+    compileOnly project(path: ':common-core', configuration: 'shadow')
 
     compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
 

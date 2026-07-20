@@ -1,0 +1,5 @@
+name: XingtuBot-MCSM
+version: '2.2.1'
+main: org.windy.xingtubot.ext.xtmcsm.McsmBungeeCordPlugin
+depends: [XingtuBotBungeeCord]
+author: 风吟

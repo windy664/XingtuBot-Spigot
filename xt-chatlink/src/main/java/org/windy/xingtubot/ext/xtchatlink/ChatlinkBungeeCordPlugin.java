@@ -49,11 +49,11 @@ public class ChatlinkBungeeCordPlugin extends Plugin {
                     .resolveConcrete(host, config.getStringList("allowed-groups"));
             groupChatLink.setAllowedGroups(allowedGroups);
 
-            if (config.getBoolean("Enable", true)) {
-                org.windy.xingtubot.common.service.SensitiveFilter filter =
-                        org.windy.xingtubot.common.service.SensitiveFilter.fromConfig(config, logger);
-                filter.reloadCloudWords();
-                groupChatLink.setSensitiveFilter(filter);
+            // 敏感词过滤器：从服务总线获取（core 注册的全局单例）
+            org.windy.xingtubot.common.service.SensitiveFilter sf =
+                    host.getService(org.windy.xingtubot.common.service.SensitiveFilter.class);
+            if (sf != null) {
+                groupChatLink.setSensitiveFilter(sf);
             }
 
             // 调试日志器：核心调试开关开启时在群服互联两条链路入口/兜底打点

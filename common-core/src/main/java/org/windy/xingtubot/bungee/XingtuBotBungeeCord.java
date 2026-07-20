@@ -1,7 +1,6 @@
 package org.windy.xingtubot.bungee;
 
 import net.md_5.bungee.api.CommandSender;
-import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.event.PlayerDisconnectEvent;
@@ -11,17 +10,21 @@ import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.event.EventHandler;
 import org.windy.xingtubot.common.bot.BotLauncher;
-import org.windy.xingtubot.common.config.BotConfig;
+import org.windy.xingtubot.common.bot.QQOnboard;
 import org.windy.xingtubot.common.event.BotMessageEvent;
 import org.windy.xingtubot.common.module.XingtuBotHostProvider;
+import org.windy.xingtubot.common.service.SensitiveFilter;
+import org.windy.xingtubot.common.runtime.BotRuntimeState;
 import org.windy.xingtubot.common.poll.QQGatewayClient;
 import org.windy.xingtubot.common.poll.QqBot;
 import org.windy.xingtubot.common.poll.OpenidNameCache;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
-import org.windy.xingtubot.common.util.Pretty;
+import org.windy.xingtubot.common.util.Texts;
+import org.windy.xingtubot.common.bridge.CrossServerChannelFactory;
+import org.windy.xingtubot.common.bridge.CrossServerProtocol;
+import org.windy.xingtubot.common.queue.KnownGroupStore;
 
 import java.io.File;
-import java.nio.file.Path;
 import java.util.function.Consumer;
 
 /**
@@ -35,7 +38,7 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
     private BungeeCordAdapter adapter;
     private BungeeCordCommandHandler commandHandler;
     private BungeeCordBridge bridge;
-    private org.windy.xingtubot.common.bridge.CrossServerChannelFactory.Holder redisHolder;
+    private CrossServerChannelFactory.Holder redisHolder;
 
     @Override
     public void onEnable() {
@@ -62,13 +65,14 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
 
     private void init() {
         config = new BungeeCordConfig(getDataFolder().toPath());
+        BotRuntimeState.bindDebug(() -> BotRuntimeState.isDebugEnabled());
 
         PendingMessageQueue.getInstance().init(getDataFolder());
         // 初始化已知群列表持久化（供「推送到全部群」的主动消息使用）
-        org.windy.xingtubot.common.queue.KnownGroupStore.getInstance().init(getDataFolder());
+        KnownGroupStore.getInstance().init(getDataFolder());
         initOpenidNameCache();
 
-        adapter = new BungeeCordAdapter(getProxy(), () -> config.getBoolean("debug", false));
+        adapter = new BungeeCordAdapter(getProxy(), () -> BotRuntimeState.isDebugEnabled());
 
         // 跨服 Bridge 是通用基础设施（PAPI/控制台/群服互联都走它）：只要代理端跑 bot 就建。
         // auth 逻辑完全由 xt-auth 的 AuthBungeeCordPlugin 处理（DirectAuthAdapter + packetevents）。
@@ -76,10 +80,10 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
         boolean velocityIsBrain = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
         if (velocityIsBrain) {
             bridge = new BungeeCordBridge(getProxy(), this,
-                    org.windy.xingtubot.common.bridge.CrossServerProtocol.CHANNEL,
+                    CrossServerProtocol.CHANNEL,
                     getLogger()::info);
             // 跨服 Redis 信道（通用基础设施，配置在核心 config）：由核心创建并注入到 bridge。
-            redisHolder = org.windy.xingtubot.common.bridge.CrossServerChannelFactory.create(
+            redisHolder = CrossServerChannelFactory.create(
                     config, false, new BungeeCordBotLogger(getLogger()));
             if (redisHolder != null) {
                 bridge.setRedisChannel(redisHolder.channel);
@@ -97,10 +101,14 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
         getLogger().info("[XingtuBot] 生图字体：" + textImage.getFontSource());
 
         commandHandler = new BungeeCordCommandHandler(getProxy(), getLogger(), config, bridge, textImage, getDataFolder());
-        // 代理端：跑 bot（server-role 非 off）即为大脑。框架一次性写入宿主，供 xt-auth 等扩展只读。
+        // 代理端默认为大脑。框架一次性写入宿主，供 xt-auth 等扩展只读。
         commandHandler.getHost().setBrain(velocityIsBrain);
         commandHandler.getHost().registerService("core.allowed-groups",
                 (java.util.function.Supplier<java.util.List<String>>) () -> config.getStringList("allowed-groups"));
+        // 敏感词过滤（全局单例，供 xt-chatlink / xt-ai 等扩展消费）
+        SensitiveFilter sf = SensitiveFilter.fromConfig(config, "sensitive-filter",
+                new BungeeCordBotLogger(getLogger()));
+        commandHandler.getHost().registerService(SensitiveFilter.class, sf);
         registerCommands();
 
         // 收到消息后的统一处理
@@ -117,9 +125,9 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
                 String gwAppId = config.getString("openapi-app-id", "").trim();
                 if (gwAppId.isEmpty()) {
                     adapter.log("未配置 openapi-app-id，启动扫码接入流程...");
-                    org.windy.xingtubot.common.bot.QQOnboard onboard =
-                            new org.windy.xingtubot.common.bot.QQOnboard(new BungeeCordBotLogger(getLogger()));
-                    org.windy.xingtubot.common.bot.QQOnboard.ScanResult result = onboard.run();
+                    QQOnboard onboard =
+                            new QQOnboard(new BungeeCordBotLogger(getLogger()));
+                    QQOnboard.ScanResult result = onboard.run();
                     if (result != null) {
                         config.set("openapi-app-id", result.appId);
                         config.set("openapi-client-secret", result.clientSecret);
@@ -160,12 +168,10 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
                     getLogger().severe("[XingtuBot] Gateway 模式配置不全");
                 }
                 return;
-            default:
-                getLogger().severe("[XingtuBot] 未知的 server-role");
         }
 
         printBanner();
-        if (config.getBoolean("debug", false)) {
+        if (BotRuntimeState.isDebugEnabled()) {
             printDebugInfo();
         }
     }
@@ -253,22 +259,15 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
     }
 
     private void printBanner() {
-        getLogger().info("");
-        getLogger().info(" ██╗  ██╗██╗███╗   ██╗ ██████╗ ████████╗██╗   ██╗██████╗  ██████╗ ████████╗");
-        getLogger().info(" ╚██╗██╔╝██║████╗  ██║██╔════╝ ╚══██╔══╝██║   ██║██╔══██╗██╔═══██╗╚══██╔══╝");
-        getLogger().info("  ╚███╔╝ ██║██╔██╗ ██║██║        ██║   ██║   ██║██████╔╝██║   ██║   ██║   ");
-        getLogger().info("  ██╔██╗ ██║██║╚██╗██║██║        ██║   ██║   ██║██╔══██╗██║   ██║   ██║   ");
-        getLogger().info(" ██╔╝ ██╗██║██║ ╚████║╚██████╗   ██║   ╚██████╔╝██████╔╝╚██████╔╝   ██║   ");
-        getLogger().info(" ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═════╝  ╚═════╝    ╚═╝   ");
-        getLogger().info("");
-        getLogger().info("▌ 昕途机器人 · BungeeCord");
-        getLogger().info("▌ ✔ 已启动  输入 /bqq help 查看命令");
-        getLogger().info("");
+        for (String line : Texts.banner(
+                getDescription().getVersion(), "BungeeCord", "/bqq help")) {
+            getLogger().info(line);
+        }
     }
 
     private void printDebugInfo() {
         boolean botOn = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
-        getLogger().info("[Debug] 角色: " + config.getString("server-role", "auto") + (botOn ? "（大脑）" : "（off）"));
+        getLogger().info("[Debug] 角色: " + (botOn ? "大脑" : "已关闭"));
         getLogger().info("[Debug] 监听: " + config.getString("listen-mode", "mention"));
         getLogger().info("[Debug] 跨服: " + (botOn ? "已启用" : "未启用"));
     }

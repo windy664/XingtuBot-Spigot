@@ -43,13 +43,15 @@ public class GithubMessageBuilder {
         return card.link("🔗 点击前往仓库查看下载", url).build();
     }
 
-    public String buildCommit(String owner, String repo, String sha, String message, String author, String url) {
+    public String buildCommit(String owner, String repo, String branch, String sha, String message, String author, String url) {
         String[] parts = message.split("\n", 2);
         String msgTitle = parts[0];
         String translatedTitle = translate(msgTitle);
 
+        String subtitle = "**" + owner + "/" + repo + "**";
+        if (branch != null && !branch.isEmpty()) subtitle += " ｜ `" + branch + "`";
         Md card = Md.card("🔨", "代码提交记录")
-                .subtitle("**" + owner + "/" + repo + "**");
+                .subtitle(subtitle);
 
         if (!translatedTitle.equals(msgTitle) && !translatedTitle.isEmpty()) {
             card.quote("🌐 **" + translatedTitle + "**\n📝 " + truncate(msgTitle, 100));

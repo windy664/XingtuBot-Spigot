@@ -4,6 +4,7 @@ import org.windy.xingtubot.common.ai.AiService;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ModuleContext;
+import org.windy.xingtubot.common.service.SensitiveFilter;
 import org.windy.xingtubot.module.ai.AiChatHandler;
 
 /**
@@ -38,12 +39,18 @@ public final class AiModule implements BotModule {
         AiService chimeInJudgeService = createChimeInJudgeService(config, apiKey);
         ctx.registerService(AiService.class, aiService);
 
+        // 敏感词过滤：优先从服务总线获取（core 注册的全局单例），回退本地创建
+        SensitiveFilter sf = ctx.getService(SensitiveFilter.class);
+        if (sf == null) {
+            sf = SensitiveFilter.fromConfig(config, ctx.logger());
+        }
+
         // 注册 AI 聊天 observer
         AiChatHandler handler = new AiChatHandler(
                 aiService, chimeInJudgeService, config, ctx.logger(),
                 ctx.registry()::isHandledByCommand,
                 ctx.permission(),
-                ctx.dataFolder());
+                ctx.dataFolder(), sf);
         ctx.registry().registerObserver(handler);
 
         String omniModel = config.getString("llm-model-omni", "mimo-v2-omni");

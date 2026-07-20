@@ -42,7 +42,7 @@ public final class CrossServerChannelFactory {
     /**
      * 按核心配置创建跨服信道。
      *
-     * @param config   核心配置（读 cross-server-channel / redis-host / redis-port / redis-password / server-name）
+     * @param config   核心配置（读 cross-server-channel / redis-host / redis-port / redis-password）
      * @param isSpigot true=Bukkit 子服(手脚)，false=代理大脑(Velocity/BungeeCord)；用于 Redis 消息来源类型过滤
      * @param logger   日志
      * @return 信道持有者；未配置 Redis（或配置为 plugin-message）则返回 null（表示走原生 PluginMessage）。
@@ -58,9 +58,9 @@ public final class CrossServerChannelFactory {
             int port = config.getInt("redis-port", 6379);
             RedisManager manager = new RedisManager(
                     redisHost, port, config.getString("redis-password", ""), logger);
-            String serverName = config.getString("server-name", "server");
-            RedisChannel channel = new RedisChannel(manager, serverName, isSpigot, logger);
-            logger.info("[跨服] Redis 信道已启用 (" + redisHost + ":" + port + ", server-name=" + serverName + ")");
+            // server-name 由代理端 I_AM_BOSS 握手自动设置，初始用占位值
+            RedisChannel channel = new RedisChannel(manager, "server", isSpigot, logger);
+            logger.info("[跨服] Redis 信道已启用 (" + redisHost + ":" + port + ")");
             return new Holder(channel, () -> {
                 try { channel.close(); } catch (Exception ignored) { }
                 try { manager.close(); } catch (Exception ignored) { }

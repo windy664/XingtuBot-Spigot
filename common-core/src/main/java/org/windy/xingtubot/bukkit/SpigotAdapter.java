@@ -29,8 +29,8 @@ public class SpigotAdapter implements PlatformAdapter {
 
     @Override
     public void log(String msg) {
-        // 仅调试模式输出，与原 WebSocket 调试日志行为一致
-        if (plugin.getConfig().getBoolean("debug", false)) {
+
+        if (org.windy.xingtubot.common.runtime.XingtuBotServiceImpl.runtime().isDebugEnabled()) {
             plugin.getLogger().info(msg);
         }
     }

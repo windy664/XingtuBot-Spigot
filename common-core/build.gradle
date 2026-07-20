@@ -1,5 +1,6 @@
 plugins {
     id 'com.github.johnrengelman.shadow'
+    id 'org.springframework.boot' version '2.7.18'
 }
 
 dependencies {
@@ -10,7 +11,12 @@ dependencies {
     compileOnly 'com.velocitypowered:velocity-api:3.1.1'
     annotationProcessor 'com.velocitypowered:velocity-api:3.1.1'
 
-    // ─── 核心依赖（implementation → shadow 打包进 jar）───
+    // ─── Spring Boot ───
+    implementation('org.springframework.boot:spring-boot-starter:2.7.18') {
+        exclude group: 'org.yaml', module: 'snakeyaml'  // 核心自带
+    }
+
+    // ─── 核心依赖 ───
     implementation 'org.java-websocket:Java-WebSocket:1.5.3'
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'org.yaml:snakeyaml:1.33'
@@ -24,10 +30,15 @@ base {
     archivesName = 'XingtuBot'
 }
 
+// ==================== shadowJar（中间产物：relocate 依赖，给 bootJar 合并用） ====================
+
 shadowJar {
-    configurations = [project.configurations.runtimeClasspath]
-    archiveBaseName.set('XingtuBot')
-    archiveClassifier.set('')
+    archiveClassifier.set('shadow')  // 中间产物，不覆盖最终 jar
+
+    dependencies {
+        exclude(dependency('org.springframework.boot:.*'))
+        exclude(dependency('org.springframework:.*'))
+    }
 
     relocate 'org.yaml.snakeyaml', 'org.lib.snakeyaml'
     relocate 'com.google.zxing', 'org.lib.zxing'
@@ -38,8 +49,36 @@ shadowJar {
     exclude '**/META-INF/native-image/**'
 }
 
-build.dependsOn shadowJar
-jar.enabled = false  // shadowJar 已替代 jar，禁用避免覆盖
+jar.enabled = false
+
+// ==================== bootJar（最终产物：XingtuBot-2.2.1.jar，四合一） ====================
+// 双击即跑（Spring Boot），扔进 plugins/ 也能当 Bukkit/Velocity 插件
+
+afterEvaluate {
+    assemble.dependsOn -= bootJar
+}
+bootJar {
+    dependsOn shadowJar
+    archiveBaseName.set('XingtuBot')
+    archiveClassifier.set('')           // 最终产物 = XingtuBot-2.2.1.jar
+    archiveVersion.set(project.version) // 2.2.1
+    mainClass = 'org.windy.xingtubot.springboot.XingtuBotSpringApplication'
+    manifest {
+        attributes 'Main-Class': 'org.springframework.boot.loader.PropertiesLauncher'
+    }
+    // 把 shadowJar 的内容（common-core + 三端适配 + relocate 后的依赖）合进 BOOT-INF/classes/
+    from shadowJar
+    // BOOT-INF/lib/ 排除平台 SDK（核心依赖已在 BOOT-INF/classes/ 里 via shadowJar，共存不影响）
+    classpath = classpath.filter { f ->
+        !f.name.contains('spigot-api') &&
+        !f.name.contains('velocity-api') &&
+        !f.name.contains('bungeecord-api') &&
+        !f.name.contains('placeholderapi')
+    }
+}
+
+// ==================== buildAll 改为依赖 bootJar ====================
+build.dependsOn bootJar
 
 processResources {
     def props = [version: version]

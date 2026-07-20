@@ -75,8 +75,8 @@ public final class GithubModule implements BotModule {
             }
 
             @Override
-            public void onNewCommit(String owner, String repo, String sha, String message, String author, String url) {
-                push(builder.buildCommit(owner, repo, sha, message, author, url), configuredGroups, sender, ctx);
+            public void onNewCommit(String owner, String repo, String branch, String sha, String message, String author, String url) {
+                push(builder.buildCommit(owner, repo, branch, sha, message, author, url), configuredGroups, sender, ctx);
             }
 
             @Override

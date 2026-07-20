@@ -41,7 +41,7 @@ public class GithubTrackerService {
 
     public interface ChangeListener {
         void onNewRelease(String owner, String repo, String tagName, String name, String url);
-        void onNewCommit(String owner, String repo, String sha, String message, String author, String url);
+        void onNewCommit(String owner, String repo, String branch, String sha, String message, String author, String url);
         void onNewIssue(String owner, String repo, int number, String title, String action,
                         String author, String labels, String body, String url);
         void onNewPr(String owner, String repo, int number, String title, String action,
@@ -78,10 +78,16 @@ public class GithubTrackerService {
     }
 
     public boolean watch(String owner, String repo, boolean gitee) {
-        String key = repoKey(owner, repo, gitee);
+        return watch(owner, repo, gitee, null);
+    }
+
+    public boolean watch(String owner, String repo, boolean gitee, String branch) {
+        String effectiveBranch = (branch != null && !branch.isEmpty()) ? branch : null;
+        String key = repoKey(owner, repo, gitee, effectiveBranch);
         if (watched.containsKey(key)) return false;
         WatchedRepo wr = new WatchedRepo(owner, repo);
         wr.gitee = gitee;
+        wr.branch = effectiveBranch;
         if (gitee) {
             wr.watchIssues = false;
             wr.watchPrs = false;
@@ -94,7 +100,12 @@ public class GithubTrackerService {
     }
 
     public boolean unwatch(String owner, String repo, boolean gitee) {
-        String key = repoKey(owner, repo, gitee);
+        return unwatch(owner, repo, gitee, null);
+    }
+
+    public boolean unwatch(String owner, String repo, boolean gitee, String branch) {
+        String effectiveBranch = (branch != null && !branch.isEmpty()) ? branch : null;
+        String key = repoKey(owner, repo, gitee, effectiveBranch);
         if (watched.remove(key) == null) return false;
         seenReleaseIds.remove(key);
         seenCommitSha.remove(key);
@@ -108,13 +119,19 @@ public class GithubTrackerService {
     public List<WatchedRepo> listWatched() { return new ArrayList<>(watched.values()); }
 
     private static String repoKey(String owner, String repo, boolean gitee) {
-        return (gitee ? "gitee:" : "") + owner + "/" + repo;
+        return repoKey(owner, repo, gitee, null);
+    }
+
+    private static String repoKey(String owner, String repo, boolean gitee, String branch) {
+        String base = (gitee ? "gitee:" : "") + owner + "/" + repo;
+        if (branch != null && !branch.isEmpty()) base += ":" + branch;
+        return base;
     }
 
     private void poll() {
         boolean stateChanged = false;
         for (WatchedRepo wr : watched.values()) {
-            String key = repoKey(wr.owner, wr.repo, wr.gitee);
+            String key = repoKey(wr.owner, wr.repo, wr.gitee, wr.branch);
             if (wr.watchReleases) stateChanged |= safePoll(() -> pollReleases(key, wr), key, "Releases");
             if (wr.watchCommits) stateChanged |= safePoll(() -> pollCommits(key, wr), key, "Commits");
             if (wr.watchIssues) stateChanged |= safePoll(() -> pollIssues(key, wr), key, "Issues");
@@ -168,7 +185,9 @@ public class GithubTrackerService {
     }
 
     private boolean pollCommits(String key, WatchedRepo wr) throws Exception {
-        JsonArray arr = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/commits?per_page=5", wr.gitee);
+        String commitsUrl = wr.apiBase() + "/repos/" + wr.path() + "/commits?per_page=5";
+        if (wr.branch != null && !wr.branch.isEmpty()) commitsUrl += "&sha=" + wr.branch;
+        JsonArray arr = apiGetArray(commitsUrl, wr.gitee);
         if (arr == null || arr.size() == 0) return false;
 
         String latestSha = arr.get(0).getAsJsonObject().get("sha").getAsString();
@@ -192,7 +211,7 @@ public class GithubTrackerService {
                     if (a.has("name") && !a.get("name").isJsonNull()) author = a.get("name").getAsString();
                 }
                 String url = obj.has("html_url") && !obj.get("html_url").isJsonNull() ? obj.get("html_url").getAsString() : wr.webBase() + "/" + wr.path() + "/commit/" + sha;
-                listener.onNewCommit(wr.owner, wr.repo, sha.substring(0, 7), msg, author, url);
+                listener.onNewCommit(wr.owner, wr.repo, wr.branch, sha.substring(0, 7), msg, author, url);
             }
         }
         return true;
@@ -283,7 +302,9 @@ public class GithubTrackerService {
             }
         } catch (Exception ignored) {}
         try {
-            JsonArray commits = apiGetArray(wr.apiBase() + "/repos/" + wr.path() + "/commits?per_page=1", wr.gitee);
+            String commitsInitUrl = wr.apiBase() + "/repos/" + wr.path() + "/commits?per_page=1";
+            if (wr.branch != null && !wr.branch.isEmpty()) commitsInitUrl += "&sha=" + wr.branch;
+            JsonArray commits = apiGetArray(commitsInitUrl, wr.gitee);
             if (commits != null && commits.size() > 0) {
                 seenCommitSha.put(key, commits.get(0).getAsJsonObject().get("sha").getAsString());
             }
@@ -350,15 +371,37 @@ public class GithubTrackerService {
                         Map<String, Object> m = (Map<String, Object>) entry.getValue();
                         boolean gitee = key.startsWith("gitee:") || Boolean.TRUE.equals(m.get("gitee"));
                         String path = key.startsWith("gitee:") ? key.substring("gitee:".length()) : key;
+                        // key 格式: owner/repo 或 owner/repo:branch
                         String[] parts = path.split("/", 2);
                         if (parts.length == 2) {
-                            WatchedRepo wr = new WatchedRepo(parts[0], parts[1]);
+                            String owner = parts[0];
+                            // repo 部分可能含 :branch
+                            String repoAndBranch = parts[1];
+                            String repo, branch;
+                            int colonIdx = repoAndBranch.indexOf(':');
+                            if (colonIdx >= 0) {
+                                repo = repoAndBranch.substring(0, colonIdx);
+                                branch = repoAndBranch.substring(colonIdx + 1);
+                            } else {
+                                repo = repoAndBranch;
+                                branch = null;
+                            }
+                            WatchedRepo wr = new WatchedRepo(owner, repo);
                             wr.gitee = gitee;
                             wr.watchReleases = Boolean.TRUE.equals(m.get("releases"));
                             wr.watchCommits = Boolean.TRUE.equals(m.get("commits"));
                             wr.watchIssues = Boolean.TRUE.equals(m.get("issues"));
                             wr.watchPrs = Boolean.TRUE.equals(m.get("prs"));
-                            watched.put(repoKey(parts[0], parts[1], gitee), wr);
+                            // 分支优先从 key 解析，其次从 value 兼容旧格式
+                            if (branch != null && !branch.isEmpty()) {
+                                wr.branch = branch;
+                            } else {
+                                Object branchObj = m.get("branch");
+                                if (branchObj instanceof String && !((String) branchObj).isEmpty()) {
+                                    wr.branch = (String) branchObj;
+                                }
+                            }
+                            watched.put(repoKey(owner, repo, gitee, wr.branch), wr);
                         }
                     }
                 }
@@ -375,7 +418,8 @@ public class GithubTrackerService {
             m.put("commits", wr.watchCommits);
             m.put("issues", wr.watchIssues);
             m.put("prs", wr.watchPrs);
-            data.put(repoKey(wr.owner, wr.repo, wr.gitee), m);
+            if (wr.branch != null) m.put("branch", wr.branch);
+            data.put(repoKey(wr.owner, wr.repo, wr.gitee, wr.branch), m);
         }
         try (Writer w = new OutputStreamWriter(new FileOutputStream(watchedFile), StandardCharsets.UTF_8)) {
             new org.yaml.snakeyaml.Yaml().dump(data, w);
@@ -458,6 +502,8 @@ public class GithubTrackerService {
         public boolean watchCommits = true;
         public boolean watchIssues = true;
         public boolean watchPrs = true;
+        /** 追踪的分支名，null 表示默认分支。 */
+        public String branch = null;
 
         public WatchedRepo(String owner, String repo) {
             this.owner = owner;

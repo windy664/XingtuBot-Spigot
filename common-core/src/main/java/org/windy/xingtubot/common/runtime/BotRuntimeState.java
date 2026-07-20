@@ -8,6 +8,7 @@ import java.util.function.BooleanSupplier;
 public final class BotRuntimeState {
 
     private static volatile String botName = "机器人";
+    private static volatile String proxyServerName; // 子服在代理端的注册名（由 I_AM_BOSS 握手设置）
     private static volatile BooleanSupplier debugSupplier = () -> false;
 
     private BotRuntimeState() {
@@ -34,6 +35,21 @@ public final class BotRuntimeState {
             return debugSupplier.getAsBoolean();
         } catch (Throwable ignored) {
             return false;
+        }
+    }
+
+    /**
+     * 子服在代理端的注册名（如 "lobby"、"shelter"）。
+     * 由 I_AM_BOSS 握手自动设置，无需手动配置。
+     * 未获取到时返回 null。
+     */
+    public static String getProxyServerName() {
+        return proxyServerName;
+    }
+
+    public static void setProxyServerName(String name) {
+        if (name != null && !name.trim().isEmpty()) {
+            proxyServerName = name.trim();
         }
     }
 }

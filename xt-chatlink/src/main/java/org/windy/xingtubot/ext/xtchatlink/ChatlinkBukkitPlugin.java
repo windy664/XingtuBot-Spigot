@@ -66,7 +66,9 @@ public final class ChatlinkBukkitPlugin extends JavaPlugin {
         // 游戏→QQ：ChatreplyModule（GameChatForwarder + /messagereply + 敏感词）
         if (config.getBoolean("chatreply-enable", true)) {
             PlayerLockManager lockState = host.getService(PlayerLockManager.class);
-            chatreplyModule = new ChatreplyModule(this, config, logger, lockState);
+            org.windy.xingtubot.common.service.SensitiveFilter sf =
+                    host.getService(org.windy.xingtubot.common.service.SensitiveFilter.class);
+            chatreplyModule = new ChatreplyModule(this, config, logger, lockState, sf);
 
             // 注入目标群 + 主动发送器（否则 game→QQ 永远不转发：默认 allowedGroups={"*"} 无具体群）
             java.util.List<String> allowedGroups = org.windy.xingtubot.common.util.GroupTargets

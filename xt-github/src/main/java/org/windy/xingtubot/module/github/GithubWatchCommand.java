@@ -5,15 +5,12 @@ import org.windy.xingtubot.common.event.BotMessageContext;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * /github 命令：管理 GitHub 仓库追踪。
  */
 public class GithubWatchCommand implements BotCommand {
 
-    private static final Pattern REPO_PATTERN = Pattern.compile("([\\w.-]+)/([\\w.-]+)");
     private final GithubTrackerService tracker;
 
     public GithubWatchCommand(GithubTrackerService tracker) {
@@ -31,9 +28,10 @@ public class GithubWatchCommand implements BotCommand {
         String[] args = parts.length > 1 ? Arrays.copyOfRange(parts, 1, parts.length) : new String[0];
 
         if (args.length == 0) {
-            event.reply("用法: /github <watch|unwatch|list> [owner/repo]\n"
-                    + "GitHub: /github watch owner/repo\n"
-                    + "Gitee:  /github watch gitee:owner/repo （或贴 gitee.com 链接）");
+            event.reply("用法: /github <watch|unwatch|list> [owner/repo/branch]\n"
+                    + "GitHub: /github watch windy664/XingtuBot-Spigot\n"
+                    + "带分支: /github watch windy664/XingtuBot-Spigot/26.2\n"
+                    + "Gitee:  /github watch gitee:owner/repo/dev");
             return;
         }
 
@@ -51,43 +49,67 @@ public class GithubWatchCommand implements BotCommand {
                 handleList(event);
                 break;
             default:
-                event.reply("未知子命令: " + args[0] + "\n用法: /github <watch|unwatch|list> [owner/repo]");
+                event.reply("未知子命令: " + args[0] + "\n用法: /github <watch|unwatch|list> [owner/repo/branch]");
         }
+    }
+
+    /**
+     * 解析 owner/repo[/branch...] 路径。
+     * 返回 String[3]: {owner, repo, branchOrNull}
+     */
+    private String[] parseRepoPath(String input, boolean gitee) {
+        String s = normalizeRepo(input);
+        String[] segs = s.split("/", -1);
+        if (segs.length < 2) return null;
+        String owner = segs[0];
+        String repo = segs[1];
+        String branch = null;
+        if (segs.length > 2) {
+            // 分支名可能含 /，把第三段及之后拼回来
+            StringBuilder sb = new StringBuilder(segs[2]);
+            for (int i = 3; i < segs.length; i++) sb.append("/").append(segs[i]);
+            String b = sb.toString();
+            if (!b.isEmpty()) branch = b;
+        }
+        return new String[]{owner, repo, branch};
     }
 
     private void handleWatch(String[] args, BotMessageContext event) {
         if (args.length < 2) {
-            event.reply("用法: /github watch <owner/repo>\n"
+            event.reply("用法: /github watch <owner/repo[/branch]>\n"
                     + "GitHub 示例: /github watch windy664/XingtuBot-Spigot\n"
-                    + "Gitee 示例:  /github watch gitee:owner/repo");
+                    + "带分支:     /github watch windy664/XingtuBot-Spigot/26.2\n"
+                    + "Gitee 示例:  /github watch gitee:owner/repo/dev");
             return;
         }
         boolean gitee = isGitee(args[1]);
-        String repoStr = normalizeRepo(args[1]);
-        Matcher m = REPO_PATTERN.matcher(repoStr);
-        if (!m.matches()) {
-            event.reply("格式错误，应为 owner/repo（如 windy664/XingtuBot-Spigot）");
+        String[] parsed = parseRepoPath(args[1], gitee);
+        if (parsed == null) {
+            event.reply("格式错误，应为 owner/repo[/branch]（如 windy664/XingtuBot-Spigot/26.2）");
             return;
         }
-        String label = (gitee ? "Gitee " : "GitHub ") + repoStr;
-        boolean added = tracker.watch(m.group(1), m.group(2), gitee);
+        String owner = parsed[0], repo = parsed[1], branch = parsed[2];
+        String label = (gitee ? "Gitee " : "GitHub ") + owner + "/" + repo;
+        if (branch != null) label += " [" + branch + "]";
+        boolean added = tracker.watch(owner, repo, gitee, branch);
         event.reply(added ? "✅ 已订阅 " + label : "⚠️ 已经在订阅 " + label + " 了");
     }
 
     private void handleUnwatch(String[] args, BotMessageContext event) {
         if (args.length < 2) {
-            event.reply("用法: /github unwatch <owner/repo>");
+            event.reply("用法: /github unwatch <owner/repo[/branch]>");
             return;
         }
         boolean gitee = isGitee(args[1]);
-        String repoStr = normalizeRepo(args[1]);
-        Matcher m = REPO_PATTERN.matcher(repoStr);
-        if (!m.matches()) {
-            event.reply("格式错误，应为 owner/repo");
+        String[] parsed = parseRepoPath(args[1], gitee);
+        if (parsed == null) {
+            event.reply("格式错误，应为 owner/repo[/branch]");
             return;
         }
-        String label = (gitee ? "Gitee " : "GitHub ") + repoStr;
-        boolean removed = tracker.unwatch(m.group(1), m.group(2), gitee);
+        String owner = parsed[0], repo = parsed[1], branch = parsed[2];
+        String label = (gitee ? "Gitee " : "GitHub ") + owner + "/" + repo;
+        if (branch != null) label += " [" + branch + "]";
+        boolean removed = tracker.unwatch(owner, repo, gitee, branch);
         event.reply(removed ? "✅ 已取消订阅 " + label : "⚠️ 未找到订阅 " + label);
     }
 
@@ -106,12 +128,13 @@ public class GithubWatchCommand implements BotCommand {
         for (GithubTrackerService.WatchedRepo wr : list) {
             sb.append("· ").append(wr.gitee ? "[Gitee] " : "[GitHub] ");
             sb.append(wr.owner).append("/").append(wr.repo);
-            sb.append(" [");
+            if (wr.branch != null) sb.append("/").append(wr.branch);
+            sb.append(" (");
             if (wr.watchReleases) sb.append("release ");
             if (wr.watchCommits) sb.append("commit ");
             if (wr.watchIssues) sb.append("issue ");
             if (wr.watchPrs) sb.append("PR ");
-            sb.append("]\n");
+            sb.append(")\n");
         }
         event.reply(sb.toString().trim());
     }
@@ -139,9 +162,9 @@ public class GithubWatchCommand implements BotCommand {
     @Override
     public List<String> triggers() { return Arrays.asList("/github", "github"); }
     @Override
-    public String usage() { return "/github <watch|unwatch|list>"; }
+    public String usage() { return "/github <watch|unwatch|list> [owner/repo/branch]"; }
     @Override
-    public String description() { return "GitHub / Gitee 项目追踪（release/commit/issue/PR）"; }
+    public String description() { return "GitHub / Gitee 项目追踪（release/commit/issue/PR），支持指定分支"; }
     @Override
     public String category() { return "🔍 模组工具"; }
 }

@@ -1,0 +1,39 @@
+# XingtuBot-MCSM: MCSManager 面板管理配置
+
+# MCSM 面板地址（不带尾斜杠）
+panel-url: "http://localhost:23333"
+
+# 面板 API Key
+api-key: ""
+
+# 节点列表（留空则自动从面板获取第一个可用节点）
+# nodes:
+#   - id: "daemon-uuid"
+#     name: "主节点"
+#     api-key: "daemon-api-key"
+nodes: []
+
+# 崩溃轮询间隔（秒，0=关闭事件监控）
+poll-interval: 30
+
+# 推送目标群（留空=推到 allowed-groups 全部群）
+notify-groups: []
+
+# ─── 事件推送开关 ───
+
+# 实例崩溃通知（运行中→停止）
+notify-crash: true
+
+# 实例恢复通知（崩溃后重新启动成功）
+notify-recovery: true
+
+# 节点离线通知（可用→不可用）
+notify-node-offline: true
+
+# 脱敏开关（遮蔽 IP/路径/密码）
+sanitize: true
+
+# 实例别名（UUID → 中文名，留空则用实例昵称）
+# aliases:
+#   "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx": "生存服"
+aliases: {}
