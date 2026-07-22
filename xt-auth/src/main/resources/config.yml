@@ -5,12 +5,10 @@
 # 总开关（false = 不启用白名单和登录流程）
 whitelist-enable: true
 
-# ---- 群内关键词 ----
 # 玩家在 QQ 群发送这些词触发对应流程
 login-prompt: "登录"
 binding-prompt: "绑定"
 
-# ---- 免密登录 ----
 # 同 IP 重进自动登录的信任期（分钟），0 = 关闭（每次都要群内登录）
 auto-login-window-minutes: 720
 
@@ -20,19 +18,13 @@ group-qr-enable: true
 qq-group: "582224783"
 group-join-url: "https://qm.qq.com/q/FEK78ZAOWY"
 
-# ---- 登录卡片 ----
-# 进服时在群里发的「登录」按钮卡片相关设置
-# 是否标注玩家省级地区（IP 定位，仅到省份，不显示 IP/城市）
-login-announce-region: false
 # 登录按钮发往哪些群。
 # "*" 或留空 = 继承核心 common-core 的 allowed-groups；填写具体群 = 在核心白名单内再缩小范围。
 allowed-groups:
   - "*"
 
-# ---- 安全 ----
 # 单个 QQ 10 分钟内最大绑定失败次数（防碰运气），超过暂时拒绝
 bind-max-attempts: 5
 
-# ---- 存储 ----
 # 绑定数据持久化方式：json（默认） / sqlite
 storage-type: "json"

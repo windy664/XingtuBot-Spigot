@@ -1,8 +1,10 @@
-package org.windy.xingtubot.common.handler.impl;
+package org.windy.xingtubot.ext.xtgroup.handler;
 
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.event.BotMessageType;
 import org.windy.xingtubot.common.handler.BotMessageHandler;
+import org.windy.xingtubot.common.runtime.XingtuBotServiceImpl;
 
 import java.util.Set;
 
@@ -28,7 +30,7 @@ public class WelcomeHandler implements BotMessageHandler {
 
     @Override
     public boolean matches(String message, BotMessageContext event) {
-        if (!"GROUP_MEMBER_ADD".equals(event.getEventType())) return false;
+        if (event.getMessageType() != BotMessageType.MEMBER_ADD) return false;
         return isGroupAllowed(event.getConversationId());
     }
 
@@ -36,7 +38,7 @@ public class WelcomeHandler implements BotMessageHandler {
     public void handle(String message, BotMessageContext event) {
         String text = welcomeMessage;
         if (text == null || text.isEmpty()) return;
-        text = text.replace("{bot}", org.windy.xingtubot.common.runtime.XingtuBotServiceImpl.runtime().getBotName());
+        text = text.replace("{bot}", XingtuBotServiceImpl.runtime().getBotName());
         event.replyMarkdown(text, null);
     }
 

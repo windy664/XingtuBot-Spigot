@@ -28,8 +28,6 @@ public class QqOpenApiClient {
     private static final String TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken";
     /** 正式环境接口域名。 */
     public static final String API_PROD = "https://api.sgroup.qq.com";
-    /** 沙箱环境接口域名。 */
-    public static final String API_SANDBOX = "https://sandbox.api.sgroup.qq.com";
 
     // === 消息类型 msg_type ===
     public static final int MSG_TYPE_TEXT = 0;
@@ -56,10 +54,6 @@ public class QqOpenApiClient {
 
     public QqOpenApiClient(String appId, String clientSecret) {
         this(appId, clientSecret, API_PROD, null);
-    }
-
-    public QqOpenApiClient(String appId, String clientSecret, boolean sandbox, BotLogger logger) {
-        this(appId, clientSecret, sandbox ? API_SANDBOX : API_PROD, logger);
     }
 
     public QqOpenApiClient(String appId, String clientSecret, String apiBase, BotLogger logger) {

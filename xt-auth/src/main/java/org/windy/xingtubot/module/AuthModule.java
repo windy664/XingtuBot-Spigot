@@ -103,7 +103,7 @@ public final class AuthModule implements BotModule {
             // 仅在代理上下文（platformDataDir != null）告警——Bukkit 子服(slave)本就不处理群消息，无需适配器。
             if (authAdapter == null && platformDataDir != null) {
                 logger.warn("[Auth] 未注入认证适配器：群里「登录」/「绑定」将无法驱动子服解锁。"
-                        + "请确认核心 Bridge 已就绪（server-role 非 off）。");
+                        + "请确认核心 Bridge 已就绪。");
             }
             BindingService bindingService = new BindingServiceImpl(store, authAdapter, appIdSupplier, logger::warn);
             bindingService.setBindingPrompt(config.getString("binding-prompt", "绑定"));

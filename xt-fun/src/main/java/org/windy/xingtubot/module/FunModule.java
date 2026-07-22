@@ -1,19 +1,30 @@
 package org.windy.xingtubot.module;
 
-import org.windy.xingtubot.common.command.impl.AnimePicCommand;
-import org.windy.xingtubot.common.command.impl.FortuneCommand;
-import org.windy.xingtubot.common.command.impl.TextImageCommand;
-import org.windy.xingtubot.common.command.impl.WeatherCommand;
-import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.handler.impl.RichReplyDemoHandler;
-import org.windy.xingtubot.common.image.TextImageRenderer;
+import org.windy.xingtubot.common.command.BotCommand;
+import org.windy.xingtubot.common.handler.BotMessageHandler;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ModuleContext;
+import org.windy.xingtubot.ext.xtfun.feature.*;
 
 /**
- * 群娱乐模块：天气、运势、随机动漫图、文字生图、富消息 demo。
+ * 群娱乐模块：自动扫描注册所有 {@link FunFeature}。
+ *
+ * <p>新增功能只需：
+ * <ol>
+ *   <li>写一个 {@code XxxFeature implements FunFeature}</li>
+ *   <li>在下面 {@code FEATURES} 列表加一行</li>
+ * </ol>
  */
 public final class FunModule implements BotModule {
+
+    /** 所有娱乐功能。新增功能在这里加一行即可。 */
+    private static final FunFeature[] FEATURES = {
+            new WeatherFeature(),
+            new FortuneFeature(),
+            new AnimePicFeature(),
+            new TextImageFeature(),
+            new RichReplyDemoFeature(),
+    };
 
     @Override
     public String name() {
@@ -22,34 +33,22 @@ public final class FunModule implements BotModule {
 
     @Override
     public void onEnable(ModuleContext ctx) {
-        BotConfig config = ctx.config();
-
-        regIfCmd(ctx, "weather-enable", true, WeatherCommand::new);
-        regIfCmd(ctx, "fortune-enable", true, FortuneCommand::new);
-        regIfCmd(ctx, "anime-enable", true, AnimePicCommand::new);
-
-        // 文字生图依赖 TextImageRenderer（从主插件服务总线获取）
-        TextImageRenderer textImage = ctx.getService(TextImageRenderer.class);
-        if (textImage != null) {
-            regIfCmd(ctx, "textimage-enable", true, () -> new TextImageCommand(textImage));
+        int count = 0;
+        for (FunFeature feature : FEATURES) {
+            if (!ctx.config().getBoolean(feature.configKey(), feature.defaultEnabled())) {
+                continue;
+            }
+            BotCommand cmd = feature.createCommand(ctx);
+            if (cmd != null) {
+                ctx.registry().register(cmd);
+                count++;
+            }
+            BotMessageHandler handler = feature.createHandler(ctx);
+            if (handler != null) {
+                ctx.registry().register(handler);
+                count++;
+            }
         }
-
-        regIf(ctx, "demo-enable", false, () -> new RichReplyDemoHandler(config));
-
-        ctx.logger().info("[Fun] 群娱乐模块已加载");
-    }
-
-    private void regIf(ModuleContext ctx, String key, boolean def,
-                       java.util.function.Supplier<org.windy.xingtubot.common.handler.BotMessageHandler> supplier) {
-        if (ctx.config().getBoolean(key, def)) {
-            ctx.registry().register(supplier.get());
-        }
-    }
-
-    private void regIfCmd(ModuleContext ctx, String key, boolean def,
-                          java.util.function.Supplier<org.windy.xingtubot.common.command.BotCommand> supplier) {
-        if (ctx.config().getBoolean(key, def)) {
-            ctx.registry().register(supplier.get());
-        }
+        ctx.logger().info("[Fun] 群娱乐模块已加载 (" + count + " 个功能)");
     }
 }

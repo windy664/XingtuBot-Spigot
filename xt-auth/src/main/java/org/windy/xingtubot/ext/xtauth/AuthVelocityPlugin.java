@@ -256,15 +256,9 @@ public class AuthVelocityPlugin {
 
         final String loginWord = config.getString("login-prompt", "登录");
         final String btnLabel = LockMessages.get("login-button-label");
-        final boolean showRegion = config.getBoolean("login-announce-region", true);
-        final String ip = proxy.getPlayer(playerName)
-                .map(com.velocitypowered.api.proxy.Player::getRemoteAddress)
-                .map(addr -> addr.getAddress() != null ? addr.getAddress().getHostAddress() : null)
-                .orElse(null);
 
         proxy.getScheduler().buildTask(this, () -> {
-            String region = showRegion ? org.windy.xingtubot.auth.util.IpGeo.province(ip) : "";
-            String card = buildLoginCard(playerName, region, loginWord);
+            String card = buildLoginCard(playerName, loginWord);
             String openid = resolveOpenid(host, playerName);
             String keyboard = org.windy.xingtubot.common.util.Keyboards.callbackForUser(
                     btnLabel, loginWord, openid);
@@ -287,7 +281,7 @@ public class AuthVelocityPlugin {
         return null;
     }
 
-    private static String buildLoginCard(String player, String region, String loginWord) {
+    private static String buildLoginCard(String player, String loginWord) {
         StringBuilder sb = new StringBuilder();
         sb.append(LockMessages.get("group-login-card-title"));
         sb.append(LockMessages.get("group-login-card-player")).append(player).append("\n");

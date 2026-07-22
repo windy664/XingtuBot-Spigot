@@ -23,8 +23,6 @@ import java.util.function.Consumer;
  */
 public final class BotLauncher {
 
-    public enum Mode { GATEWAY, OFF }
-
     /** gateway 模式的构建结果：bot + gatewayClient。 */
     public static class GatewayResult {
         public final QqBot bot;
@@ -36,24 +34,6 @@ public final class BotLauncher {
     }
 
     private BotLauncher() {
-    }
-
-    /**
-     * 本节点是否运行 QQ bot。
-     * Bukkit 端已改为自动探测（ProxyDetector），手脚模式不调本方法。
-     * 仅 {@code server-role=off} 可关闭 bot（代理端/Bukkit 均适用）。
-     */
-    public static Mode resolveMode(BotConfig config) {
-        String role = config.getString("server-role", "auto").trim().toLowerCase();
-        String legacy = config.getString("bot-mode", "").trim().toLowerCase(); // 已废弃，仅兼容旧配置
-        if (isDisabled(role) || isDisabled(legacy)) {
-            return Mode.OFF;
-        }
-        return Mode.GATEWAY;
-    }
-
-    private static boolean isDisabled(String v) {
-        return v.equals("off") || v.equals("none") || v.equals("disable");
     }
 
     /**
@@ -72,10 +52,8 @@ public final class BotLauncher {
 
         String appId = config.getString("openapi-app-id", "").trim();
         String secret = config.getString("openapi-client-secret", "").trim();
-        boolean sandbox = config.getBoolean("openapi-sandbox", false);
 
-        QqOpenApiClient api = new QqOpenApiClient(appId, secret,
-                sandbox ? QqOpenApiClient.API_SANDBOX : QqOpenApiClient.API_PROD, null);
+        QqOpenApiClient api = new QqOpenApiClient(appId, secret);
 
         // 群白名单：["*"] 或空 = 全部允许，否则只响应列表中的群
         List<String> allowedList = config.getStringList("allowed-groups");

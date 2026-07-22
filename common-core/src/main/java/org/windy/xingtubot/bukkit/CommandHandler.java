@@ -9,8 +9,6 @@ import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
 import org.windy.xingtubot.common.qq.QqOpenApiClient;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 import org.windy.xingtubot.common.util.Texts;
-import org.windy.xingtubot.common.runtime.BotRuntimeState;
-import org.windy.xingtubot.common.module.XingtuBotHost;
 import org.windy.xingtubot.bukkit.util.ProxyDetector;
 
 import java.util.ArrayList;
@@ -22,7 +20,7 @@ import java.util.stream.Collectors;
 public class CommandHandler implements CommandExecutor, TabCompleter {
 
     private static final List<String> SUB_COMMANDS = Arrays.asList(
-            "reload", "connect", "reply", "status", "list", "debug");
+            "reload", "connect", "reply", "status", "debug");
 
     private final XingtuBot plugin;
 
@@ -38,12 +36,8 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             sender.sendMessage("§7  connect    - 通信模式说明");
             sender.sendMessage("§7  reply      - 回复最后一条群消息");
             sender.sendMessage("§7  status     - 运行状态");
-            sender.sendMessage("§7  list       - 绑定列表");
             sender.sendMessage("§7  debug      - 切换调试模式");
             sender.sendMessage("§7  proactive <群id> [消息] - 测试主动消息");
-            sender.sendMessage("§7  status  - 查看运行状态");
-            sender.sendMessage("§7  list    - 查看绑定列表");
-            sender.sendMessage("§7  debug   - 切换调试模式");
             return true;
         }
 
@@ -64,10 +58,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 handleStatus(sender);
                 return true;
 
-            case "list":
-                handleList(sender);
-                return true;
-
             case "debug":
                 handleDebug(sender);
                 return true;
@@ -77,7 +67,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 return true;
 
             default:
-                sender.sendMessage("§c未知子命令: " + args[0] + "，使用 /xtb 查看帮助");
                 sender.sendMessage("§c未知子命令: " + args[0] + "，使用 /xtb 查看帮助");
                 return true;
         }
@@ -95,7 +84,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
 
     private void handleConnect(CommandSender sender) {
         sender.sendMessage("§7部署角色自动探测：检测到代理 → 手脚（代理接管），否则 → 本地大脑。");
-        sender.sendMessage("§7设置 server-role=off 可关闭本服 bot，修改后需重启服务器。");
+        sender.sendMessage("§7不想跑 bot 就不要装插件！");
     }
 
     private void handleReply(CommandSender sender, String[] args) {
@@ -114,65 +103,14 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
     }
 
     private void handleStatus(CommandSender sender) {
-        String boundCount = "—";
-        Object store = getBindingStore();
-        if (store != null) {
-            try {
-                @SuppressWarnings("unchecked")
-                java.util.List<?> all = (java.util.List<?>) store.getClass()
-                        .getMethod("all").invoke(store);
-                boundCount = String.valueOf(all != null ? all.size() : 0);
-            } catch (Exception ignored) {}
-        }
-
         boolean behindProxy = ProxyDetector.isBehindProxy(plugin);
         String role = behindProxy ? "手脚（代理接管）" : "本地大脑";
 
         for (String line : Texts.statusBlock("运行状态",
                 "部署角色", role,
                 "在线玩家", Bukkit.getOnlinePlayers().size() + "/" + Bukkit.getMaxPlayers(),
-                "已绑定", boundCount + " 人",
                 "机器人名", org.windy.xingtubot.common.runtime.XingtuBotServiceImpl.runtime().getBotName())) {
             sender.sendMessage(line);
-        }
-    }
-
-    private void handleList(CommandSender sender) {
-        Object store = getBindingStore();
-        if (store == null) {
-            sender.sendMessage("§c绑定数据不可用（白名单未启用或为 slave 模式）。");
-            return;
-        }
-        try {
-            @SuppressWarnings("unchecked")
-            java.util.List<?> all = (java.util.List<?>) store.getClass()
-                    .getMethod("all").invoke(store);
-            if (all == null || all.isEmpty()) {
-                sender.sendMessage("§7暂无绑定记录。");
-                return;
-            }
-            sender.sendMessage("§e绑定列表（" + all.size() + " 人）:");
-            java.lang.reflect.Field fPlayer = null;
-            java.lang.reflect.Field fOpenid = null;
-            int i = 0;
-            for (Object entry : all) {
-                i++;
-                if (fPlayer == null) {
-                    fPlayer = entry.getClass().getField("player");
-                    fOpenid = entry.getClass().getField("openid");
-                }
-                String player = (String) fPlayer.get(entry);
-                String openid = (String) fOpenid.get(entry);
-                boolean online = Bukkit.getPlayerExact(player) != null;
-                String status = online ? "§a●" : "§7○";
-                sender.sendMessage(status + " §f" + player + " §7- " + openid);
-                if (i >= 50) {
-                    sender.sendMessage("§7... 仅显示前 50 条");
-                    break;
-                }
-            }
-        } catch (Exception e) {
-            sender.sendMessage("§c获取绑定列表失败: " + e.getMessage());
         }
     }
 
@@ -200,11 +138,7 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
             sender.sendMessage("§c未配置 openapi-app-id / openapi-client-secret");
             return;
         }
-        boolean sandbox = plugin.getConfig().getBoolean("openapi-sandbox", false);
-        QqOpenApiClient api =
-                new QqOpenApiClient(appId, secret,
-                        sandbox ? QqOpenApiClient.API_SANDBOX
-                                : QqOpenApiClient.API_PROD, null);
+        QqOpenApiClient api = new QqOpenApiClient(appId, secret);
 
         final String msg = "🔔 [主动消息] " + content;
         sender.sendMessage("§e正在发送主动消息到群 " + groupOpenid + "...");
@@ -221,19 +155,6 @@ public class CommandHandler implements CommandExecutor, TabCompleter {
                 sender.sendMessage("§7下次群里有人 @机器人 时会一起发出");
             }
         });
-    }
-
-    /** 绑定库由 xt-auth 注册到服务总线，通过 Class.forName 反射获取类型，避免编译期依赖 xt-auth。 */
-    private Object getBindingStore() {
-        try {
-            XingtuBotHost host =
-                    Bukkit.getServicesManager().load(XingtuBotHost.class);
-            if (host == null) return null;
-            Class<?> repoClass = Class.forName("org.windy.xingtubot.common.binding.BindingRepository");
-            return host.getService(repoClass);
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     @Override

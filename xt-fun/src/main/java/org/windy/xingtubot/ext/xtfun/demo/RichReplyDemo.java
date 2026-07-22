@@ -1,4 +1,4 @@
-package org.windy.xingtubot.common.demo;
+package org.windy.xingtubot.ext.xtfun.demo;
 
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageContext;
@@ -11,34 +11,21 @@ import org.windy.xingtubot.common.event.BotMessageContext;
  * 需要素材的类型未配置则跳过并在首条文本里说明。
  *
  * <p>可选类型：text / image / voice / video / markdown
- * （ark / embed 较冷门且需报备模板，已从 demo 移除，但 {@code QqOpenApiClient} 仍保留其方法备用）
  */
 public final class RichReplyDemo {
 
     private RichReplyDemo() {
     }
 
-    /** 若消息是触发词则执行 demo 并返回 true；否则返回 false。 */
-    public static boolean maybeHandle(BotMessageContext event, BotConfig config) {
-        String msg = event.getMessage() == null ? "" : event.getMessage().trim();
-        if (!msg.equals("测试") && !msg.equalsIgnoreCase("/demo")) {
-            return false;
-        }
-        run(event, config);
-        return true;
-    }
-
     public static void run(BotMessageContext event, BotConfig config) {
-        // 图片地址：配了用配的；未配则跳过图片 demo
         String imageUrl = config.getString("demo-image-url", "");
         String voiceUrl = config.getString("demo-voice-url", "");
         String videoUrl = config.getString("demo-video-url", "");
         String mdKeyboardId = config.getString("demo-markdown-keyboard-id", "");
         String types = config.getString("demo-types", "text,image,markdown").toLowerCase();
 
-        int budget = 5; // QQ 被动回复上限
+        int budget = 5;
 
-        // 第 1 条永远是文本说明（不计入是否选了 text）
         StringBuilder sb = new StringBuilder("✅ 富消息 demo（被动回复每条限 5 次）\n");
         sb.append("本次将尝试: ").append(types).append("\n");
         sb.append("可选: text/image/voice/video/markdown，用 demo-types 配置\n");
@@ -78,7 +65,6 @@ public final class RichReplyDemo {
         return types.contains(name);
     }
 
-    /** 选了某类型但缺素材时，给出一行提示。 */
     private static String skipNote(String name, String types, String value, String configKey) {
         if (want(types, name) && (value == null || value.isEmpty())) {
             return "⚠️ " + name + " 跳过：未配置 " + configKey + "\n";

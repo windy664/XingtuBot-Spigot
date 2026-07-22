@@ -1,7 +1,7 @@
-package org.windy.xingtubot.common.handler.impl;
+package org.windy.xingtubot.ext.xtfun.handler;
 
 import org.windy.xingtubot.common.config.BotConfig;
-import org.windy.xingtubot.common.demo.RichReplyDemo;
+import org.windy.xingtubot.ext.xtfun.demo.RichReplyDemo;
 import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.handler.BotMessageHandler;
 

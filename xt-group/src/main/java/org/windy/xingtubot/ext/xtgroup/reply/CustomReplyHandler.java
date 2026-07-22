@@ -1,10 +1,8 @@
-package org.windy.xingtubot.common.handler.impl;
+package org.windy.xingtubot.ext.xtgroup.reply;
 
 import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.handler.MenuEntry;
 import org.windy.xingtubot.common.handler.BotMessageHandler;
-import org.windy.xingtubot.common.reply.CustomReply;
-import org.windy.xingtubot.common.reply.CustomReplyService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,8 +30,8 @@ public class CustomReplyHandler implements BotMessageHandler {
 
     /**
      * 自定义问答是服主显式配置的触发词（在线/状态/规则…），理应在群里直接发就能触发，
-     * 无需先 @机器人——与白名单的「绑定/登录」免@（{@code WhitelistHandler}）一致。
-     * 故放开 mention 门控：listen-mode=mention（默认）下,群里发触发词也能回复。
+     * 无需先 @机器人——与白名单的「绑定/登录」免@一致。
+     * 故放开 mention 门控：群里发触发词也能回复。
      *
      * <p>不会误抢普通闲聊:只有命中配置的触发词才 handle,未命中仍落到群服互联兜底镜像进游戏
      * （dispatch 首个命中即停)。AI 闲聊则自身门控只认 @消息,不受此影响。

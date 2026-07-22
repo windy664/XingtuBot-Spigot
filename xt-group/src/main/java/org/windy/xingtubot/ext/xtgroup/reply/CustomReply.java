@@ -1,4 +1,4 @@
-package org.windy.xingtubot.common.reply;
+package org.windy.xingtubot.ext.xtgroup.reply;
 
 import java.util.ArrayList;
 import java.util.List;

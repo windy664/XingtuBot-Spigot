@@ -1,7 +1,8 @@
-package org.windy.xingtubot.common.reply;
+package org.windy.xingtubot.ext.xtgroup.reply;
 
 import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.image.TextImageRenderer;
+import org.windy.xingtubot.common.reply.PlaceholderResolver;
 import org.yaml.snakeyaml.Yaml;
 
 import com.google.gson.JsonArray;

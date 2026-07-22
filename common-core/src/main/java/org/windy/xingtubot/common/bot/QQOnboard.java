@@ -221,24 +221,11 @@ public class QQOnboard {
         }
     }
 
-    // ========================= 结果 =========================
-
-    public static class ScanResult {
-        public final String appId;
-        public final String clientSecret;
-        public final String userOpenid;
-
-        public ScanResult(String appId, String clientSecret, String userOpenid) {
-            this.appId = appId;
-            this.clientSecret = clientSecret;
-            this.userOpenid = userOpenid;
-        }
-    }
+    // ========================= QR 码渲染 =========================
 
     /**
-     * 用 ZXing 生成 QR 码并以 Unicode 方块字符渲染到控制台。
-     * 每行用两个竖排像素合并为一个字符（▀=上黑下白，▄=上白下黑，█=全黑，空格=全白），
-     * 使二维码在终端中更紧凑。
+     * 用 ZXing 生成 QR 码并以纯 ASCII 字符渲染到控制台。
+     * 直接写 System.out 绕过 SLF4J（logger 会吞掉 ANSI/特殊字符）。
      */
     private void renderQrToConsole(String text) {
         try {
@@ -252,7 +239,7 @@ public class QQOnboard {
             int width = matrix.getWidth();
             int height = matrix.getHeight();
 
-            // 每两行合并为一行（▀▄ 字符）
+            // 纯 ASCII：每两行合并为一行，█=全黑 ▄=上黑下白 ▀=上白下黑 空格=全白
             for (int y = 0; y < height; y += 2) {
                 StringBuilder line = new StringBuilder("  ");
                 for (int x = 0; x < width; x++) {
@@ -260,19 +247,34 @@ public class QQOnboard {
                     boolean bottom = (y + 1 < height) ? matrix.get(x, y + 1) : false;
                     if (top && bottom) {
                         line.append('█'); // █ 全黑
-                    } else if (top && !bottom) {
-                        line.append('▀'); // ▀ 上黑下白
-                    } else if (!top && bottom) {
-                        line.append('▄'); // ▄ 上白下黑
+                    } else if (top) {
+                        line.append('▄'); // ▄ 上黑下白
+                    } else if (bottom) {
+                        line.append('▀'); // ▀ 上白下黑
                     } else {
-                        line.append(' ');       // 全白
+                        line.append(' ');
                     }
                 }
-                log(line.toString());
+                // 直接写 stdout，不走 logger（避免 SLF4J 吞字符）
+                System.out.println("[Onboard] " + line);
             }
         } catch (Exception e) {
-            // ZXing 不可用时降级为纯链接
             log("  [QR 码生成失败: " + e.getMessage() + "]");
+            log("  请直接复制上方链接到 QQ 中打开");
+        }
+    }
+
+    // ========================= 结果 =========================
+
+    public static class ScanResult {
+        public final String appId;
+        public final String clientSecret;
+        public final String userOpenid;
+
+        public ScanResult(String appId, String clientSecret, String userOpenid) {
+            this.appId = appId;
+            this.clientSecret = clientSecret;
+            this.userOpenid = userOpenid;
         }
     }
 

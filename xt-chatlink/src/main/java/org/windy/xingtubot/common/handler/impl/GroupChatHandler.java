@@ -13,7 +13,7 @@ import java.util.function.BiConsumer;
  *
  * <p>门控统一在此（两端共用）：
  * <ul>
- *   <li>listen-mode（mention/all）已在 {@code HandlerRegistry.dispatch} 顶层统一过滤；</li>
+ *   <li>mention 门控已在 {@code HandlerRegistry.dispatch} 顶层统一过滤；</li>
  *   <li>可选 {@code prefix}（config 的 {@code startsWith}）：QQ 群消息需以此前缀开头才转发进游戏，
  *       命中后会自动剥掉前缀；留空=所有（经监听模式过滤的）群消息都转发。</li>
  * </ul>
@@ -47,11 +47,9 @@ public class GroupChatHandler implements BotMessageHandler {
 
     /**
      * 群服互联按定义要把<b>群里所有聊天</b>镜像进游戏，而非只镜像 @机器人 的消息，
-     * 故主动放开 mention 门控——否则 listen-mode=mention（默认）下，群里发的普通聊天
-     * （未@机器人）会在 {@code HandlerRegistry.dispatch} 顶层被门控，永远传不进游戏。
+     * 故主动放开 mention 门控——否则非@群消息会在 {@code HandlerRegistry.dispatch} 顶层被门控，永远传不进游戏。
      *
      * <p>这样可同时满足「AI/命令只在@时响应」+「群服互联镜像全部聊天」两个诉求，二者解耦。
-     * 前提是网关确实投递了非@群消息（已由实测 GROUP_MESSAGE_CREATE 证实）。
      */
     @Override
     public boolean acceptsWithoutMention() {

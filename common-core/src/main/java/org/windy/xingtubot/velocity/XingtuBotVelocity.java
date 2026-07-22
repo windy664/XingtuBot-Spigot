@@ -37,7 +37,7 @@ import java.util.function.Consumer;
 @Plugin(
         id = "xingtubotvelocity",
         name = "XingtuBotVelocity",
-        version = "1.4",
+        version = "2.2.1",
         authors = {"风吟"},
         dependencies = {
                 @com.velocitypowered.api.plugin.Dependency(id = "packetevents", optional = true)
@@ -98,7 +98,7 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         // 跨服 Bridge 是通用基础设施（PAPI/控制台/群服互联都走它）：只要代理端跑 bot 就建。
         // auth 逻辑完全由 xt-auth 的 AuthVelocityPlugin 处理（DirectAuthAdapter + packetevents）。
         VelocityBridge bridge = null;
-        boolean velocityIsBrain = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
+        boolean velocityIsBrain = true;
         if (velocityIsBrain) {
             ChannelIdentifier bridgeChannel = MinecraftChannelIdentifier.from(CrossServerProtocol.CHANNEL);
             bridge = new VelocityBridge(proxy, this, bridgeChannel, logger::warn);
@@ -146,60 +146,47 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
             commandHandler.handle(event);
         };
 
-        switch (BotLauncher.resolveMode(config)) {
-            case OFF:
-                adapter.log("通信模式 = off，机器人通信未启用。");
-                return;
-            case GATEWAY:
-                // 如果未配置 app-id，自动进入扫码接入流程
-                String gwAppId = config.getString("openapi-app-id", "").trim();
-                if (gwAppId.isEmpty()) {
-                    adapter.log("未配置 openapi-app-id，启动扫码接入流程...");
-                    QQOnboard onboard =
-                            new QQOnboard(new VelocityBotLogger(logger));
-                    QQOnboard.ScanResult result = onboard.run();
-                    if (result != null) {
-                        config.set("openapi-app-id", result.appId);
-                        config.set("openapi-client-secret", result.clientSecret);
-                        try {
-                            config.save();
-                            adapter.log("✅ 凭据已写入 config.yml");
-                        } catch (Exception e) {
-                            logger.warn("[XingtuBot] 写入 config.yml 失败: " + e.getMessage());
-                        }
-                    } else {
-                        logger.error("[XingtuBot] 扫码接入失败或超时，请手动填写 openapi-app-id 和 openapi-client-secret");
-                        return;
-                    }
+        // 如果未配置 app-id，自动进入扫码接入流程
+        String gwAppId = config.getString("openapi-app-id", "").trim();
+        if (gwAppId.isEmpty()) {
+            adapter.log("未配置 openapi-app-id，启动扫码接入流程...");
+            QQOnboard onboard =
+                    new QQOnboard(new VelocityBotLogger(logger));
+            QQOnboard.ScanResult result = onboard.run();
+            if (result != null) {
+                config.set("openapi-app-id", result.appId);
+                config.set("openapi-client-secret", result.clientSecret);
+                try {
+                    config.save();
+                    adapter.log("✅ 凭据已写入 config.yml");
+                } catch (Exception e) {
+                    logger.warn("[XingtuBot] 写入 config.yml 失败: " + e.getMessage());
                 }
-                BotLauncher.GatewayResult gw = BotLauncher.buildGateway(config, adapter,
-                        new VelocityBotLogger(logger), listener);
-                if (gw != null) {
-                    qqBot = gw.bot;
-                    gatewayClient = gw.gatewayClient;
-                    // 机器人昵称由 QQ API 自动写入 BotRuntimeState（QQGatewayClient 内部已处理）；此处仅记日志
-                    gatewayClient.setOnBotNameResolved(name ->
-                            adapter.log("✅ 机器人昵称已自动获取: " + name));
-                    gatewayClient.start();
-                    adapter.log("✅ 通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
+            } else {
+                logger.error("[XingtuBot] 扫码接入失败或超时，请手动填写 openapi-app-id 和 openapi-client-secret");
+                return;
+            }
+        }
+        BotLauncher.GatewayResult gw = BotLauncher.buildGateway(config, adapter,
+                new VelocityBotLogger(logger), listener);
+        if (gw != null) {
+            qqBot = gw.bot;
+            gatewayClient = gw.gatewayClient;
+            gatewayClient.setOnBotNameResolved(name ->
+                    adapter.log("✅ 机器人昵称已自动获取: " + name));
+            gatewayClient.start();
+            adapter.log("✅ 通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
 
-                    // 接线主动消息
-                    org.windy.xingtubot.common.qq.QqOpenApiClient apiClient = qqBot.getApi();
-                    if (apiClient != null) {
-                        // 模组更新等主动推送：填实惰性句柄（module-modtools 持有同一句柄）。
-                        // 群服互联（GroupChatLink）也用同一 ProactiveSender holder——由 xt-chatlink 自己拉取，
-                        // 故此处 bind 一次即可让两边同时就绪，不再 push 裸 apiClient 给尚未注册的 GroupChatLink。
-                        commandHandler.getProactiveSender().bind(apiClient);
-                        // 对外 API 发消息也走主动优先
-                        if (commandHandler != null && commandHandler.getService() != null) {
-                            commandHandler.getService().setApiClient(apiClient);
-                        }
-                        adapter.log("✅ 主动消息已启用（模组通知 + 群服互联将即时推送）");
-                    }
-                } else {
-                    logger.error("[XingtuBot] Gateway 模式配置不全，请检查 openapi-app-id / openapi-client-secret");
+            org.windy.xingtubot.common.qq.QqOpenApiClient apiClient = qqBot.getApi();
+            if (apiClient != null) {
+                commandHandler.getProactiveSender().bind(apiClient);
+                if (commandHandler != null && commandHandler.getService() != null) {
+                    commandHandler.getService().setApiClient(apiClient);
                 }
-                return;
+                adapter.log("✅ 主动消息已启用（模组通知 + 群服互联将即时推送）");
+            }
+        } else {
+            logger.error("[XingtuBot] Gateway 模式配置不全，请检查 openapi-app-id / openapi-client-secret");
         }
 
     }
@@ -254,15 +241,14 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
 
     /** 详细配置信息（仅 debug 模式）。 */
     private void printDebugInfo() {
-        boolean botOn = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
-        adapter.log("§7[Debug] 角色: " + (botOn ? "大脑" : "已关闭"));
-        if (botOn) {
+        adapter.log("§7[Debug] 角色: 大脑");
+        {
             String appId = config.getString("openapi-app-id", "");
             String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "未配置";
             adapter.log("§7[Debug] AppID: " + masked);
         }
-        adapter.log("§7[Debug] 监听: " + config.getString("listen-mode", "mention"));
-        adapter.log("§7[Debug] 跨服: " + (botOn ? "已启用" : "未启用"));
+        adapter.log("§7[Debug] 监听: mention");
+        adapter.log("§7[Debug] 跨服: 已启用");
         adapter.log("§7[Debug] 存储: JSON");
     }
 
@@ -377,14 +363,7 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         }
 
         private void handleStatus(CommandSource sender) {
-            BotLauncher.Mode mode = BotLauncher.resolveMode(config);
-            boolean botOff = mode == BotLauncher.Mode.OFF;
-            String connStatus;
-            if (botOff) {
-                connStatus = "§c已关闭";
-            } else {
-                connStatus = (gatewayClient != null && gatewayClient.isRunning()) ? "§a已连接" : "§c未连接";
-            }
+            String connStatus = (gatewayClient != null && gatewayClient.isRunning()) ? "§a已连接" : "§c未连接";
 
             StringBuilder servers = new StringBuilder();
             for (com.velocitypowered.api.proxy.server.RegisteredServer rs : proxy.getAllServers()) {
@@ -407,7 +386,7 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
             } catch (Exception ignored) {}
 
             for (String line : Texts.statusBlock("运行状态",
-                    "通信模式", mode + " " + connStatus,
+                    "通信模式", "gateway " + connStatus,
                     "在线人数", proxy.getPlayerCount() + " 人",
                     "子服", servers.toString(),
                     "已绑定", boundCount + " 人")) {

@@ -77,7 +77,7 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
         // 跨服 Bridge 是通用基础设施（PAPI/控制台/群服互联都走它）：只要代理端跑 bot 就建。
         // auth 逻辑完全由 xt-auth 的 AuthBungeeCordPlugin 处理（DirectAuthAdapter + packetevents）。
         bridge = null;
-        boolean velocityIsBrain = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
+        boolean velocityIsBrain = true;
         if (velocityIsBrain) {
             bridge = new BungeeCordBridge(getProxy(), this,
                     CrossServerProtocol.CHANNEL,
@@ -117,57 +117,47 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
             commandHandler.handle(event);
         };
 
-        switch (BotLauncher.resolveMode(config)) {
-            case OFF:
-                adapter.log("通信模式 = off，机器人通信未启用。");
-                return;
-            case GATEWAY:
-                String gwAppId = config.getString("openapi-app-id", "").trim();
-                if (gwAppId.isEmpty()) {
-                    adapter.log("未配置 openapi-app-id，启动扫码接入流程...");
-                    QQOnboard onboard =
-                            new QQOnboard(new BungeeCordBotLogger(getLogger()));
-                    QQOnboard.ScanResult result = onboard.run();
-                    if (result != null) {
-                        config.set("openapi-app-id", result.appId);
-                        config.set("openapi-client-secret", result.clientSecret);
-                        try {
-                            config.save();
-                            adapter.log("✅ 凭据已写入 config.yml");
-                        } catch (Exception e) {
-                            getLogger().warning("[XingtuBot] 写入 config.yml 失败: " + e.getMessage());
-                        }
-                    } else {
-                        getLogger().severe("[XingtuBot] 扫码接入失败或超时，请手动填写 openapi-app-id 和 openapi-client-secret");
-                        return;
-                    }
+        // 如果未配置 app-id，自动进入扫码接入流程
+        String gwAppId = config.getString("openapi-app-id", "").trim();
+        if (gwAppId.isEmpty()) {
+            adapter.log("未配置 openapi-app-id，启动扫码接入流程...");
+            QQOnboard onboard =
+                    new QQOnboard(new BungeeCordBotLogger(getLogger()));
+            QQOnboard.ScanResult result = onboard.run();
+            if (result != null) {
+                config.set("openapi-app-id", result.appId);
+                config.set("openapi-client-secret", result.clientSecret);
+                try {
+                    config.save();
+                    adapter.log("✅ 凭据已写入 config.yml");
+                } catch (Exception e) {
+                    getLogger().warning("[XingtuBot] 写入 config.yml 失败: " + e.getMessage());
                 }
-                BotLauncher.GatewayResult gw = BotLauncher.buildGateway(config, adapter,
-                        new BungeeCordBotLogger(getLogger()), listener);
-                if (gw != null) {
-                    qqBot = gw.bot;
-                    gatewayClient = gw.gatewayClient;
-                    // 机器人昵称由 QQ API 自动写入 BotRuntimeState（QQGatewayClient 内部已处理）；此处仅记日志
-                    gatewayClient.setOnBotNameResolved(name ->
-                            adapter.log("✅ 机器人昵称已自动获取: " + name));
-                    gatewayClient.start();
-                    adapter.log("✅ 通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
+            } else {
+                getLogger().severe("[XingtuBot] 扫码接入失败或超时，请手动填写 openapi-app-id 和 openapi-client-secret");
+                return;
+            }
+        }
+        BotLauncher.GatewayResult gw = BotLauncher.buildGateway(config, adapter,
+                new BungeeCordBotLogger(getLogger()), listener);
+        if (gw != null) {
+            qqBot = gw.bot;
+            gatewayClient = gw.gatewayClient;
+            gatewayClient.setOnBotNameResolved(name ->
+                    adapter.log("✅ 机器人昵称已自动获取: " + name));
+            gatewayClient.start();
+            adapter.log("✅ 通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
 
-                    // 接线主动消息
-                    org.windy.xingtubot.common.qq.QqOpenApiClient apiClient = qqBot.getApi();
-                    if (apiClient != null) {
-                        // 群服互联（BungeeCordGroupChatLink）与模组通知共用同一 ProactiveSender holder，
-                        // 由 xt-chatlink 自己拉取；故 bind 一次即同时就绪，不再 push 给尚未注册的 GroupChatLink。
-                        commandHandler.getProactiveSender().bind(apiClient);
-                        if (commandHandler.getService() != null) {
-                            commandHandler.getService().setApiClient(apiClient);
-                        }
-                        adapter.log("✅ 主动消息已启用");
-                    }
-                } else {
-                    getLogger().severe("[XingtuBot] Gateway 模式配置不全");
+            org.windy.xingtubot.common.qq.QqOpenApiClient apiClient = qqBot.getApi();
+            if (apiClient != null) {
+                commandHandler.getProactiveSender().bind(apiClient);
+                if (commandHandler.getService() != null) {
+                    commandHandler.getService().setApiClient(apiClient);
                 }
-                return;
+                adapter.log("✅ 主动消息已启用");
+            }
+        } else {
+            getLogger().severe("[XingtuBot] Gateway 模式配置不全");
         }
 
         printBanner();
@@ -266,9 +256,8 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
     }
 
     private void printDebugInfo() {
-        boolean botOn = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
-        getLogger().info("[Debug] 角色: " + (botOn ? "大脑" : "已关闭"));
-        getLogger().info("[Debug] 监听: " + config.getString("listen-mode", "mention"));
-        getLogger().info("[Debug] 跨服: " + (botOn ? "已启用" : "未启用"));
+        getLogger().info("[Debug] 角色: 大脑");
+        getLogger().info("[Debug] 监听: mention");
+        getLogger().info("[Debug] 跨服: 已启用");
     }
 }

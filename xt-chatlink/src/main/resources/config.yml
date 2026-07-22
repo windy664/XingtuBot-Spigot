@@ -1,10 +1,8 @@
-# XingtuBot-Chatlink: 群服互联配置
-
 # 群服互联功能开关
 chatreply-enable: true
 
 # 游戏内聊天格式前缀
-chat-format: "§b[QQ群] §f"
+chat-format: "🐧§cQQ群 §7| §f"
 
 # QQ 群消息触发前缀（为空则全部转发）
 startsWith: ""
@@ -22,4 +20,4 @@ allowed-groups:
   - "*"
 
 # 回显前缀（机器人消息→游戏时显示，{bot}=机器人昵称）
-echo-format: "§b[{bot}] §f"
+echo-format: "🐧§cQQ群 §7| §f{bot}："

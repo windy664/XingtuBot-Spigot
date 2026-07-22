@@ -1,6 +1,6 @@
 plugins {
     id 'com.github.johnrengelman.shadow'
-    id 'org.springframework.boot' version '2.7.18'
+    // spring-boot 插件不再需要——四合一 jar 不用 bootJar/PropertiesLauncher
 }
 
 dependencies {
@@ -30,10 +30,10 @@ base {
     archivesName = 'XingtuBot'
 }
 
-// ==================== shadowJar（中间产物：relocate 依赖，给 bootJar 合并用） ====================
+// ==================== shadowJar（中间产物：给附属模块编译用，不含 Spring Boot） ====================
 
 shadowJar {
-    archiveClassifier.set('shadow')  // 中间产物，不覆盖最终 jar
+    archiveClassifier.set('shadow')
 
     dependencies {
         exclude(dependency('org.springframework.boot:.*'))
@@ -51,34 +51,52 @@ shadowJar {
 
 jar.enabled = false
 
-// ==================== bootJar（最终产物：XingtuBot-2.2.1.jar，四合一） ====================
-// 双击即跑（Spring Boot），扔进 plugins/ 也能当 Bukkit/Velocity 插件
+// ==================== 四合一 fatJar ====================
+// 所有类 + 依赖都在 jar 根目录，一个 jar 同时满足四端：
+//   java -jar    → Spring Boot 独立运行（Main-Class 直接引导）
+//   Velocity     → velocity-plugin.json + 类在根目录 → PluginClassLoader 正常加载
+//   Bukkit       → plugin.yml + 类在根目录
+//   BungeeCord   → bungee.yml + 类在根目录
 
-afterEvaluate {
-    assemble.dependsOn -= bootJar
-}
-bootJar {
-    dependsOn shadowJar
+task fatJar(type: Jar, dependsOn: shadowJar) {
     archiveBaseName.set('XingtuBot')
-    archiveClassifier.set('')           // 最终产物 = XingtuBot-2.2.1.jar
-    archiveVersion.set(project.version) // 2.2.1
-    mainClass = 'org.windy.xingtubot.springboot.XingtuBotSpringApplication'
+    archiveClassifier.set('')
+    archiveVersion.set(project.version)
+
+    // 1. 核心类 + relocate 后的依赖（shadowJar 解压到根目录）
+    from(zipTree(shadowJar.archiveFile))
+
+    // 2. Spring Boot 依赖也解压到根目录（java -jar 需要，插件端无害）
+    from {
+        configurations.runtimeClasspath
+                .filter { f -> f.name.endsWith('.jar') && !f.name.contains('spigot-api') && !f.name.contains('velocity-api') && !f.name.contains('bungeecord-api') && !f.name.contains('placeholderapi') }
+                .collect { zipTree(it) }
+    } {
+        exclude 'META-INF/*.SF'
+        exclude 'META-INF/*.DSA'
+        exclude 'META-INF/*.RSA'
+        exclude 'META-INF/native-image/**'
+        exclude 'META-INF/services/**'
+    }
+
+    // 3. 平台描述文件（注解处理器产物 + 资源文件）
+    from("${buildDir}/classes/java/main") {
+        include 'velocity-plugin.json'
+    }
+    from("${buildDir}/resources/main") {
+        include 'plugin.yml'
+        include 'bungee.yml'
+    }
+
     manifest {
-        attributes 'Main-Class': 'org.springframework.boot.loader.PropertiesLauncher'
+        attributes 'Main-Class': 'org.windy.xingtubot.springboot.XingtuBotSpringApplication'
     }
-    // 把 shadowJar 的内容（common-core + 三端适配 + relocate 后的依赖）合进 BOOT-INF/classes/
-    from shadowJar
-    // BOOT-INF/lib/ 排除平台 SDK（核心依赖已在 BOOT-INF/classes/ 里 via shadowJar，共存不影响）
-    classpath = classpath.filter { f ->
-        !f.name.contains('spigot-api') &&
-        !f.name.contains('velocity-api') &&
-        !f.name.contains('bungeecord-api') &&
-        !f.name.contains('placeholderapi')
-    }
+
+    // shadowJar 的 relocate 类优先（避免未 relocate 的原始类覆盖）
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-// ==================== buildAll 改为依赖 bootJar ====================
-build.dependsOn bootJar
+build.dependsOn fatJar
 
 processResources {
     def props = [version: version]

@@ -12,7 +12,7 @@ import java.util.List;
  * 跨服 Plugin Message 的编解码：[类型名][字段数][字段...]，全部 UTF。
  * 两端（Velocity / Spigot）共用，纯 JDK IO，无需 Guava。
  */
-public final class BridgeCodec {
+public final class  BridgeCodec {
 
     private BridgeCodec() {
     }

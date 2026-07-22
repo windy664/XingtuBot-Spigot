@@ -95,20 +95,17 @@ public final class XingtuBot extends JavaPlugin implements Listener {
     }
 
     private void printConfigSummary(FileConfiguration config, boolean slave) {
-        boolean botOn = !slave && BotLauncher.resolveMode(new SpigotConfig(config)) != BotLauncher.Mode.OFF;
         for (String line : Texts.banner(
                 getDescription().getVersion(), "Bukkit", "/xtb help")) {
             getLogger().info(line);
         }
-        String roleDesc = slave ? "手脚（代理接管）" : (botOn ? "本地大脑" : "已关闭");
+        String roleDesc = slave ? "手脚（代理接管）" : "本地大脑";
         getLogger().info(Texts.statusLine("角色", roleDesc));
-        if (botOn) {
-            String appId = config.getString("openapi-app-id", "");
-            String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "未配置";
-            getLogger().info(Texts.statusLine("AppID", masked));
-        }
-        getLogger().info(Texts.statusLine("监听", config.getString("listen-mode", "mention")));
-        getLogger().info(Texts.statusLine("跨服", botOn ? "已启用" : "未启用"));
+        String appId = config.getString("openapi-app-id", "");
+        String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "未配置";
+        getLogger().info(Texts.statusLine("AppID", masked));
+        getLogger().info(Texts.statusLine("监听", "mention"));
+        getLogger().info(Texts.statusLine("跨服", "已启用"));
     }
 
 
@@ -148,45 +145,36 @@ public final class XingtuBot extends JavaPlugin implements Listener {
 
     private void startBot(FileConfiguration config) {
         BotConfig cfg = new SpigotConfig(config);
-        switch (BotLauncher.resolveMode(cfg)) {
-            case OFF:
-                getLogger().info("通信模式 = off，机器人通信未启用。");
+        // 如果未配置 app-id，自动进入扫码接入流程
+        String appId = config.getString("openapi-app-id", "").trim();
+        if (appId.isEmpty()) {
+            getLogger().info("未配置 openapi-app-id，启动扫码接入流程...");
+            QQOnboard onboard = new QQOnboard(new SpigotBotLogger(getLogger()));
+            QQOnboard.ScanResult result = onboard.run();
+            if (result != null) {
+                config.set("openapi-app-id", result.appId);
+                config.set("openapi-client-secret", result.clientSecret);
+                saveConfig();
+                reloadConfig();
+                config = getConfig();
+                cfg = new SpigotConfig(config);
+                getLogger().info("✅ 凭据已写入 config.yml，App ID: " + result.appId);
+            } else {
+                getLogger().severe("扫码接入失败或超时，请手动填写 openapi-app-id 和 openapi-client-secret 到 config.yml");
                 return;
-            case GATEWAY:
-                // 如果未配置 app-id，自动进入扫码接入流程
-                String appId = config.getString("openapi-app-id", "").trim();
-                if (appId.isEmpty()) {
-                    getLogger().info("未配置 openapi-app-id，启动扫码接入流程...");
-                    QQOnboard onboard = new QQOnboard(new SpigotBotLogger(getLogger()));
-                    QQOnboard.ScanResult result = onboard.run();
-                    if (result != null) {
-                        // 写入 config.yml 并重载
-                        config.set("openapi-app-id", result.appId);
-                        config.set("openapi-client-secret", result.clientSecret);
-                        saveConfig();
-                        reloadConfig(); // 从磁盘重载，确保内存中的 config 一致
-                        config = getConfig();
-                        cfg = new SpigotConfig(config);
-                        getLogger().info("✅ 凭据已写入 config.yml，App ID: " + result.appId);
-                    } else {
-                        getLogger().severe("扫码接入失败或超时，请手动填写 openapi-app-id 和 openapi-client-secret 到 config.yml");
-                        return;
-                    }
-                }
-                BotLauncher.GatewayResult gw = BotLauncher.buildGateway(
-                        cfg, new SpigotAdapter(this), new SpigotBotLogger(getLogger()), this::dispatchToBukkit);
-                if (gw != null) {
-                    qqBot = gw.bot;
-                    gatewayClient = gw.gatewayClient;
-                    // 机器人昵称由 QQ API 自动写入 BotRuntimeState（QQGatewayClient 内部已处理）；此处仅记日志
-                    gatewayClient.setOnBotNameResolved(name ->
-                            getLogger().info("✅ 机器人昵称已自动获取: " + name));
-                    gatewayClient.start();
-                    getLogger().info("通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
-                } else {
-                    getLogger().severe("Gateway 模式配置不全，请检查 openapi-app-id / openapi-client-secret");
-                }
-                return;
+            }
+        }
+        BotLauncher.GatewayResult gw = BotLauncher.buildGateway(
+                cfg, new SpigotAdapter(this), new SpigotBotLogger(getLogger()), this::dispatchToBukkit);
+        if (gw != null) {
+            qqBot = gw.bot;
+            gatewayClient = gw.gatewayClient;
+            gatewayClient.setOnBotNameResolved(name ->
+                    getLogger().info("✅ 机器人昵称已自动获取: " + name));
+            gatewayClient.start();
+            getLogger().info("通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
+        } else {
+            getLogger().severe("Gateway 模式配置不全，请检查 openapi-app-id / openapi-client-secret");
         }
     }
 

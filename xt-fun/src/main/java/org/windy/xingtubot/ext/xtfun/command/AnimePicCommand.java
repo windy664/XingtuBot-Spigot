@@ -1,24 +1,31 @@
-package org.windy.xingtubot.common.command.impl;
+package org.windy.xingtubot.ext.xtfun.command;
 
 import org.windy.xingtubot.common.command.BotCommand;
 import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.util.Http;
 
+import java.util.List;
+
 /**
  * 随机二次元图片：「来张图」「随机图片」「来点图」「二次元」。
- *
- * <p>直接使用第三方图源 URL。如果 QQ 服务器无法下载（防盗链/不可达），
- * 图片发送会失败并提示用户稍后重试。
  */
 public class AnimePicCommand implements BotCommand {
 
-    // 随机二次元图源（须返回 jpg/png，QQ 不支持 webp）。dmoe 返回 jpeg。
-    private static final String[] APIS = {
+    private static final String[] DEFAULT_APIS = {
             "https://www.dmoe.cc/random.php",
             "https://api.mtyqx.cn/api/random.php"
     };
 
+    private final String[] sources;
+
     public AnimePicCommand() {
+        this.sources = DEFAULT_APIS;
+    }
+
+    public AnimePicCommand(List<String> sources) {
+        this.sources = (sources != null && !sources.isEmpty())
+                ? sources.toArray(new String[0])
+                : DEFAULT_APIS;
     }
 
     @Override
@@ -29,26 +36,24 @@ public class AnimePicCommand implements BotCommand {
 
     @Override
     public void handle(String message, BotMessageContext event) {
-        for (String api : APIS) {
+        for (String api : sources) {
             try {
                 String imageUrl = Http.head(api).userAgent("XingtuBot").timeout(8000, 8000)
                         .followRedirects(false).resolveRedirect();
                 event.replyImage(imageUrl, "🖼 来啦~");
                 return;
             } catch (Exception ignored) {
-                // 换下一个源
             }
         }
         event.reply("图片服务暂时不可用，稍后再试~");
     }
 
     @Override
-    public String name() {
-        return "animepic";
-    }
+    public String name() { return "animepic"; }
     @Override
     public String usage() { return "来张图 / 随机图片"; }
     @Override
     public String description() { return "随机二次元图片"; }
     @Override
-    public String category() { return "🎮 娱乐"; }}
+    public String category() { return "🎮 娱乐"; }
+}

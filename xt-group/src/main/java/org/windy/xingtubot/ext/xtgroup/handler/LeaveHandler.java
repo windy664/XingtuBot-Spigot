@@ -1,7 +1,8 @@
-package org.windy.xingtubot.common.handler.impl;
+package org.windy.xingtubot.ext.xtgroup.handler;
 
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.event.BotMessageType;
 import org.windy.xingtubot.common.handler.BotMessageHandler;
 
 import java.util.Set;
@@ -28,7 +29,7 @@ public class LeaveHandler implements BotMessageHandler {
 
     @Override
     public boolean matches(String message, BotMessageContext event) {
-        if (!"GROUP_MEMBER_REMOVE".equals(event.getEventType())) return false;
+        if (event.getMessageType() != BotMessageType.MEMBER_REMOVE) return false;
         return isGroupAllowed(event.getConversationId());
     }
 

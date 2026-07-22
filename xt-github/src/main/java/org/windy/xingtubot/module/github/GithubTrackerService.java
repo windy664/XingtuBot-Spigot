@@ -77,14 +77,25 @@ public class GithubTrackerService {
         saveState();
     }
 
-    public boolean watch(String owner, String repo, boolean gitee) {
+    public String watch(String owner, String repo, boolean gitee) {
         return watch(owner, repo, gitee, null);
     }
 
-    public boolean watch(String owner, String repo, boolean gitee, String branch) {
+    /**
+     * 订阅一个仓库。先验证仓库（和分支）是否存在。
+     * @return null=成功，非null=错误信息
+     */
+    public String watch(String owner, String repo, boolean gitee, String branch) {
         String effectiveBranch = (branch != null && !branch.isEmpty()) ? branch : null;
         String key = repoKey(owner, repo, gitee, effectiveBranch);
-        if (watched.containsKey(key)) return false;
+        if (watched.containsKey(key)) return "already";
+
+        // 验证仓库是否存在
+        WatchedRepo probe = new WatchedRepo(owner, repo);
+        probe.gitee = gitee;
+        String verifyError = verifyRepo(probe, effectiveBranch);
+        if (verifyError != null) return verifyError;
+
         WatchedRepo wr = new WatchedRepo(owner, repo);
         wr.gitee = gitee;
         wr.branch = effectiveBranch;
@@ -96,7 +107,7 @@ public class GithubTrackerService {
         initSeenState(key);
         saveWatched();
         saveState();
-        return true;
+        return null;
     }
 
     public boolean unwatch(String owner, String repo, boolean gitee) {
@@ -117,6 +128,50 @@ public class GithubTrackerService {
     }
 
     public List<WatchedRepo> listWatched() { return new ArrayList<>(watched.values()); }
+
+    /** 验证仓库（和可选分支）是否存在。null=存在，非null=错误信息。 */
+    private String verifyRepo(WatchedRepo probe, String branch) {
+        // 1. 验证仓库
+        try {
+            int code = probeApi(probe.apiBase() + "/repos/" + probe.path(), probe.gitee);
+            if (code == 404) {
+                return (probe.gitee ? "Gitee" : "GitHub") + " 仓库 " + probe.path() + " 不存在";
+            }
+            if (code >= 400) {
+                return "验证仓库失败 (HTTP " + code + ")，请稍后再试";
+            }
+        } catch (Exception e) {
+            return "验证仓库时网络异常: " + e.getMessage();
+        }
+        // 2. 验证分支（如果指定了）
+        if (branch != null && !branch.isEmpty()) {
+            try {
+                int code = probeApi(probe.apiBase() + "/repos/" + probe.path() + "/branches/" + branch, probe.gitee);
+                if (code == 404) {
+                    return "分支 " + branch + " 在 " + probe.path() + " 中不存在";
+                }
+                if (code >= 400) {
+                    return "验证分支失败 (HTTP " + code + ")，请稍后再试";
+                }
+            } catch (Exception e) {
+                return "验证分支时网络异常: " + e.getMessage();
+            }
+        }
+        return null;
+    }
+
+    /** 发 HEAD/GET 请求拿状态码，不读 body。 */
+    private int probeApi(String urlStr, boolean gitee) throws Exception {
+        HttpURLConnection conn = (HttpURLConnection) new URL(urlStr).openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("User-Agent", "XingtuBot-GithubTracker");
+        conn.setRequestProperty("Accept", gitee ? "application/json" : "application/vnd.github.v3+json");
+        conn.setConnectTimeout(6000);
+        conn.setReadTimeout(6000);
+        int code = conn.getResponseCode();
+        conn.disconnect();
+        return code;
+    }
 
     private static String repoKey(String owner, String repo, boolean gitee) {
         return repoKey(owner, repo, gitee, null);

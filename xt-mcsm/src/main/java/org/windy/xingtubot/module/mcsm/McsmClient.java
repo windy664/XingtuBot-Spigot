@@ -133,12 +133,11 @@ public final class McsmClient {
      * @param items     [{instanceUuid, daemonId}, ...]
      */
     public void batchOperation(String operation, JsonArray items) throws McsmException {
-        String url = baseUrl + "/api/instance/multi_" + operation;
+        String url = baseUrl + "/api/instance/multi_" + operation + "?apikey=" + enc(apiKey);
         try {
             Http.Response resp = Http.post(url)
                     .header("X-Requested-With", "XMLHttpRequest")
                     .header("Content-Type", "application/json; charset=utf-8")
-                    .header("apikey", apiKey)
                     .json(items.toString())
                     .send();
             checkResponse(resp);
@@ -151,11 +150,12 @@ public final class McsmClient {
 
     private JsonObject get(String path) throws McsmException {
         String url = path.startsWith("http") ? path : baseUrl + path;
+        // MCSM API key 通过查询参数传递，不是 header
+        String separator = url.contains("?") ? "&" : "?";
+        url = url + separator + "apikey=" + enc(apiKey);
         try {
             Http.Response resp = Http.get(url)
                     .header("X-Requested-With", "XMLHttpRequest")
-                    .header("Content-Type", "application/json; charset=utf-8")
-                    .header("apikey", apiKey)
                     .send();
             return checkResponse(resp);
         } catch (IOException e) {

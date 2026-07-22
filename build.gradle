@@ -54,8 +54,8 @@ subprojects {
 
 // 一键构建全部模块（./gradlew buildAll）
 task buildAll(group: 'build', description: '构建所有模块 jar') {
-    // common-core 先构建（其他模块编译依赖它的 shadow jar）
-    dependsOn ':common-core:shadowJar'
+    // common-core 先构建 fatJar（其他模块编译依赖它的 shadow jar）
+    dependsOn ':common-core:fatJar'
     // 再构建所有子模块
     dependsOn subprojects.findAll { it.path != ':common-core' }.collect { p ->
         p.tasks.matching { t -> t.name == 'shadowJar' || (t.name == 'jar' && !p.tasks.any { it.name == 'shadowJar' }) }
@@ -64,7 +64,7 @@ task buildAll(group: 'build', description: '构建所有模块 jar') {
 
 // 构建完成后把所有 jar 汇总到根 build/libs/
 task collectJars(type: Copy, group: 'build', description: '收集所有模块 jar 到 build/libs/') {
-    from subprojects.collect { it.tasks.matching { t -> t.name == 'shadowJar' || t.name == 'bootJar' || (t.name == 'jar' && !t.enabled == false) } }
+    from subprojects.collect { it.tasks.matching { t -> t.name == 'shadowJar' || t.name == 'bootJar' || t.name == 'fatJar' || (t.name == 'jar' && !t.enabled == false) } }
     into "${rootDir}/build/libs"
     include '*.jar'
     exclude '*-shadow.jar'  // 中间产物不输出
@@ -73,7 +73,7 @@ task collectJars(type: Copy, group: 'build', description: '收集所有模块 ja
 
 subprojects {
     afterEvaluate {
-        tasks.matching { it.name == 'shadowJar' || (it.name == 'jar' && it.enabled) }.configureEach {
+        tasks.matching { it.name == 'shadowJar' || it.name == 'fatJar' || (it.name == 'jar' && it.enabled) }.configureEach {
             finalizedBy rootProject.collectJars
         }
     }

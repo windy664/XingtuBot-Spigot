@@ -50,7 +50,7 @@ public final class CrossServerChannelFactory {
     public static Holder create(BotConfig config, boolean isSpigot, BotLogger logger) {
         String mode = config.getString("cross-server-channel", "plugin-message");
         String redisHost = config.getString("redis-host", "");
-        boolean wantRedis = !redisHost.isEmpty() && (mode.contains("redis") || mode.equals("both"));
+        boolean wantRedis = !redisHost.isEmpty() && mode.equals("redis");
         if (!wantRedis) {
             return null;
         }

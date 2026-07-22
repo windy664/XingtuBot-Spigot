@@ -1,4 +1,4 @@
-package org.windy.xingtubot.common.command;
+package org.windy.xingtubot.ext.xtgroup.command;
 
 import org.yaml.snakeyaml.Yaml;
 

@@ -31,7 +31,6 @@ public class BungeeCordAdapter implements PlatformAdapter {
 
     @Override
     public void log(String msg) {
-
         if (debugEnabled.getAsBoolean()) {
             proxy.getLogger().info(msg);
         }

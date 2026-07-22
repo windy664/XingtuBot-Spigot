@@ -1,16 +1,25 @@
 # XingtuBot-Fun: 群娱乐配置
 
-# 天气查询
+# ===== 天气查询 =====
+# 触发词: "天气 城市名"
 weather-enable: true
 
-# 运势查询
+# ===== 运势 / 骰子 / 选择 =====
+# 触发词: "运势" / "骰子" / "roll" / "选择 A 还是 B"
 fortune-enable: true
 
-# 随机动漫图片
+# ===== 随机二次元图片 =====
+# 触发词: "来张图" / "随机图片" / "来点图" / "二次元"
 anime-enable: true
+# 图源列表（按顺序尝试，第一个失败自动换下一个）
+anime-sources:
+  - "https://www.dmoe.cc/random.php"
+  - "https://api.mtyqx.cn/api/random.php"
 
-# 文字生图
+# ===== 文字生图 =====
+# 触发词: "生图 <模板> <文字>"
 textimage-enable: true
 
-# 富消息 demo
+# ===== 富消息 demo =====
+# 触发词: "测试" / "/demo"（仅调试用，默认关）
 demo-enable: false

@@ -90,7 +90,7 @@ public class SpigotBridge implements Listener, PluginMessageListener {
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 if (!brainConfirmed) {
                     plugin.getLogger().warning("⚠️ 白名单手脚模式：未收到代理(大脑)应答。"
-                            + "请确认 Velocity 已装本插件且 server-role 非 off、whitelist-enable=true。");
+                            + "请确认 Velocity 已装本插件且 whitelist-enable=true。");
                 }
             }, 200L);
         }

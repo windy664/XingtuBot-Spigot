@@ -1,18 +1,12 @@
 # 调试模式
 debug: false
 
-####################################
-# QQ 开放平台凭据（运行 bot 必需）
-# 是否运行 bot 由下方 server-role 决定（off=不运行）；旧的 bot-mode 键已废弃删除。
-####################################
+# QQ 开放平台凭据
 openapi-app-id: ""
 openapi-client-secret: ""
-# 沙箱环境（true=sandbox，false=正式）
-openapi-sandbox: false
 
 ####################################
-# 机器人超级管理员（按 openid 识别，QQ 自带不可伪造）
-# openid 可在 debug 日志「收到事件」里的 author.member_openid 看到
+# 机器人超级管理员
 ####################################
 admin-openids:
   - ""
@@ -20,53 +14,23 @@ admin-openids:
 ####################################
 # 群聊白名单（机器人只响应这些群的消息）
 #   ["*"] 或 []          = 全部群允许（默认）
-#   ["群openid1", ...]   = 只允许这些群
 # 单聊（C2C）不受此限制。群 openid 获取：开 debug → 群里 @机器人 → 看 group_openid。
 ####################################
 allowed-groups:
   - "*"
 
 ####################################
-# 群消息监听模式
-#   mention = 只响应 @机器人 的消息（默认）
-#   all     = 响应所有群消息（无需@；需在 QQ 开放平台开启「接收所有群消息」权限才会真正收到）
-# 注：白名单/登录等关键流程无论哪种模式都接收非@消息（玩家直接发「绑定」/「登录」即可）。
-####################################
-listen-mode: mention
-
-####################################
-# 部署角色——决定本服是否跑 QQ bot、以什么身份跑。
-#
-# 代理端（Velocity / BungeeCord）：
-#   auto / local / (留空) = 跑 bot，充当中枢大脑（管理 QQ 连接、跨服通信、白名单等）
-#   off / none            = 不跑 bot（不做大脑、不建跨服桥接）
-#
-# Bukkit 子服 / 独立服：
-#   auto             = 自动探测：检测到代理端→手脚模式（不跑 bot，由代理接管）；
-#                      未检测到→本地大脑（自己跑 bot）
-#   local/standalone = 强制本地大脑（不管有没有代理，本机跑 bot）
-#   slave            = 强制手脚模式（本机不跑 bot，一切由代理大脑接管）
-#   off / none       = 不跑 bot（只装插件，不连 QQ）
-#
-# 注：白名单总开关 whitelist-enable 在 xt-auth 附属的 config 里，不在此处。
-####################################
-server-role: auto
-
-####################################
 # 跨服信道（通用基础设施：PAPI / 远程控制台 / 群服互联 / 白名单 都经它在代理大脑与 Bukkit 子服间通信）
 # 仅在「代理大脑 + Bukkit 子服」部署下有意义；单机本地大脑用不到。
-#   plugin-message = 原生插件消息（默认，零依赖）。靠玩家连接转发：子服发包需该子服有在线玩家当“载体”，
-#                    控制台下发到“空子服”会失败。
-#   redis          = Redis 发布订阅（推荐 Velocity/BungeeCord 主导用）。无需在线玩家即可双向通信，
+#   plugin-message = 原生插件消息（默认，零依赖）。靠玩家连接转发：子服发包需该子服有在线玩家当”载体”，
+#                    控制台下发到”空子服”会失败。
+#   redis          = Redis 发布订阅（推荐）。无需在线玩家即可双向通信，
 #                    控制台也能下发到没人的子服；需一台 Redis。
-#   both           = 等同 redis（有 Redis 时一律优先走 Redis），同时保留 PluginMessage 监听做兜底（过渡期）。
 #
 # ⚠️ 全网一致：代理大脑与所有 Bukkit 子服必须填【相同】的 cross-server-channel，且连同一台 Redis。
-cross-server-channel: both
+cross-server-channel: redis
 
-# Redis 连接（仅当 cross-server-channel 为 redis / both 且 redis-host 非空时启用）。
-# 大脑与所有子服都要填同一套连接。示例：
-#   redis-host: "127.0.0.1"
+# Redis 连接（仅当 cross-server-channel 为 redis 且 redis-host 非空时启用）。
 redis-host: "127.0.0.1"
 redis-port: 6379
 redis-password: ""

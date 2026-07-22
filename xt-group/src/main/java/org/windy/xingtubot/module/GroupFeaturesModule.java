@@ -2,18 +2,18 @@ package org.windy.xingtubot.module;
 
 import org.windy.xingtubot.common.binding.BindingRepository;
 import org.windy.xingtubot.common.binding.BindingEntry;
-import org.windy.xingtubot.common.command.CustomCommandConfig;
-import org.windy.xingtubot.common.command.impl.CustomCommandHandler;
-import org.windy.xingtubot.common.handler.impl.CustomReplyHandler;
-import org.windy.xingtubot.common.handler.impl.LeaveHandler;
-import org.windy.xingtubot.common.handler.impl.WelcomeHandler;
+import org.windy.xingtubot.ext.xtgroup.command.CustomCommandConfig;
+import org.windy.xingtubot.ext.xtgroup.command.CustomCommandHandler;
+import org.windy.xingtubot.ext.xtgroup.reply.CustomReplyHandler;
+import org.windy.xingtubot.ext.xtgroup.handler.LeaveHandler;
+import org.windy.xingtubot.ext.xtgroup.handler.WelcomeHandler;
 import org.windy.xingtubot.common.image.TextImageRenderer;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ModuleContext;
 import org.windy.xingtubot.common.module.capability.ConsoleExecutor;
 import org.windy.xingtubot.common.module.capability.CrossServerConsole;
 import org.windy.xingtubot.common.module.capability.PlayerCommandExecutor;
-import org.windy.xingtubot.common.reply.CustomReplyService;
+import org.windy.xingtubot.ext.xtgroup.reply.CustomReplyService;
 import org.windy.xingtubot.common.reply.PlaceholderResolver;
 
 import java.io.File;

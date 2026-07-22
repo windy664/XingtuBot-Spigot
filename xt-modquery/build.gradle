@@ -38,6 +38,12 @@ shadowJar {
     relocate 'org.jsoup', 'org.lib.jsoup'
 
     mergeServiceFiles()
+
+    // 注解处理器生成的 velocity-plugin.json 在 build/classes/java/main/，
+    // shadowJar 有时不自动包含——显式加入
+    from("${buildDir}/classes/java/main") {
+        include 'velocity-plugin.json'
+    }
 }
 
 build.dependsOn shadowJar

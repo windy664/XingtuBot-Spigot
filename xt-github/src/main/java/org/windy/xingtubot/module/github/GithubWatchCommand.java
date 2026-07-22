@@ -2,6 +2,7 @@ package org.windy.xingtubot.module.github;
 
 import org.windy.xingtubot.common.command.BotCommand;
 import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.util.Md;
 
 import java.util.Arrays;
 import java.util.List;
@@ -28,10 +29,13 @@ public class GithubWatchCommand implements BotCommand {
         String[] args = parts.length > 1 ? Arrays.copyOfRange(parts, 1, parts.length) : new String[0];
 
         if (args.length == 0) {
-            event.reply("用法: /github <watch|unwatch|list> [owner/repo/branch]\n"
-                    + "GitHub: /github watch windy664/XingtuBot-Spigot\n"
-                    + "带分支: /github watch windy664/XingtuBot-Spigot/26.2\n"
-                    + "Gitee:  /github watch gitee:owner/repo/dev");
+            event.replyMarkdown(Md.card("🔍", "GitHub 追踪")
+                    .field("📡", "订阅", "`/github watch owner/repo`")
+                    .field("📡", "带分支", "`/github watch owner/repo/branch`")
+                    .field("📡", "Gitee", "`/github watch gitee:owner/repo`")
+                    .field("🗑", "取消", "`/github unwatch owner/repo`")
+                    .field("📋", "列表", "`/github list`")
+                    .build(), null);
             return;
         }
 
@@ -49,14 +53,12 @@ public class GithubWatchCommand implements BotCommand {
                 handleList(event);
                 break;
             default:
-                event.reply("未知子命令: " + args[0] + "\n用法: /github <watch|unwatch|list> [owner/repo/branch]");
+                event.replyMarkdown(Md.card("❓", "未知子命令")
+                        .quote("可用: watch / unwatch / list")
+                        .build(), null);
         }
     }
 
-    /**
-     * 解析 owner/repo[/branch...] 路径。
-     * 返回 String[3]: {owner, repo, branchOrNull}
-     */
     private String[] parseRepoPath(String input, boolean gitee) {
         String s = normalizeRepo(input);
         String[] segs = s.split("/", -1);
@@ -65,7 +67,6 @@ public class GithubWatchCommand implements BotCommand {
         String repo = segs[1];
         String branch = null;
         if (segs.length > 2) {
-            // 分支名可能含 /，把第三段及之后拼回来
             StringBuilder sb = new StringBuilder(segs[2]);
             for (int i = 3; i < segs.length; i++) sb.append("/").append(segs[i]);
             String b = sb.toString();
@@ -76,41 +77,73 @@ public class GithubWatchCommand implements BotCommand {
 
     private void handleWatch(String[] args, BotMessageContext event) {
         if (args.length < 2) {
-            event.reply("用法: /github watch <owner/repo[/branch]>\n"
-                    + "GitHub 示例: /github watch windy664/XingtuBot-Spigot\n"
-                    + "带分支:     /github watch windy664/XingtuBot-Spigot/26.2\n"
-                    + "Gitee 示例:  /github watch gitee:owner/repo/dev");
+            event.replyMarkdown(Md.card("📡", "订阅项目")
+                    .field("", "GitHub", "`/github watch owner/repo`")
+                    .field("", "带分支", "`/github watch owner/repo/branch`")
+                    .field("", "Gitee", "`/github watch gitee:owner/repo`")
+                    .build(), null);
             return;
         }
         boolean gitee = isGitee(args[1]);
         String[] parsed = parseRepoPath(args[1], gitee);
         if (parsed == null) {
-            event.reply("格式错误，应为 owner/repo[/branch]（如 windy664/XingtuBot-Spigot/26.2）");
+            event.replyMarkdown(Md.card("❌", "格式错误")
+                    .quote("应为 `owner/repo[/branch]`")
+                    .build(), null);
             return;
         }
         String owner = parsed[0], repo = parsed[1], branch = parsed[2];
-        String label = (gitee ? "Gitee " : "GitHub ") + owner + "/" + repo;
-        if (branch != null) label += " [" + branch + "]";
-        boolean added = tracker.watch(owner, repo, gitee, branch);
-        event.reply(added ? "✅ 已订阅 " + label : "⚠️ 已经在订阅 " + label + " 了");
+        String platform = gitee ? "Gitee" : "GitHub";
+        String label = owner + "/" + repo;
+        if (branch != null) label += " `" + branch + "`";
+
+        String result = tracker.watch(owner, repo, gitee, branch);
+        if (result == null) {
+            event.replyMarkdown(Md.card("✅", "订阅成功")
+                    .subtitle("**" + platform + "** ｜ " + label)
+                    .field("📡", "追踪", "release / commit / issue / PR")
+                    .build(), null);
+        } else if ("already".equals(result)) {
+            event.replyMarkdown(Md.card("⚠️", "重复订阅")
+                    .quote(label + " 已在订阅列表中")
+                    .build(), null);
+        } else {
+            event.replyMarkdown(Md.card("❌", "订阅失败")
+                    .quote(result)
+                    .build(), null);
+        }
     }
 
     private void handleUnwatch(String[] args, BotMessageContext event) {
         if (args.length < 2) {
-            event.reply("用法: /github unwatch <owner/repo[/branch]>");
+            event.replyMarkdown(Md.card("🗑", "取消订阅")
+                    .quote("用法: `/github unwatch owner/repo[/branch]`")
+                    .build(), null);
             return;
         }
         boolean gitee = isGitee(args[1]);
         String[] parsed = parseRepoPath(args[1], gitee);
         if (parsed == null) {
-            event.reply("格式错误，应为 owner/repo[/branch]");
+            event.replyMarkdown(Md.card("❌", "格式错误")
+                    .quote("应为 `owner/repo[/branch]`")
+                    .build(), null);
             return;
         }
         String owner = parsed[0], repo = parsed[1], branch = parsed[2];
-        String label = (gitee ? "Gitee " : "GitHub ") + owner + "/" + repo;
-        if (branch != null) label += " [" + branch + "]";
+        String platform = gitee ? "Gitee" : "GitHub";
+        String label = owner + "/" + repo;
+        if (branch != null) label += " `" + branch + "`";
+
         boolean removed = tracker.unwatch(owner, repo, gitee, branch);
-        event.reply(removed ? "✅ 已取消订阅 " + label : "⚠️ 未找到订阅 " + label);
+        if (removed) {
+            event.replyMarkdown(Md.card("✅", "已取消订阅")
+                    .subtitle("**" + platform + "** ｜ " + label)
+                    .build(), null);
+        } else {
+            event.replyMarkdown(Md.card("⚠️", "未找到")
+                    .quote(label + " 不在订阅列表中")
+                    .build(), null);
+        }
     }
 
     private boolean isGitee(String input) {
@@ -121,22 +154,26 @@ public class GithubWatchCommand implements BotCommand {
     private void handleList(BotMessageContext event) {
         List<GithubTrackerService.WatchedRepo> list = tracker.listWatched();
         if (list.isEmpty()) {
-            event.reply("当前无订阅。使用 /github watch <owner/repo> 添加。");
+            event.replyMarkdown(Md.card("📋", "项目追踪")
+                    .quote("暂无订阅。使用 `/github watch owner/repo` 添加")
+                    .build(), null);
             return;
         }
-        StringBuilder sb = new StringBuilder("📋 项目追踪订阅列表：\n");
+        Md md = Md.card("📋", "项目追踪（" + list.size() + "）");
         for (GithubTrackerService.WatchedRepo wr : list) {
-            sb.append("· ").append(wr.gitee ? "[Gitee] " : "[GitHub] ");
-            sb.append(wr.owner).append("/").append(wr.repo);
-            if (wr.branch != null) sb.append("/").append(wr.branch);
-            sb.append(" (");
-            if (wr.watchReleases) sb.append("release ");
-            if (wr.watchCommits) sb.append("commit ");
-            if (wr.watchIssues) sb.append("issue ");
-            if (wr.watchPrs) sb.append("PR ");
-            sb.append(")\n");
+            String platform = wr.gitee ? "Gitee" : "GitHub";
+            String name = wr.owner + "/" + wr.repo;
+            if (wr.branch != null) name += " `" + wr.branch + "`";
+
+            StringBuilder tags = new StringBuilder();
+            if (wr.watchReleases) tags.append("release ");
+            if (wr.watchCommits) tags.append("commit ");
+            if (wr.watchIssues) tags.append("issue ");
+            if (wr.watchPrs) tags.append("PR ");
+
+            md.field("📡", name, platform + " ｜ " + tags.toString().trim());
         }
-        event.reply(sb.toString().trim());
+        event.replyMarkdown(md.build(), null);
     }
 
     private String normalizeRepo(String input) {

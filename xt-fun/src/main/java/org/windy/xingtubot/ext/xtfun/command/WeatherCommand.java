@@ -1,4 +1,4 @@
-package org.windy.xingtubot.common.command.impl;
+package org.windy.xingtubot.ext.xtfun.command;
 
 import org.windy.xingtubot.common.command.BotCommand;
 import org.windy.xingtubot.common.event.BotMessageContext;
@@ -23,7 +23,6 @@ public class WeatherCommand implements BotCommand {
             return;
         }
         try {
-            // 各字段分开取，便于排成 Markdown 卡片
             String fmt = Http.enc("%C|%t|%f|%h|%w|%p");
             String url = "https://wttr.in/" + Http.enc(city) + "?format=" + fmt + "&lang=zh&m";
             Http.Response response = Http.get(url).userAgent("XingtuBot").timeout(8000, 10000).send();
@@ -54,12 +53,11 @@ public class WeatherCommand implements BotCommand {
     }
 
     @Override
-    public String name() {
-        return "weather";
-    }
+    public String name() { return "weather"; }
     @Override
     public String usage() { return "天气 <城市>"; }
     @Override
     public String description() { return "查询实时天气"; }
     @Override
-    public String category() { return "🎮 娱乐"; }}
+    public String category() { return "🎮 娱乐"; }
+}

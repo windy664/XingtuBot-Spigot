@@ -33,7 +33,6 @@ public class HandlerRegistry {
     private boolean initialized = false;
     private HandlerContext readyCtx;
     private volatile Consumer<String> gameEcho;
-    private volatile String listenMode = "mention";
 
     public HandlerRegistry(PermissionChecker permission, Consumer<String> logger) {
         this.permission = permission;
@@ -47,10 +46,6 @@ public class HandlerRegistry {
                     return t;
                 },
                 new ThreadPoolExecutor.DiscardPolicy());
-    }
-
-    public void setListenMode(String listenMode) {
-        this.listenMode = listenMode == null ? "mention" : listenMode.trim().toLowerCase();
     }
 
     public void setGameEcho(Consumer<String> gameEcho) {
@@ -141,7 +136,10 @@ public class HandlerRegistry {
         boolean mentionGated = isMentionGated(event, msg);
         BotMessageEvent dispatchEvent = withGameEcho(event, msg);
 
-        dispatchObservers(msg, dispatchEvent);
+        // 命令消息不走观察者：防止 AI 等 observer 与命令处理器并行抢答
+        if (!isCommandMessage(msg, dispatchEvent, mentionGated)) {
+            dispatchObservers(msg, dispatchEvent);
+        }
 
         for (BotMessageHandler handler : handlers) {
             if (mentionGated && !handler.acceptsWithoutMention()) {
@@ -160,8 +158,23 @@ public class HandlerRegistry {
         return false;
     }
 
+    /**
+     * 判断消息是否为已注册命令：匹配任意一个 handler 且该 handler 非 catch-all。
+     * 命令消息跳过观察者分发，防止 AI 等 observer 与命令处理器并行抢答。
+     */
+    private boolean isCommandMessage(String msg, BotMessageContext event, boolean mentionGated) {
+        String nonce = "cmd_probe_" + Long.toHexString(System.nanoTime());
+        for (BotMessageHandler handler : handlers) {
+            if (mentionGated && !handler.acceptsWithoutMention()) continue;
+            if (!matches(handler, msg, event)) continue;
+            // catch-all 型 handler（如 GroupChatHandler）对任意消息都匹配，需排除
+            if (!matches(handler, nonce, event)) return true;
+        }
+        return false;
+    }
+
     private boolean isMentionGated(BotMessageEvent event, String msg) {
-        if (!"mention".equals(listenMode) || !event.isGroupMessage() || event.isGroupAtMessage()) {
+        if (!event.isGroupMessage() || event.isGroupAtMessage()) {
             return false;
         }
         String eventType = event.getEventType();

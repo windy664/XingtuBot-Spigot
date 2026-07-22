@@ -1,4 +1,4 @@
-package org.windy.xingtubot.common.command.impl;
+package org.windy.xingtubot.ext.xtfun.command;
 
 import org.windy.xingtubot.common.command.BotCommand;
 import org.windy.xingtubot.common.event.BotMessageContext;
@@ -10,12 +10,6 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 趣味随机：运势 / 骰子 / 选择。纯本地，零依赖零成本。
- *
- * <ul>
- *   <li>「运势」：当天同一发送者结果固定（按 openid+日期 取种子），有仪式感。</li>
- *   <li>「骰子」/「roll」：1~100 随机。</li>
- *   <li>「选择 A 还是 B」：从候选里随机挑一个。</li>
- * </ul>
  */
 public class FortuneCommand implements BotCommand {
 
@@ -37,24 +31,20 @@ public class FortuneCommand implements BotCommand {
     @Override
     public void handle(String message, BotMessageContext event) {
         if (message.equals("运势")) {
-            // 多字段 → Markdown 卡片
             event.replyMarkdown(fortuneCard(event.getSenderId()), null);
         } else if (message.equals("骰子") || message.equalsIgnoreCase("roll")) {
-            // 一行话 → 纯文本
             event.reply("🎲 你掷出了 " + (ThreadLocalRandom.current().nextInt(100) + 1) + " 点");
         } else if (message.startsWith("选择")) {
             event.reply(choose(message.substring(2).trim()));
         }
     }
 
-    /** 当天固定运势卡片（Markdown）：用 openid+日期做种子。 */
     private String fortuneCard(String openid) {
         long seed = stableSeed((openid == null ? "" : openid) + LocalDate.now());
         java.util.Random r = new java.util.Random(seed);
         String level = LEVELS[r.nextInt(LEVELS.length)];
         String tip = TIPS[r.nextInt(TIPS.length)];
         int luck = r.nextInt(101);
-        // 幸运值做个进度条更直观
         int bars = luck / 10;
         StringBuilder bar = new StringBuilder();
         for (int i = 0; i < 10; i++) bar.append(i < bars ? "█" : "░");
@@ -89,12 +79,11 @@ public class FortuneCommand implements BotCommand {
     }
 
     @Override
-    public String name() {
-        return "fortune";
-    }
+    public String name() { return "fortune"; }
     @Override
     public String usage() { return "运势 / 骰子 / 选择 A 还是 B"; }
     @Override
     public String description() { return "今日运势、掷骰、帮你做选择"; }
     @Override
-    public String category() { return "🎮 娱乐"; }}
+    public String category() { return "🎮 娱乐"; }
+}

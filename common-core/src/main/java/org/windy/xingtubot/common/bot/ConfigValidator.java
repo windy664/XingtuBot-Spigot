@@ -37,11 +37,6 @@ public final class ConfigValidator {
             r.errors.add("openapi-client-secret 未填写");
         }
 
-        // 提示旧配置用户
-        String relay = config.getString("webhook-relay-url", "").trim();
-        if (!relay.isEmpty()) {
-            r.warnings.add("webhook-relay-url 已废弃（SCF 中转已移除），该配置项将被忽略");
-        }
 
         return r;
     }

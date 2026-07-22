@@ -1,4 +1,4 @@
-package org.windy.xingtubot.common.command.impl;
+package org.windy.xingtubot.ext.xtfun.command;
 
 import org.windy.xingtubot.common.command.BotCommand;
 import org.windy.xingtubot.common.event.BotMessageContext;
@@ -6,7 +6,6 @@ import org.windy.xingtubot.common.image.TextImageRenderer;
 
 /**
  * 文字生图命令：生图 <模板> <文字>。
- * 包装 {@link TextImageRenderer}。
  */
 public class TextImageCommand implements BotCommand {
 
@@ -40,12 +39,11 @@ public class TextImageCommand implements BotCommand {
     }
 
     @Override
-    public String name() {
-        return "text-image";
-    }
+    public String name() { return "text-image"; }
     @Override
     public String usage() { return "生图 <模板> <文字>"; }
     @Override
     public String description() { return "文字转图片"; }
     @Override
-    public String category() { return "🎮 娱乐"; }}
+    public String category() { return "🎮 娱乐"; }
+}

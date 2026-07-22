@@ -158,60 +158,52 @@ public class XingtuBotSpringApplication {
     // ==================== 内部方法 ====================
 
     private void startBot(BotConfig config, SpringBootAdapter adapter, SpringBootBotLogger logger) {
-        switch (BotLauncher.resolveMode(config)) {
-            case OFF:
-                logger.info("通信模式 = off，机器人通信未启用。");
-                return;
-            case GATEWAY:
-                String appId = config.getString("openapi-app-id", "").trim();
-                if (appId.isEmpty()) {
-                    logger.info("未配置 openapi-app-id，启动扫码接入流程...");
-                    QQOnboard onboard = new QQOnboard(logger);
-                    QQOnboard.ScanResult result = onboard.run();
-                    if (result != null) {
-                        if (config instanceof SpringBootConfig) {
-                            SpringBootConfig sbc = (SpringBootConfig) config;
-                            sbc.set("openapi-app-id", result.appId);
-                            sbc.set("openapi-client-secret", result.clientSecret);
-                            sbc.save();
-                            logger.info("✅ 凭据已写入 config.yml，App ID: " + result.appId);
-                        }
-                        return;
-                    } else {
-                        logger.warn("扫码接入失败或超时，请手动填写 openapi-app-id 和 openapi-client-secret");
-                        return;
-                    }
-                }
-
-                Consumer<BotMessageEvent> listener = event -> {
-                    if (commandHandler != null) {
-                        commandHandler.handle(event, commandHandler.getPermission().isAdmin(event.getSenderId()));
-                    }
-                };
-
-                BotLauncher.GatewayResult gw = BotLauncher.buildGateway(
-                        config, adapter, logger, listener);
-                if (gw != null) {
-                    qqBot = gw.bot;
-                    gatewayClient = gw.gatewayClient;
-                    gatewayClient.setOnBotNameResolved(name ->
-                            logger.info("✅ 机器人昵称已自动获取: " + name));
-                    gatewayClient.start();
-                    logger.info("✅ 通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
-
-                    // 接线主动消息
-                    org.windy.xingtubot.common.qq.QqOpenApiClient apiClient = qqBot.getApi();
-                    if (apiClient != null) {
-                        commandHandler.getProactiveSender().bind(apiClient);
-                        if (commandHandler.getService() != null) {
-                            commandHandler.getService().setApiClient(apiClient);
-                        }
-                        logger.info("✅ 主动消息已启用");
-                    }
-                } else {
-                    logger.warn("Gateway 模式配置不全，请检查 openapi-app-id / openapi-client-secret");
+        String appId = config.getString("openapi-app-id", "").trim();
+        if (appId.isEmpty()) {
+            logger.info("未配置 openapi-app-id，启动扫码接入流程...");
+            QQOnboard onboard = new QQOnboard(logger);
+            QQOnboard.ScanResult result = onboard.run();
+            if (result != null) {
+                if (config instanceof SpringBootConfig) {
+                    SpringBootConfig sbc = (SpringBootConfig) config;
+                    sbc.set("openapi-app-id", result.appId);
+                    sbc.set("openapi-client-secret", result.clientSecret);
+                    sbc.save();
+                    logger.info("✅ 凭据已写入 config.yml，App ID: " + result.appId);
                 }
                 return;
+            } else {
+                logger.warn("扫码接入失败或超时，请手动填写 openapi-app-id 和 openapi-client-secret");
+                return;
+            }
+        }
+
+        Consumer<BotMessageEvent> listener = event -> {
+            if (commandHandler != null) {
+                commandHandler.handle(event, commandHandler.getPermission().isAdmin(event.getSenderId()));
+            }
+        };
+
+        BotLauncher.GatewayResult gw = BotLauncher.buildGateway(
+                config, adapter, logger, listener);
+        if (gw != null) {
+            qqBot = gw.bot;
+            gatewayClient = gw.gatewayClient;
+            gatewayClient.setOnBotNameResolved(name ->
+                    logger.info("✅ 机器人昵称已自动获取: " + name));
+            gatewayClient.start();
+            logger.info("✅ 通信模式 = gateway（QQ 官方 WebSocket 网关）已启动");
+
+            org.windy.xingtubot.common.qq.QqOpenApiClient apiClient = qqBot.getApi();
+            if (apiClient != null) {
+                commandHandler.getProactiveSender().bind(apiClient);
+                if (commandHandler.getService() != null) {
+                    commandHandler.getService().setApiClient(apiClient);
+                }
+                logger.info("✅ 主动消息已启用");
+            }
+        } else {
+            logger.warn("Gateway 模式配置不全，请检查 openapi-app-id / openapi-client-secret");
         }
     }
 
@@ -237,13 +229,12 @@ public class XingtuBotSpringApplication {
     }
 
     private void printDebugInfo(BotConfig config, SpringBootBotLogger logger) {
-        boolean botOn = BotLauncher.resolveMode(config) != BotLauncher.Mode.OFF;
         String appId = config.getString("openapi-app-id", "");
         String masked = appId.length() > 4 ? appId.substring(0, 4) + "****" : "未配置";
         logger.info("▌ 角色     大脑（独立运行）");
         logger.info("▌ AppID    " + masked);
-        logger.info("▌ 监听     " + config.getString("listen-mode", "mention"));
-        logger.info("▌ 跨服     " + (botOn ? "已启用" : "未启用"));
+        logger.info("▌ 监听     mention");
+        logger.info("▌ 跨服     已启用");
         logger.info("▌ 存储     JSON");
     }
 }

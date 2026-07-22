@@ -1,9 +1,9 @@
-package org.windy.xingtubot.common.command.impl;
+package org.windy.xingtubot.ext.xtgroup.command;
 
 import org.windy.xingtubot.common.command.BotCommand;
-import org.windy.xingtubot.common.command.CustomCommandConfig;
-import org.windy.xingtubot.common.command.CustomCommandConfig.Entry;
 import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.util.ColorCodeConverter;
+import org.windy.xingtubot.common.reply.PlaceholderResolver;
 
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -23,7 +23,7 @@ public class CustomCommandHandler implements BotCommand {
     private final CommandExecutor consoleExecutor;
     private final CommandExecutor playerExecutor;
     private final CrossServerExecutor crossServerExecutor;
-    private org.windy.xingtubot.common.reply.PlaceholderResolver placeholderResolver;
+    private PlaceholderResolver placeholderResolver;
 
     @FunctionalInterface
     public interface CommandExecutor {
@@ -47,7 +47,7 @@ public class CustomCommandHandler implements BotCommand {
         this.crossServerExecutor = crossServerExecutor;
     }
 
-    public void setPlaceholderResolver(org.windy.xingtubot.common.reply.PlaceholderResolver resolver) {
+    public void setPlaceholderResolver(PlaceholderResolver resolver) {
         this.placeholderResolver = resolver;
     }
 
@@ -58,7 +58,7 @@ public class CustomCommandHandler implements BotCommand {
 
     @Override
     public void handle(String message, BotMessageContext event) {
-        Entry entry = config.match(message.trim());
+        CustomCommandConfig.Entry entry = config.match(message.trim());
         if (entry == null) return;
 
         String args = config.extractArgs(message, entry);
@@ -91,7 +91,7 @@ public class CustomCommandHandler implements BotCommand {
         }
     }
 
-    private void executeCommand(String resolvedCmd, Entry entry, String playerName, BotMessageContext event) {
+    private void executeCommand(String resolvedCmd, CustomCommandConfig.Entry entry, String playerName, BotMessageContext event) {
         if (entry.execAs == CustomCommandConfig.ExecAs.PLAYER) {
             if (playerName == null) {
                 playerName = resolvePlayerName(event.getSenderId());
@@ -138,7 +138,7 @@ public class CustomCommandHandler implements BotCommand {
 
     @Override
     public boolean adminFor(String message) {
-        Entry entry = config.match(message.trim());
+        CustomCommandConfig.Entry entry = config.match(message.trim());
         return entry != null && entry.admin;
     }
 
@@ -157,7 +157,7 @@ public class CustomCommandHandler implements BotCommand {
         if (output == null || output.isEmpty()) return;
         if (output.contains("§")) {
             event.replyMarkdown(
-                    org.windy.xingtubot.common.util.ColorCodeConverter.toMarkdown(output), null);
+                    ColorCodeConverter.toMarkdown(output), null);
         } else {
             event.reply(output);
         }

@@ -8,6 +8,8 @@ public enum BotMessageType {
     GROUP,
     DIRECT,
     CHANNEL,
+    MEMBER_ADD,
+    MEMBER_REMOVE,
     UNKNOWN;
 
     public static BotMessageType fromRawEventType(String raw) {
@@ -23,6 +25,10 @@ public enum BotMessageType {
             case "AT_MESSAGE_CREATE":
             case "MESSAGE_CREATE":
                 return CHANNEL;
+            case "GROUP_MEMBER_ADD":
+                return MEMBER_ADD;
+            case "GROUP_MEMBER_REMOVE":
+                return MEMBER_REMOVE;
             default:
                 return UNKNOWN;
         }

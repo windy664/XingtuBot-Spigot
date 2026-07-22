@@ -40,7 +40,6 @@ public abstract class AbstractCommandHandler {
         this.permission = (openid -> config.getStringList("admin-openids").contains(openid));
 
         registry = new HandlerRegistry(permission, m -> logger.info("[群指令] " + m));
-        registry.setListenMode(config.getString("listen-mode", "mention"));
 
         moduleCtx = new ModuleContextImpl(registry, config, logger, null, permission, dataFolder);
         proactiveSender.setAllowedGroupsSupplier(() -> config.getStringList("allowed-groups"));
