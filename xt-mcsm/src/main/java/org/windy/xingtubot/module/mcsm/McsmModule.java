@@ -18,6 +18,11 @@ public final class McsmModule implements BotModule {
     }
 
     @Override
+    public String displayName() {
+        return "🖥️ 服务器管理";
+    }
+
+    @Override
     public void onEnable(ModuleContext ctx) {
         McsmConfig config = new McsmConfig(ctx.config());
 

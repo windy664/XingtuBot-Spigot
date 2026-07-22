@@ -672,5 +672,5 @@ public final class AiChatHandler implements BotMessageHandler {
     @Override public int priority() { return 95; }
     @Override public String usage() { return "@我聊天 或 群里自然对话中我偶尔也会参与"; }
     @Override public String description() { return "AI 群聊成员（旁听 + 语境回复 + 超管立场 + 自主参与）"; }
-    @Override public String category() { return "🤖 AI 对话"; }
+    // category 自动继承模块 displayName
 }

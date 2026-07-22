@@ -61,6 +61,11 @@ public final class ChatlinkModule implements BotModule {
     }
 
     @Override
+    public String displayName() {
+        return "🔗 群服互联";
+    }
+
+    @Override
     public void onEnable(ModuleContext ctx) {
         // ===== 机器人消息回显到游戏（独立开关 echo-bot-to-game，与 QQ→游戏 转发分开）=====
         wireGameEcho(ctx);

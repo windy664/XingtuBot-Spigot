@@ -66,5 +66,5 @@ public class MsmExecCommand implements BotCommand {
     @Override public boolean adminOnly() { return true; }
     @Override public String usage() { return "msm 命令 <实例名> <命令>"; }
     @Override public String description() { return "向实例发送控制台命令"; }
-    @Override public String category() { return "🖥️ 服务器管理"; }
+    // category 自动继承模块 displayName
 }

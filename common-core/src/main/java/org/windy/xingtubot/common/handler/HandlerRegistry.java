@@ -33,6 +33,9 @@ public class HandlerRegistry {
     private boolean initialized = false;
     private HandlerContext readyCtx;
     private volatile Consumer<String> gameEcho;
+    // 当前正在加载的模块显示名（由 ModuleLoader 在 onEnable 前设置），
+    // handler 注册时若自身 category 为空则自动继承。
+    private volatile String currentModuleDisplayName;
 
     public HandlerRegistry(PermissionChecker permission, Consumer<String> logger) {
         this.permission = permission;
@@ -56,8 +59,20 @@ public class HandlerRegistry {
         this.hookService = hookService;
     }
 
+    /** ModuleLoader 在每个模块 onEnable 前调用，设置当前模块的菜单分类名。 */
+    public void setCurrentModuleDisplayName(String displayName) {
+        this.currentModuleDisplayName = displayName;
+    }
+
     public HandlerRegistry register(BotMessageHandler handler) {
         if (handler == null) return this;
+        // 若 handler 自身未设置 category，自动继承当前模块的显示名
+        if (currentModuleDisplayName != null && !currentModuleDisplayName.isEmpty()) {
+            String cat = handler.category();
+            if (cat == null || cat.isEmpty()) {
+                handler = new ModuleCategoryWrapper(handler, currentModuleDisplayName);
+            }
+        }
         handlers.add(handler);
         handlers.sort(Comparator.comparingInt(BotMessageHandler::priority));
         initLate(handler, "Handler");
@@ -66,7 +81,7 @@ public class HandlerRegistry {
 
     public HandlerRegistry register(BotCommand command) {
         if (command == null) return this;
-        return register(new BotCommandHandler(command));
+        return register(new BotCommandHandler(command, currentModuleDisplayName));
     }
 
     public HandlerRegistry registerObserver(BotMessageHandler observer) {
@@ -407,11 +422,39 @@ public class HandlerRegistry {
         if (logger != null) logger.accept(message);
     }
 
+    /** 包装 handler，使其 category() 返回模块显示名（handler 自身 category 为空时生效）。 */
+    private static class ModuleCategoryWrapper implements BotMessageHandler {
+        private final BotMessageHandler delegate;
+        private final String moduleCategory;
+
+        ModuleCategoryWrapper(BotMessageHandler delegate, String moduleCategory) {
+            this.delegate = delegate;
+            this.moduleCategory = moduleCategory;
+        }
+
+        @Override public boolean matches(String message, BotMessageContext event) { return delegate.matches(message, event); }
+        @Override public void handle(String message, BotMessageContext event) { delegate.handle(message, event); }
+        @Override public String name() { return delegate.name(); }
+        @Override public int priority() { return delegate.priority(); }
+        @Override public boolean adminOnly() { return delegate.adminOnly(); }
+        @Override public boolean acceptsWithoutMention() { return delegate.acceptsWithoutMention(); }
+        @Override public boolean adminFor(String message) { return delegate.adminFor(message); }
+        @Override public java.util.List<String> triggers() { return delegate.triggers(); }
+        @Override public java.util.List<MenuEntry> menuEntries() { return delegate.menuEntries(); }
+        @Override public String usage() { return delegate.usage(); }
+        @Override public String description() { return delegate.description(); }
+        @Override public String category() { return moduleCategory; }
+        @Override public void init(HandlerContext ctx) { delegate.init(ctx); }
+        @Override public void shutdown() { delegate.shutdown(); }
+    }
+
     private static class BotCommandHandler implements BotMessageHandler {
         private final BotCommand command;
+        private final String moduleCategory;
 
-        BotCommandHandler(BotCommand command) {
+        BotCommandHandler(BotCommand command, String moduleCategory) {
             this.command = command;
+            this.moduleCategory = moduleCategory;
         }
 
         @Override
@@ -461,7 +504,8 @@ public class HandlerRegistry {
 
         @Override
         public String category() {
-            return command.category();
+            String cat = command.category();
+            return (cat != null && !cat.isEmpty()) ? cat : moduleCategory;
         }
     }
 

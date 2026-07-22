@@ -8,13 +8,10 @@ import org.yaml.snakeyaml.Yaml;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
-import org.windy.xingtubot.common.handler.MenuEntry;
-
 import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -28,16 +25,10 @@ import java.util.function.Consumer;
 public class CustomReplyService {
 
     private final List<CustomReply> replies = new ArrayList<>();
-    private final Map<String, List<MenuEntry>> menuByCategory = new LinkedHashMap<>();
     private final File imagesDir;          // 本地图片目录（type=image）
     private final TextImageRenderer textImage;
     private final PlaceholderResolver resolver;
     private final Consumer<String> logger;
-    // {menu} 占位符提供者：把自定义回复内容里的 {menu} 展开成「全部命令」菜单。
-    // 由平台侧注入（背后是 HandlerRegistry.buildMenu，含权限分组）。null = 不展开。
-    private java.util.function.Function<BotMessageContext, String> menuProvider;
-    // {menu} 菜单的按钮键盘提供者（按发送者是否超管自动生成命令按钮）。null=只发文字菜单不带按钮。
-    private java.util.function.Function<BotMessageContext, String> menuKeyboardProvider;
 
     public CustomReplyService(File repliesFile, File imagesDir, TextImageRenderer textImage,
                               PlaceholderResolver resolver, Consumer<String> logger) {
@@ -56,27 +47,6 @@ public class CustomReplyService {
             if (!(root instanceof Map)) return;
             Map<String, Object> rootMap = (Map<String, Object>) root;
 
-            // ===== 加载 menu 部分（帮助菜单）=====
-            Object menuObj = rootMap.get("menu");
-            if (menuObj instanceof Map) {
-                for (Map.Entry<String, Object> catEntry : ((Map<String, Object>) menuObj).entrySet()) {
-                    String category = catEntry.getKey();
-                    if (!(catEntry.getValue() instanceof List)) continue;
-                    List<MenuEntry> entries = new ArrayList<>();
-                    for (Object entryObj : (List<Object>) catEntry.getValue()) {
-                        if (!(entryObj instanceof Map)) continue;
-                        Map<String, Object> em = (Map<String, Object>) entryObj;
-                        String trigger = str(em, "trigger", "");
-                        String desc = str(em, "desc", "");
-                        boolean admin = bool(em, "admin");
-                        if (!trigger.isEmpty()) {
-                            entries.add(new MenuEntry(trigger, desc, category, admin));
-                        }
-                    }
-                    if (!entries.isEmpty()) menuByCategory.put(category, entries);
-                }
-            }
-
             // ===== 加载 replies 部分（自定义问答）=====
             Object list = rootMap.get("replies");
             if (!(list instanceof List)) return;
@@ -85,7 +55,6 @@ public class CustomReplyService {
                 Map<String, Object> m = (Map<String, Object>) item;
                 CustomReply r = new CustomReply();
                 r.trigger = str(m, "trigger", "");
-                r.name = str(m, "name", "");
                 r.match = parseMatch(str(m, "match", "equals"));
                 // 默认 markdown：所有回复默认走 markdown 渲染（更统一的审美）。
                 // 需要纯文本时显式写 type: text。
@@ -93,7 +62,6 @@ public class CustomReplyService {
                 r.content = str(m, "content", "");
                 r.file = str(m, "file", "");
                 r.template = str(m, "template", "default");
-                r.menu = bool(m, "menu");
                 // 解析 buttons 列表
                 Object btnsObj = m.get("buttons");
                 if (btnsObj instanceof List) {
@@ -124,7 +92,7 @@ public class CustomReplyService {
 
     /** 已知的内置 {占位符}（PAPI 的 %xxx% 是动态的，不在此校验）。 */
     private static final java.util.Set<String> KNOWN_PLACEHOLDERS = new java.util.HashSet<>(java.util.Arrays.asList(
-            "online", "sender", "date", "time", "max", "player_names", "bot", "menu", "args"));
+            "online", "sender", "date", "time", "max", "player_names", "bot", "args"));
     private static final java.util.regex.Pattern PLACEHOLDER_PATTERN =
             java.util.regex.Pattern.compile("\\{([a-zA-Z_][a-zA-Z0-9_]*)\\}");
 
@@ -186,37 +154,19 @@ public class CustomReplyService {
             event.replyImageData(bytes, "");
             return;
         }
-        // 菜单：Markdown + 按钮键盘
-        if (r.type == CustomReply.Type.MENU) {
-            resolve(r.content, event, resolved -> {
-                try {
-                    String keyboard = buildKeyboard(r.buttons);
-                    event.replyKeyboard(resolved, keyboard);
-                } catch (Exception e) {
-                    log("菜单发送失败(" + r.trigger + "): " + e.getMessage());
-                }
-            });
-            return;
-        }
         // 其余先异步解析占位符（含可能的 PAPI 跨服），拿到结果再发
         resolve(r.content, event, resolved -> {
             try {
-                // 含 {menu} 的回复：自动把全部命令渲染成按钮附在菜单下（无参一键发、带参填草稿）
-                String menuKb = null;
-                if (r.content.contains("{menu}") && menuKeyboardProvider != null) {
-                    try { menuKb = menuKeyboardProvider.apply(event); }
-                    catch (Exception e) { log("生成菜单按钮失败: " + e.getMessage()); }
-                }
                 switch (r.type) {
                     case TEXTIMAGE:
                         event.replyImageData(textImage.render(r.template, resolved), "");
                         break;
                     case MARKDOWN:
+                        event.replyMarkdown(resolved, null);
+                        break;
                     case TEXT:
                     default:
-                        if (menuKb != null) event.replyKeyboard(resolved, menuKb);
-                        else if (r.type == CustomReply.Type.MARKDOWN) event.replyMarkdown(resolved, null);
-                        else event.reply(resolved);
+                        event.reply(resolved);
                 }
             } catch (Exception e) {
                 log("发送失败(" + r.trigger + "): " + e.getMessage());
@@ -224,54 +174,14 @@ public class CustomReplyService {
         });
     }
 
-    /**
-     * 注入 {menu} 占位符提供者。内容里出现 {menu} 时，展开为「全部命令」菜单
-     * （由 HandlerRegistry.buildMenu 生成，按分类 + 权限分组）。
-     */
-    public void setMenuProvider(java.util.function.Function<BotMessageContext, String> menuProvider) {
-        this.menuProvider = menuProvider;
-    }
-
-    /**
-     * 注入 {menu} 菜单的按钮键盘提供者。内容含 {menu} 的回复发送时，
-     * 会自动把全部命令渲染成可点按钮（无参一键执行、带参填草稿）附在菜单下方。
-     */
-    public void setMenuKeyboardProvider(java.util.function.Function<BotMessageContext, String> provider) {
-        this.menuKeyboardProvider = provider;
-    }
-
     private void resolve(String text, BotMessageContext event, java.util.function.Consumer<String> cb) {
         if (text == null) { cb.accept(""); return; }
-        // 先展开 {menu}（自定义回复即菜单：内容里写 {menu} 就替换成全部命令清单）
-        if (menuProvider != null && text.contains("{menu}")) {
-            try {
-                String menu = menuProvider.apply(event);
-                text = text.replace("{menu}", menu != null ? menu : "");
-            } catch (Exception e) {
-                log("展开 {menu} 失败: " + e.getMessage());
-                text = text.replace("{menu}", "");
-            }
-        }
         if (resolver != null) resolver.resolve(text, event, cb);
         else cb.accept(text);
     }
 
     public int count() {
         return replies.size();
-    }
-
-    /** 获取标记为 menu=true 的条目（用于帮助菜单）。 */
-    public List<CustomReply> getMenuEntries() {
-        List<CustomReply> menu = new ArrayList<>();
-        for (CustomReply r : replies) {
-            if (r.menu) menu.add(r);
-        }
-        return menu;
-    }
-
-    /** 获取 menu 部分定义的完整菜单（按分类）。 */
-    public Map<String, List<MenuEntry>> getMenuByCategory() {
-        return menuByCategory;
     }
 
     /** 获取所有 trigger 关键词（供 AI 模块排除）。 */
@@ -310,7 +220,6 @@ public class CustomReplyService {
             case "image":     return CustomReply.Type.IMAGE;
             case "textimage": return CustomReply.Type.TEXTIMAGE;
             case "markdown":  return CustomReply.Type.MARKDOWN;
-            case "menu":      return CustomReply.Type.MENU;
             default:          return CustomReply.Type.TEXT;
         }
     }

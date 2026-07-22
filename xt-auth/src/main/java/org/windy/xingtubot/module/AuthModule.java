@@ -67,6 +67,11 @@ public final class AuthModule implements BotModule {
     }
 
     @Override
+    public String displayName() {
+        return "🔐 白名单";
+    }
+
+    @Override
     public void onEnable(ModuleContext ctx) {
         BotConfig config = ctx.config();
         BotLogger logger = ctx.logger();

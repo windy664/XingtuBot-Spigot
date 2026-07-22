@@ -185,8 +185,5 @@ public class BindingAdminHandler implements BotMessageHandler {
         return LockMessages.get("admin-desc");
     }
 
-    @Override
-    public String category() {
-        return LockMessages.get("admin-category");
-    }
+    // category 自动继承模块 displayName（"🔐 白名单"）
 }

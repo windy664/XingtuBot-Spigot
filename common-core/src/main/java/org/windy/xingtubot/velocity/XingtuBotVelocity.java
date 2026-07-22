@@ -123,7 +123,10 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         // 自定义问答/自定义命令、翻译、模组工具均已迁出为各功能模块（module-custom/translate/modtools），
         // 由 BotCommandHandler 经 ModuleLoader 装配（占位符/绑定库/跨服执行经能力服务注入）。
 
+        // 通过 static holder 把 bridge 传进 BotCommandHandler（super() 构造期间需要）
+        BotCommandHandler.nextBridge = bridge;
         commandHandler = new BotCommandHandler(proxy, logger, config, bridge, textImage, dataDir);
+        BotCommandHandler.nextBridge = null;
         // 代理端默认为大脑。框架一次性写入宿主，供 xt-auth 等扩展只读。
         commandHandler.getHost().setBrain(velocityIsBrain);
         commandHandler.getHost().registerService("core.allowed-groups",

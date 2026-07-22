@@ -10,16 +10,14 @@ public class CustomReply {
 
     public enum Match { EQUALS, CONTAINS, STARTS_WITH, REGEX }
 
-    public enum Type { TEXT, IMAGE, TEXTIMAGE, MARKDOWN, MENU }
+    public enum Type { TEXT, IMAGE, TEXTIMAGE, MARKDOWN }
 
     public String trigger = "";
-    public String name = "";
     public Match match = Match.EQUALS;
     public Type type = Type.TEXT;
     public String content = "";
     public String file = "";
     public String template = "default";
-    public boolean menu = false;
     public List<Button> buttons = new ArrayList<>();
 
     public boolean matches(String message) {

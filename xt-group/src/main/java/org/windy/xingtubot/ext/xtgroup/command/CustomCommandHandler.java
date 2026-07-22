@@ -2,9 +2,12 @@ package org.windy.xingtubot.ext.xtgroup.command;
 
 import org.windy.xingtubot.common.command.BotCommand;
 import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.handler.MenuEntry;
 import org.windy.xingtubot.common.util.ColorCodeConverter;
 import org.windy.xingtubot.common.reply.PlaceholderResolver;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -147,6 +150,20 @@ public class CustomCommandHandler implements BotCommand {
 
     @Override
     public String description() { return ""; }
+
+    // category 自动继承模块 displayName（"💬 群功能"）
+
+    @Override
+    public List<MenuEntry> menuEntries() {
+        List<MenuEntry> out = new ArrayList<>();
+        for (CustomCommandConfig.Entry e : config.getEntries()) {
+            if (e.trigger == null || e.trigger.isEmpty()) continue;
+            String label = (e.description != null && !e.description.isEmpty())
+                    ? e.description : e.trigger;
+            out.add(new MenuEntry(e.trigger, label, "", e.admin));
+        }
+        return out;
+    }
 
     private String resolvePlayerName(String openid) {
         if (playerLookup == null || openid == null) return null;

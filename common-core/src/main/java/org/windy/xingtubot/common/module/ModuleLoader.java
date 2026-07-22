@@ -51,6 +51,10 @@ public final class ModuleLoader {
                 continue;
             }
             try {
+                // 设置当前模块的菜单分类名，handler 注册时自动继承
+                if (ctx.registry() != null) {
+                    ctx.registry().setCurrentModuleDisplayName(module.displayName());
+                }
                 module.onEnable(ctx);
                 loaded.add(module);
                 enabled.add(name);

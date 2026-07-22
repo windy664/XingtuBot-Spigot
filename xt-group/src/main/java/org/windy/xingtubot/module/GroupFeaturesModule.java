@@ -39,6 +39,11 @@ public final class GroupFeaturesModule implements BotModule {
     }
 
     @Override
+    public String displayName() {
+        return "💬 群功能";
+    }
+
+    @Override
     public void onEnable(ModuleContext ctx) {
         // ===== 迎送词 =====
         List<String> allowedList = ctx.config().getStringList("allowed-groups");
@@ -66,13 +71,6 @@ public final class GroupFeaturesModule implements BotModule {
             imagesDir.mkdirs();
             CustomReplyService customReply = new CustomReplyService(
                     repliesFile, imagesDir, textImage, placeholders, m -> ctx.logger().info(m));
-            // {menu} 占位符 → 全部命令菜单（自定义回复即菜单：replies.yml 里写 content: "{menu}"）。
-            // 背后走 HandlerRegistry.buildMenu，按发送者是否超管分组渲染。
-            customReply.setMenuProvider(event -> ctx.registry().buildMenu(
-                    ctx.permission() != null && ctx.permission().isAdmin(event.getSenderId())));
-            // {menu} 菜单自动附命令按钮：无参一键执行、带参点了只填草稿（不自动发）、超管命令仅管理员可点
-            customReply.setMenuKeyboardProvider(event -> ctx.registry().buildMenuKeyboard(
-                    ctx.permission() != null && ctx.permission().isAdmin(event.getSenderId())));
             if (customReply.count() > 0) {
                 ctx.registry().register(new CustomReplyHandler(customReply));
             }

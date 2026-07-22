@@ -1,19 +1,13 @@
 package org.windy.xingtubot.ext.xtgroup.reply;
 
 import org.windy.xingtubot.common.event.BotMessageContext;
-import org.windy.xingtubot.common.handler.MenuEntry;
 import org.windy.xingtubot.common.handler.BotMessageHandler;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
 
 /**
  * 自定义问答（replies.yml）。
  * 包装 {@link CustomReplyService}，catch-all 型，priority=80（命令之后、群服互联之前）。
  *
- * <p>帮助菜单从 replies.yml 的 {@code menu} 部分读取（按分类），同时合并
- * replies 中 {@code menu: true} 的条目到「💬 自定义」分类。
+ * <p>帮助菜单由核心 {@code MenuHandler} 统一渲染。
  */
 public class CustomReplyHandler implements BotMessageHandler {
 
@@ -53,27 +47,8 @@ public class CustomReplyHandler implements BotMessageHandler {
     }
 
     @Override
-    public List<String> triggers() {
+    public java.util.List<String> triggers() {
         return customReply != null ? customReply.getAllTriggers() : java.util.Collections.emptyList();
-    }
-
-    @Override
-    public List<MenuEntry> menuEntries() {
-        if (customReply == null) return java.util.Collections.emptyList();
-        List<MenuEntry> out = new ArrayList<>();
-
-        // 1. menu 部分（replies.yml 里用户定义的完整菜单，按分类）
-        for (Map.Entry<String, List<MenuEntry>> cat : customReply.getMenuByCategory().entrySet()) {
-            out.addAll(cat.getValue());
-        }
-
-        // 2. replies 中 menu=true 的条目（归入「💬 自定义」）
-        for (CustomReply r : customReply.getMenuEntries()) {
-            String label = r.name != null && !r.name.isEmpty() ? r.name : r.trigger;
-            out.add(new MenuEntry(r.trigger, label, "💬 自定义", false));
-        }
-
-        return out;
     }
 
     @Override
@@ -86,8 +61,5 @@ public class CustomReplyHandler implements BotMessageHandler {
         return 80;
     }
 
-    @Override
-    public String category() {
-        return "💬 自定义";
-    }
+    // category 自动继承模块 displayName（"💬 群功能"）
 }

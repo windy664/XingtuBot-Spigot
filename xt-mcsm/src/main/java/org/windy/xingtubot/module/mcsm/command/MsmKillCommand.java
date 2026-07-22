@@ -56,5 +56,5 @@ public class MsmKillCommand implements BotCommand {
     @Override public boolean adminOnly() { return true; }
     @Override public String usage() { return "msm 强杀 <实例名>"; }
     @Override public String description() { return "强制结束实例进程"; }
-    @Override public String category() { return "🖥️ 服务器管理"; }
+    // category 自动继承模块 displayName
 }

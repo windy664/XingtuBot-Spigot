@@ -69,8 +69,5 @@ public class WhoAmIHandler implements BotMessageHandler {
         return "查看你的用户 ID / 当前群 ID（配置用）";
     }
 
-    @Override
-    public String category() {
-        return "⚙ 系统";
-    }
+    // category 自动继承模块 displayName（"⚙ 内置功能"）
 }

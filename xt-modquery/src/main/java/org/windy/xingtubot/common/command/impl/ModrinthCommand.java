@@ -132,7 +132,7 @@ public class ModrinthCommand implements BotCommand {
     @Override
     public String description() { return "Modrinth 搜索（英文源，自动翻译）"; }
     @Override
-    public String category() { return "🔍 模组工具"; }
+    // category 自动继承模块 displayName
     public void shutdown() {
         cleaner.shutdownNow();
     }

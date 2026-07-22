@@ -100,7 +100,7 @@ public class MsmDetailCommand implements BotCommand {
     @Override public boolean adminOnly() { return true; }
     @Override public String usage() { return "msm 详情 <实例名>"; }
     @Override public String description() { return "查看实例详细信息"; }
-    @Override public String category() { return "🖥️ 服务器管理"; }
+    // category 自动继承模块 displayName
 
     private static String statusText(int status) {
         switch (status) {

@@ -180,7 +180,7 @@ public class XingtuBotSpringApplication {
 
         Consumer<BotMessageEvent> listener = event -> {
             if (commandHandler != null) {
-                commandHandler.handle(event, commandHandler.getPermission().isAdmin(event.getSenderId()));
+                commandHandler.handle(event);
             }
         };
 

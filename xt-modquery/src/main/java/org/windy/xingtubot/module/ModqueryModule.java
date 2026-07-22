@@ -30,6 +30,11 @@ public final class ModqueryModule implements BotModule {
     }
 
     @Override
+    public String displayName() {
+        return "📦 Mod 查询";
+    }
+
+    @Override
     public int loadPriority() {
         return 10;
     }

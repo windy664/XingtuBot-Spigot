@@ -88,6 +88,5 @@ public class ExecCommand implements BotCommand {
     @Override
     public String description() { return "远程执行服务器命令"; }
 
-    @Override
-    public String category() { return "🔧 管理"; }
+    // category 自动继承模块 displayName（"⚙ 内置功能"）
 }

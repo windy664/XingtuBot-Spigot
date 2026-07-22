@@ -21,8 +21,15 @@ import java.nio.file.Path;
  */
 public class BotCommandHandler extends AbstractCommandHandler {
 
+    /**
+     * 构造期临时传递 bridge 引用（super() 先于字段赋值，需要跨构造传递）。
+     * 调用方在 new BotCommandHandler() 前设置，构造结束后自动清空。
+     */
+    static volatile VelocityBridge nextBridge;
+
     private final OpenIdCaptureHandler openIdCapture;
     private final BotConfig config;
+    private final VelocityBridge bridge;
 
     public BotCommandHandler(ProxyServer proxy, org.slf4j.Logger slf4jLogger,
                              BotConfig config, VelocityBridge bridge,
@@ -30,6 +37,7 @@ public class BotCommandHandler extends AbstractCommandHandler {
         super(config, new VelocityBotLogger(slf4jLogger),
                 dataDir != null ? dataDir.toFile() : null, proxy);
         this.config = config;
+        this.bridge = bridge;
 
         openIdCapture = new OpenIdCaptureHandler();
         openIdCapture.setConsoleLogger(m -> proxy.getConsoleCommandSource().sendMessage(Component.text(m)));
@@ -49,21 +57,41 @@ public class BotCommandHandler extends AbstractCommandHandler {
     protected void registerPlatformServices(ModuleContextImpl ctx, BotConfig config,
                                              BotLogger logger, File dataFolder, Object platform) {
         ProxyServer proxy = (ProxyServer) platform;
+        // bridge 从 static holder 取（super() 构造期间实例字段还未赋值）
+        VelocityBridge brg = nextBridge;
 
         ctx.registerService(ServerQuery.class, new VelocityServerQuery(proxy));
 
+        // 跨服控制台执行（超管 "执行 @子服 命令" 依赖此服务）
+        if (brg != null) {
+            ctx.registerService(CrossServerConsole.class,
+                    (CrossServerConsole) (server, cmd, callback) -> brg.dispatchConsole(server, cmd, callback));
+        }
+
+        // 本服控制台执行（Velocity 代理端无游戏控制台，转发到第一个在线子服）
+        ctx.registerService(ConsoleExecutor.class,
+                (ConsoleExecutor) (cmd, callback) -> {
+                    if (brg != null) {
+                        // 没指定子服，广播到所有子服（取第一个回复）
+                        brg.dispatchConsole("all", cmd, callback);
+                    } else {
+                        callback.accept("⚠️ 跨服信道不可用");
+                    }
+                });
     }
 
     @Override
     protected PlaceholderResolver createPlaceholders(BotConfig config, Object platform) {
         ProxyServer proxy = (ProxyServer) platform;
-        return new VelocityPlaceholders(proxy, null);
+        // bridge 从 static holder 取
+        VelocityBridge brg = nextBridge;
+        return new VelocityPlaceholders(proxy, brg);
     }
 
     public void startCaptureOpenid() { openIdCapture.enableCapture(); }
 
     public void handle(BotMessageEvent event) {
-        handle(event, getPermission().isAdmin(event.getSenderId()));
+        super.handle(event);
     }
 
     private static String appendImageUrls(String content, java.util.List<String> urls) {

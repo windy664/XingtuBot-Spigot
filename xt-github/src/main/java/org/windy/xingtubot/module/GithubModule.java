@@ -27,6 +27,11 @@ public final class GithubModule implements BotModule {
     }
 
     @Override
+    public String displayName() {
+        return "🐙 GitHub";
+    }
+
+    @Override
     public void onEnable(ModuleContext ctx) {
         BotConfig config = ctx.config();
 

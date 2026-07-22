@@ -85,5 +85,5 @@ public class FortuneCommand implements BotCommand {
     @Override
     public String description() { return "今日运势、掷骰、帮你做选择"; }
     @Override
-    public String category() { return "🎮 娱乐"; }
+    // category 自动继承模块 displayName
 }

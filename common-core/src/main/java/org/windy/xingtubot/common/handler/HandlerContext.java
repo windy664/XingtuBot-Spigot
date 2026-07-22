@@ -14,12 +14,20 @@ public class HandlerContext {
     private final BotLogger logger;
     private final PermissionChecker permission;
     private final Object platform; // 平台特定对象：Velocity = ProxyServer，Spigot = JavaPlugin
+    private final HandlerRegistry registry;
 
-    public HandlerContext(BotConfig config, BotLogger logger, PermissionChecker permission, Object platform) {
+    public HandlerContext(BotConfig config, BotLogger logger, PermissionChecker permission,
+                         Object platform, HandlerRegistry registry) {
         this.config = config;
         this.logger = logger;
         this.permission = permission;
         this.platform = platform;
+        this.registry = registry;
+    }
+
+    /** 注册中心（供需要自查询的 handler 如 MenuHandler 使用）。 */
+    public HandlerRegistry getRegistry() {
+        return registry;
     }
 
     public BotConfig getConfig() {

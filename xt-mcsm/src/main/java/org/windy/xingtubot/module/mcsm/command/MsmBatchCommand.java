@@ -95,7 +95,7 @@ public class MsmBatchCommand implements BotCommand {
     @Override public List<String> triggers() { return Arrays.asList("msm 全启", "msm 全停", "msm 全重启"); }
     @Override public String usage() { return "msm 全启/全停/全重启"; }
     @Override public String description() { return "批量启停所有实例"; }
-    @Override public String category() { return "🖥️ 服务器管理"; }
+    // category 自动继承模块 displayName
 
     private static String str(JsonObject o, String key) {
         JsonElement el = o.get(key);

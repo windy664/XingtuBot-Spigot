@@ -201,9 +201,7 @@ public class McmodCommand implements BotCommand {
     }
 
     @Override
-    public String category() {
-        return "🔍 模组工具";
-    }
+    // category 自动继承模块 displayName
 
     @Override
     public java.util.List<String> triggers() {

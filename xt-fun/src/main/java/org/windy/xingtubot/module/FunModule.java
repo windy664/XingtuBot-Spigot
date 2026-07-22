@@ -32,6 +32,11 @@ public final class FunModule implements BotModule {
     }
 
     @Override
+    public String displayName() {
+        return "🎮 娱乐";
+    }
+
+    @Override
     public void onEnable(ModuleContext ctx) {
         int count = 0;
         for (FunFeature feature : FEATURES) {

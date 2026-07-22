@@ -1,45 +1,27 @@
 # ============================================================
-# 自定义问答 / 帮助菜单
-#
-# 本文件只做一件事：自定义问答（触发词 → 回复）。
-# 帮助菜单不再单独维护——它本身就是一条自定义回复：
-#   trigger=菜单, content="{menu}"
-# {menu} 会在发送时自动展开成「全部已注册命令」清单（按分类 + 权限分组），
-# 新增/卸载任何功能插件都会自动反映，无需手动维护菜单条目。
+# 自定义问答
 #
 # 字段说明：
 #   trigger : 触发词（必填）
 #   match   : equals(完全相等) / contains(包含) / startsWith(开头) / regex(正则)
 #   type    : text(文本) / image(本地图片) / textimage(文字生图) / markdown
-#   content : 文本内容，支持占位符；可内嵌 {menu} 展开为全部命令菜单
+#   content : 文本内容，支持占位符
 #   file    : 本地图片文件名（放 images/ 目录，type=image 用）
 #   template: 生图背景模板名（放 templates/ 目录，type=textimage 用）
-#   menu    : true 时这条回复会额外出现在 {menu} 菜单的「💬 自定义」分类中
-#   name    : 菜单中显示的名称（menu=true 时用）
 #
-# 内置占位符：{online} {sender} {date} {time} {max} {player_names} {bot} {menu}
+# 内置占位符：{online} {sender} {date} {time} {max} {player_names} {bot}
 # PAPI 占位符：%xingtubot_bound% %xingtubot_player% 等
 # ============================================================
 
 replies:
-  # —— 菜单即一条自定义回复：{menu} 自动列出全部命令 ——
-  - trigger: "(?i)(菜单|帮助|help|功能|指令)"
-    match: regex
-    type: markdown
-    content: "{menu}"
-
   - trigger: "规则"
     match: equals
     type: text
-    menu: true
-    name: "服务器规则"
     content: "【本服规则】\n1. 禁止破坏他人建筑\n2. 禁止使用作弊\n3. 友善交流"
 
   - trigger: "(?i)(在线玩家|在线人数|在线列表|在线)"
     match: regex
     type: markdown
-    menu: true
-    name: "在线玩家"
     content: |
       ## 🎮 服务器在线状态
 

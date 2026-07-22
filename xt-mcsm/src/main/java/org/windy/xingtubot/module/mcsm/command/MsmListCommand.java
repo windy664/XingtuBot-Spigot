@@ -96,7 +96,7 @@ public class MsmListCommand implements BotCommand {
     @Override public List<String> triggers() { return Arrays.asList("msm 实例", "msm 列表"); }
     @Override public String usage() { return "msm 实例"; }
     @Override public String description() { return "查看所有实例列表"; }
-    @Override public String category() { return "🖥️ 服务器管理"; }
+    // category 自动继承模块 displayName
 
     private static String statusIcon(int status) {
         switch (status) {

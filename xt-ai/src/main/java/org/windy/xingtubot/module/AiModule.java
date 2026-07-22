@@ -18,6 +18,11 @@ public final class AiModule implements BotModule {
     }
 
     @Override
+    public String displayName() {
+        return "🤖 AI 对话";
+    }
+
+    @Override
     public void onEnable(ModuleContext ctx) {
         BotConfig config = ctx.config();
 

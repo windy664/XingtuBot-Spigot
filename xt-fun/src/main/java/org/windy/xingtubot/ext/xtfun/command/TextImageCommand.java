@@ -45,5 +45,5 @@ public class TextImageCommand implements BotCommand {
     @Override
     public String description() { return "文字转图片"; }
     @Override
-    public String category() { return "🎮 娱乐"; }
+    // category 自动继承模块 displayName
 }

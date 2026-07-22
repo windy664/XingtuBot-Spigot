@@ -12,6 +12,15 @@ public interface BotModule {
     String name();
 
     /**
+     * 模块中文显示名（带 emoji），用于菜单分类。
+     * <p>该模块注册的 handler 若未覆盖 {@code category()}，自动继承此值作为菜单分类。
+     * <p>默认返回空字符串（不自动归类，落入"其他"）。
+     */
+    default String displayName() {
+        return "";
+    }
+
+    /**
      * 加载优先级：数值越小越先加载。默认 100。
      *
      * <p>「服务提供型」模块（如翻译/TTS，会经 {@link ModuleContext#registerService}

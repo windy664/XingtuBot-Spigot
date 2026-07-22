@@ -11,6 +11,7 @@ import org.windy.xingtubot.common.module.capability.ProactiveSender;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
 import org.windy.xingtubot.common.reply.PlaceholderResolver;
+import org.windy.xingtubot.common.handler.impl.MenuHandler;
 import org.windy.xingtubot.common.handler.impl.WhoAmIHandler;
 import org.windy.xingtubot.common.handler.impl.ExecCommand;
 import org.windy.xingtubot.common.module.capability.ConsoleExecutor;
@@ -56,12 +57,15 @@ public abstract class AbstractCommandHandler {
         // ===== 平台特定服务注册 =====
         registerPlatformServices(moduleCtx, config, logger, dataFolder, platformContext);
 
-        // ===== 内置 handler =====
+        // ===== 内置 handler（归类为"⚙ 内置功能"）=====
+        registry.setCurrentModuleDisplayName("⚙ 内置功能");
+        registry.register(new MenuHandler(registry));
         registry.register(new WhoAmIHandler());
         // 超管远程执行命令（依赖平台注册的 ConsoleExecutor / CrossServerConsole）
         ConsoleExecutor consoleExec = moduleCtx.getService(ConsoleExecutor.class);
         CrossServerConsole crossExec = moduleCtx.getService(CrossServerConsole.class);
         registry.register(new ExecCommand(consoleExec, crossExec));
+        registry.setCurrentModuleDisplayName(null);
 
         // ===== Placeholder =====
         PlaceholderResolver placeholders = createPlaceholders(config, platformContext);
@@ -81,7 +85,7 @@ public abstract class AbstractCommandHandler {
         moduleCtx.registerService(BotRuntimeInfo.class, service);
 
         // ===== 初始化 =====
-        HandlerContext ctx = new HandlerContext(config, logger, permission, platformContext);
+        HandlerContext ctx = new HandlerContext(config, logger, permission, platformContext, registry);
         registry.initAll(ctx);
     }
 
@@ -96,21 +100,14 @@ public abstract class AbstractCommandHandler {
     // ==================== 消息处理 ====================
 
     /**
-     * 处理群消息。三端共用逻辑：dispatch + 菜单兜底 + pending messages。
+     * 处理群消息。三端共用逻辑：dispatch + pending messages。
      * @param event 群消息事件
-     * @param senderIsAdmin 发送者是否管理员
      */
-    public void handle(BotMessageEvent event, boolean senderIsAdmin) {
+    public void handle(BotMessageEvent event) {
         String msg = event.getMessage();
         if ((msg == null || msg.trim().isEmpty()) && event.getImageUrls().isEmpty()) return;
-        String t = msg == null ? "" : msg.trim();
 
         boolean handled = registry.dispatch(event);
-
-        // 兜底菜单
-        if (!handled && (t.equals("菜单") || t.equals("帮助") || t.equalsIgnoreCase("help"))) {
-            event.replyMarkdown(registry.buildMenu(senderIsAdmin), null);
-        }
 
         // pending messages
         String pending = PendingMessageQueue.getInstance().drainForGroup(event.getConversationId());

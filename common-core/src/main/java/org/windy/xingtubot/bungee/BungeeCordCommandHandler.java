@@ -59,6 +59,6 @@ public class BungeeCordCommandHandler extends AbstractCommandHandler {
     }
 
     public void handle(BotMessageEvent event) {
-        handle(event, getPermission().isAdmin(event.getSenderId()));
+        super.handle(event);
     }
 }

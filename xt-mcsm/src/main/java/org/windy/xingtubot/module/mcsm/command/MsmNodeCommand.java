@@ -140,7 +140,7 @@ public class MsmNodeCommand implements BotCommand {
     @Override public boolean adminOnly() { return true; }
     @Override public String usage() { return "msm 节点"; }
     @Override public String description() { return "查看节点列表/详情"; }
-    @Override public String category() { return "🖥️ 服务器管理"; }
+    // category 自动继承模块 displayName
 
     private static String formatBytes(long bytes) {
         if (bytes < 1024) return bytes + " B";

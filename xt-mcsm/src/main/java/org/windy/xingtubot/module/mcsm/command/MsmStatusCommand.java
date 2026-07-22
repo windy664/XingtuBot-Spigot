@@ -102,7 +102,7 @@ public class MsmStatusCommand implements BotCommand {
     @Override public List<String> triggers() { return Arrays.asList("msm"); }
     @Override public String usage() { return "msm 状态"; }
     @Override public String description() { return "MCSM 面板总览"; }
-    @Override public String category() { return "🖥️ 服务器管理"; }
+    // category 自动继承模块 displayName
 
     private static String formatBytes(long bytes) {
         if (bytes < 1024) return bytes + " B";
