@@ -58,6 +58,5 @@ public class WeatherCommand implements BotCommand {
     public String usage() { return "天气 <城市>"; }
     @Override
     public String description() { return "查询实时天气"; }
-    @Override
     // category 自动继承模块 displayName
 }

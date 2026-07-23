@@ -84,6 +84,5 @@ public class FortuneCommand implements BotCommand {
     public String usage() { return "运势 / 骰子 / 选择 A 还是 B"; }
     @Override
     public String description() { return "今日运势、掷骰、帮你做选择"; }
-    @Override
     // category 自动继承模块 displayName
 }

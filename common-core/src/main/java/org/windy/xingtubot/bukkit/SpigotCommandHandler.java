@@ -91,6 +91,6 @@ public class SpigotCommandHandler extends AbstractCommandHandler implements List
                 event.getConversationId(), event.getSenderId(), msg,
                 event.getReply(), event.getUsername(), event.getEventType());
         botEvent.setImageUrls(event.getImageUrls());
-        handle(botEvent, getPermission().isAdmin(event.getSenderId()));
+        handle(botEvent);
     }
 }

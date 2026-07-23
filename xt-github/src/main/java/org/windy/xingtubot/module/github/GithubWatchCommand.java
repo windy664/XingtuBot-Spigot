@@ -202,6 +202,5 @@ public class GithubWatchCommand implements BotCommand {
     public String usage() { return "/github <watch|unwatch|list> [owner/repo/branch]"; }
     @Override
     public String description() { return "GitHub / Gitee 项目追踪（release/commit/issue/PR），支持指定分支"; }
-    @Override
     // category 自动继承模块 displayName
 }

@@ -54,6 +54,5 @@ public class AnimePicCommand implements BotCommand {
     public String usage() { return "来张图 / 随机图片"; }
     @Override
     public String description() { return "随机二次元图片"; }
-    @Override
     // category 自动继承模块 displayName
 }

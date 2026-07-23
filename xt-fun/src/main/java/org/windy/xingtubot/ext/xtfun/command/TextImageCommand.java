@@ -44,6 +44,5 @@ public class TextImageCommand implements BotCommand {
     public String usage() { return "生图 <模板> <文字>"; }
     @Override
     public String description() { return "文字转图片"; }
-    @Override
     // category 自动继承模块 displayName
 }

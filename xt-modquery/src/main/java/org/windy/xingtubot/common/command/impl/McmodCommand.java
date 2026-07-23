@@ -200,7 +200,6 @@ public class McmodCommand implements BotCommand {
         return "MCMOD 百科查询（结果可点按钮 + 翻页）";
     }
 
-    @Override
     // category 自动继承模块 displayName
 
     @Override

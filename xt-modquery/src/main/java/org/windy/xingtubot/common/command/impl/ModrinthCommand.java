@@ -131,7 +131,6 @@ public class ModrinthCommand implements BotCommand {
     public String usage() { return "/mr <模组名> · /pack <整合包名>"; }
     @Override
     public String description() { return "Modrinth 搜索（英文源，自动翻译）"; }
-    @Override
     // category 自动继承模块 displayName
     public void shutdown() {
         cleaner.shutdownNow();

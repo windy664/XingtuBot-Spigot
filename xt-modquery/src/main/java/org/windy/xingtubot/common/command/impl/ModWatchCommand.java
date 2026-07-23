@@ -76,7 +76,6 @@ public class ModWatchCommand implements BotCommand {
     public String usage() { return "/modwatch <list|add|remove|check>"; }
     @Override
     public String description() { return "Modrinth 模组更新监控"; }
-    @Override
     // category 自动继承模块 displayName
 
     /** 整体不强制超管（list/check/feed 等只读人人可用），但增删监控项按 {@link #adminFor} 限超管。 */

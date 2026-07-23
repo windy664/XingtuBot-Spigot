@@ -153,7 +153,6 @@ public class CustomCommandHandler implements BotCommand {
 
     // category 自动继承模块 displayName（"💬 群功能"）
 
-    @Override
     public List<MenuEntry> menuEntries() {
         List<MenuEntry> out = new ArrayList<>();
         for (CustomCommandConfig.Entry e : config.getEntries()) {
