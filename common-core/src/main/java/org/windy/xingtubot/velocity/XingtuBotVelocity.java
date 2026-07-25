@@ -103,6 +103,8 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
             ChannelIdentifier bridgeChannel = MinecraftChannelIdentifier.from(CrossServerProtocol.CHANNEL);
             bridge = new VelocityBridge(proxy, this, bridgeChannel, logger::warn);
             velocityBridge = bridge;
+            // 子服注册表（name→address），用于 Redis 广播 SERVER_REGISTRY 让子服自动发现代理名
+            bridge.setServersConfig(config.getStringMap("servers"));
             // 跨服 Redis 信道（通用基础设施，配置在核心 config）：由核心创建并注入到 bridge。
             redisHolder = CrossServerChannelFactory.create(config, false, botLogger);
             if (redisHolder != null) {

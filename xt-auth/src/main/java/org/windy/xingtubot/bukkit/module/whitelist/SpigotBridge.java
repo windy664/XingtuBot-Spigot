@@ -62,10 +62,26 @@ public class SpigotBridge implements Listener, PluginMessageListener {
     /** 注入 Redis 信道（AuthModule 根据 config 决定是否创建）。 */
     public void setRedisChannel(CrossServerChannel redisChannel) {
         this.redisChannel = redisChannel;
-        // 注册 Redis 消息处理（复用 PluginMessage 同一套逻辑）
-        redisChannel.setMessageHandler((fromServer, data) -> {
+        plugin.getLogger().info("[Auth] SpigotBridge 已绑定 Redis 信道（auth 消息处理器）");
+        // 追加 auth 消息处理（不覆盖 core 已注册的 DO_CONSOLE/WHO_IS_BOSS/PAPI_RESOLVE 等处理器）
+        redisChannel.addMessageHandler((fromServer, data) -> {
             BridgeCodec.Decoded msg = BridgeCodec.decode(data);
-            if (msg != null) handleMessage(msg, null);
+            if (msg == null) return;
+            // 只处理 auth 相关类型，core 的类型（DO_CONSOLE/PAPI_RESOLVE 等）由 XingtuBot 主插件处理
+            switch (msg.type) {
+                case I_AM_BOSS:     // 握手确认：core 设 proxyName，auth 设 brainConfirmed
+                case NEED_QQ:
+                case CLEAR_QQ:
+                case DO_REGISTER:
+                case DO_LOGIN:
+                case MSG_PLAYER:
+                case QUERY_BINDING_BY_OPENID:
+                case BINDING_RESULT:
+                    handleMessage(msg, null);
+                    break;
+                default:
+                    break; // DO_CONSOLE/WHO_IS_BOSS/PAPI_RESOLVE 由 core 处理
+            }
         });
     }
 

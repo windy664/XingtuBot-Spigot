@@ -58,8 +58,9 @@ public final class CrossServerChannelFactory {
             int port = config.getInt("redis-port", 6379);
             RedisManager manager = new RedisManager(
                     redisHost, port, config.getString("redis-password", ""), logger);
-            // server-name 由代理端 I_AM_BOSS 握手自动设置，初始用占位值
-            RedisChannel channel = new RedisChannel(manager, "server", isSpigot, logger);
+            // server-name：优先读配置值（如 "shelter"），握手后由 I_AM_BOSS 覆盖
+            String serverName = config.getString("server-name", "server");
+            RedisChannel channel = new RedisChannel(manager, serverName, isSpigot, logger);
             logger.info("[跨服] Redis 信道已启用 (" + redisHost + ":" + port + ")");
             return new Holder(channel, () -> {
                 try { channel.close(); } catch (Exception ignored) { }

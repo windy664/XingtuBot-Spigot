@@ -75,6 +75,7 @@ public final class AuthBukkitPlugin extends JavaPlugin {
                 // Redis 信道是核心通用基础设施：核心按其 config 创建并注册到服务总线，这里取用即可。
                 org.windy.xingtubot.common.bridge.CrossServerChannel redis =
                         host.getService(org.windy.xingtubot.common.bridge.CrossServerChannel.class);
+                getLogger().info("[Auth] 服务总线查找 CrossServerChannel: " + (redis != null ? "✅ 找到" : "❌ null"));
                 if (redis != null) {
                     spigotBridge.setRedisChannel(redis);
                 }

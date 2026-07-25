@@ -32,6 +32,8 @@ public class VelocityBridge {
 
     // Redis 跨服信道（可选，xt-auth 按 config 注入）。非 null 时大脑经它收发，免去「需在线玩家当载体」。
     private volatile org.windy.xingtubot.common.bridge.CrossServerChannel redisChannel;
+    // 子服注册表（name→address），用于 Redis 模式下广播 SERVER_REGISTRY 让子服自动发现代理名。
+    private volatile java.util.Map<String, String> serversConfig = java.util.Collections.emptyMap();
 
     public VelocityBridge(ProxyServer proxy, Object plugin, ChannelIdentifier channel,
                           Consumer<String> logger) {
@@ -43,6 +45,11 @@ public class VelocityBridge {
         proxy.getEventManager().register(plugin, this);
     }
 
+    /** 设置子服注册表（name→address），供 SERVER_REGISTRY 广播使用。 */
+    public void setServersConfig(java.util.Map<String, String> servers) {
+        this.serversConfig = servers != null ? servers : java.util.Collections.emptyMap();
+    }
+
     public void setRedisChannel(org.windy.xingtubot.common.bridge.CrossServerChannel redisChannel) {
         this.redisChannel = redisChannel;
         // 订阅 Redis：收到子服经 Redis 上报的消息后，复用与 PluginMessage 同一套处理逻辑，
@@ -51,6 +58,27 @@ public class VelocityBridge {
             BridgeCodec.Decoded msg = BridgeCodec.decode(data);
             if (msg != null) handleDecoded(msg, fromServer, this.redisChannel::broadcast);
         });
+        // 广播子服注册表，让所有子服按端口自动发现自己的代理名
+        broadcastServerRegistry();
+    }
+
+    /**
+     * 通过 Redis 广播子服注册表（SERVER_REGISTRY），子服按端口匹配自动发现自己的代理名。
+     *
+     * <p>格式："name1=host1:port1,name2=host2:port2"
+     */
+    private void broadcastServerRegistry() {
+        org.windy.xingtubot.common.bridge.CrossServerChannel rc = this.redisChannel;
+        if (rc == null || serversConfig.isEmpty()) return;
+        StringBuilder sb = new StringBuilder();
+        for (java.util.Map.Entry<String, String> e : serversConfig.entrySet()) {
+            if (sb.length() > 0) sb.append(",");
+            sb.append(e.getKey()).append("=").append(e.getValue());
+        }
+        String registry = sb.toString();
+        byte[] data = BridgeCodec.encode(CrossServerProtocol.Type.SERVER_REGISTRY, registry);
+        rc.broadcast(data);
+        log("[跨服] 已广播子服注册表: " + registry);
     }
 
     public void dispatchConsole(String targetServerName, String command,
@@ -62,10 +90,12 @@ public class VelocityBridge {
         // 有 Redis 信道：广播即可送达（即使目标子服无玩家在线），应答也经 Redis 回来。
         org.windy.xingtubot.common.bridge.CrossServerChannel rc = this.redisChannel;
         if (rc != null) {
+            log("[跨服] dispatchConsole → Redis broadcast, target=" + targetServerName + " cmd=" + command);
             rc.broadcast(data);
             scheduleCleanup(requestId);
             return;
         }
+        log("[跨服] dispatchConsole → PluginMessage 回退（无 Redis 信道）, target=" + targetServerName);
         boolean sentAny = false;
         for (com.velocitypowered.api.proxy.server.RegisteredServer rs : proxy.getAllServers()) {
             try {
@@ -140,8 +170,15 @@ public class VelocityBridge {
     private void handleDecoded(BridgeCodec.Decoded msg, String proxyServerName, Consumer<byte[]> reply) {
         switch (msg.type) {
             case WHO_IS_BOSS:
-                reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS,
-                        proxyServerName != null ? proxyServerName : ""));
+                // PluginMessage 模式：proxyServerName 从 ServerConnection 获取，是该子服在代理端的真实注册名。
+                if (this.redisChannel == null) {
+                    reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS,
+                            proxyServerName != null ? proxyServerName : ""));
+                } else {
+                    // Redis 模式：无法确定是哪个子服发的（fromServer="all"），
+                    // 广播 SERVER_REGISTRY 让所有子服按端口自动发现代理名。
+                    broadcastServerRegistry();
+                }
                 break;
 
             case PAPI_RESULT: {

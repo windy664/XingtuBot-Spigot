@@ -61,6 +61,10 @@ public final class CrossServerProtocol {
         /** 子服回传解析后的文本。字段：requestId, 解析结果。 */
         PAPI_RESULT,
 
+        // ===== 子服自动发现 =====
+        /** 代理端广播子服注册表（name=address 对），子服按端口匹配自动发现自己的代理名。字段：registryStr。 */
+        SERVER_REGISTRY,
+
         // ===== 绑定数据跨服查询 =====
         /** 子服向大脑查询：某 openid 绑定了哪个玩家。字段：requestId, openid。 */
         QUERY_BINDING_BY_OPENID,

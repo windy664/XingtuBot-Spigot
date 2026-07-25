@@ -5,7 +5,9 @@ import org.windy.xingtubot.common.redis.RedisManager;
 import redis.clients.jedis.JedisPubSub;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.BiConsumer;
@@ -26,7 +28,7 @@ public class RedisChannel implements CrossServerChannel {
     private final String instanceId;
     private final BotLogger logger;
 
-    private BiConsumer<String, byte[]> messageHandler;
+    private final List<BiConsumer<String, byte[]>> messageHandlers = new CopyOnWriteArrayList<>();
     private JedisPubSub pubSub;
     private ExecutorService subscribeExecutor;
     private volatile boolean closed = false;
@@ -59,7 +61,17 @@ public class RedisChannel implements CrossServerChannel {
 
     @Override
     public void setMessageHandler(BiConsumer<String, byte[]> handler) {
-        this.messageHandler = handler;
+        messageHandlers.clear();
+        if (handler != null) {
+            messageHandlers.add(handler);
+        }
+    }
+
+    @Override
+    public void addMessageHandler(BiConsumer<String, byte[]> handler) {
+        if (handler != null) {
+            messageHandlers.add(handler);
+        }
     }
 
     @Override
@@ -86,15 +98,35 @@ public class RedisChannel implements CrossServerChannel {
                 if (closed) return;
                 try {
                     byte[] raw = message.getBytes(StandardCharsets.ISO_8859_1);
+                    logger.info("[Redis] 收到原始消息 channel=" + channel + " rawLen=" + raw.length);
                     Unpacked unpacked = unpack(raw);
-                    if (unpacked == null) return;
+                    if (unpacked == null) {
+                        logger.warn("[Redis] unpack 返回 null, rawLen=" + raw.length);
+                        return;
+                    }
+                    logger.info("[Redis] unpack 成功: fromInstance=" + unpacked.fromInstance
+                            + " sourceType=" + unpacked.sourceType + " fromServer=" + unpacked.fromServer
+                            + " dataLen=" + unpacked.data.length
+                            + " (本实例=" + instanceId + " 本类型=" + sourceType + ")");
                     // 过滤自己发的消息
-                    if (instanceId.equals(unpacked.fromInstance)) return;
+                    if (instanceId.equals(unpacked.fromInstance)) {
+                        logger.info("[Redis] 过滤: 自己发的消息");
+                        return;
+                    }
                     // 过滤同类型（避免大脑收大脑的消息，手脚收手脚的消息）
-                    if (sourceType == unpacked.sourceType) return;
+                    if (sourceType == unpacked.sourceType) {
+                        logger.info("[Redis] 过滤: 同类型消息 sourceType=" + sourceType);
+                        return;
+                    }
 
-                    if (messageHandler != null) {
-                        messageHandler.accept(unpacked.fromServer, unpacked.data);
+                    if (!messageHandlers.isEmpty()) {
+                        logger.info("[Redis] 调用 " + messageHandlers.size() + " 个 messageHandler");
+                        for (BiConsumer<String, byte[]> handler : messageHandlers) {
+                            handler.accept(unpacked.fromServer, unpacked.data);
+                        }
+                    } else {
+                        logger.warn("[Redis] 无 messageHandler 注册！消息被丢弃 type=" +
+                                (unpacked.data.length > 0 ? BridgeCodec.decode(unpacked.data) : "empty"));
                     }
                 } catch (Exception e) {
                     logger.warn("[Redis] 处理消息失败: " + e.getMessage());
@@ -121,6 +153,11 @@ public class RedisChannel implements CrossServerChannel {
     private String resolveServerName() {
         String proxy = org.windy.xingtubot.common.runtime.BotRuntimeState.getProxyServerName();
         return (proxy != null && !proxy.isEmpty()) ? proxy : fallbackServerName;
+    }
+
+    /** 获取本通道的 server-name（供外部组件如 VelocityBridge 在握手中使用）。 */
+    public String getServerName() {
+        return resolveServerName();
     }
 
     /**

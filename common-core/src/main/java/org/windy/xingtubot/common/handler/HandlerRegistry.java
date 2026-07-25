@@ -149,6 +149,10 @@ public class HandlerRegistry {
         }
 
         boolean mentionGated = isMentionGated(event, msg);
+        boolean isAdmin = permission.isAdmin(event.getSenderId());
+        log("[Dispatch] msg=" + (msg.length() > 30 ? msg.substring(0, 30) + "..." : msg)
+                + " mentionGated=" + mentionGated + " isAdmin=" + isAdmin
+                + " senderId=" + event.getSenderId());
         BotMessageEvent dispatchEvent = withGameEcho(event, msg);
 
         // 命令消息不走观察者：防止 AI 等 observer 与命令处理器并行抢答
@@ -163,13 +167,16 @@ public class HandlerRegistry {
             if (!matches(handler, msg, dispatchEvent)) {
                 continue;
             }
-            if (handler.adminFor(msg) && !permission.isAdmin(dispatchEvent.getSenderId())) {
+            log("[Dispatch] matched handler=" + handler.name()
+                    + " adminFor=" + handler.adminFor(msg));
+            if (handler.adminFor(msg) && !isAdmin) {
                 dispatchEvent.reply("该指令仅管理员可用");
                 return true;
             }
             pool.execute(() -> executeHandler(handler, msg, dispatchEvent));
             return true;
         }
+        log("[Dispatch] no handler matched, msg will fall through");
         return false;
     }
 
@@ -190,6 +197,10 @@ public class HandlerRegistry {
 
     private boolean isMentionGated(BotMessageEvent event, String msg) {
         if (!event.isGroupMessage() || event.isGroupAtMessage()) {
+            return false;
+        }
+        // 管理员消息不做 mention 门控：允许直接发 "执行 xxx" 等超管命令
+        if (permission.isAdmin(event.getSenderId())) {
             return false;
         }
         String eventType = event.getEventType();

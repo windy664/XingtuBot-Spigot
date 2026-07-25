@@ -2,6 +2,7 @@ package org.windy.xingtubot.bukkit;
 
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.windy.xingtubot.bukkit.event.GuildMessageEvent;
@@ -70,6 +71,82 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         if (redisHolder != null && spigotCommandHandler != null) {
             spigotCommandHandler.getHost().registerService(
                     CrossServerChannel.class, redisHolder.channel);
+            // 核心处理跨服控制台命令（DO_CONSOLE）—— 不依赖 xt-auth
+            redisHolder.channel.addMessageHandler((fromServer, data) -> {
+                org.windy.xingtubot.common.bridge.BridgeCodec.Decoded msg =
+                        org.windy.xingtubot.common.bridge.BridgeCodec.decode(data);
+                if (msg == null) return;
+                switch (msg.type) {
+                    case DO_CONSOLE: {
+                        String target = msg.field(0);
+                        String requestId = msg.field(1);
+                        String command = msg.field(2);
+                        if (target == null || command == null) break;
+                        String myName = resolveServerName();
+                        if (!target.equals(myName) && !"all".equalsIgnoreCase(target)) break;
+                        getLogger().info("[跨服] 收到远程命令: " + command + " (from " + fromServer + ")");
+                        org.windy.xingtubot.bukkit.module.console.ConsoleExecutor.execute(
+                                this, command, output ->
+                                    sendBridgeResponse(org.windy.xingtubot.common.bridge.BridgeCodec.encode(
+                                            org.windy.xingtubot.common.bridge.CrossServerProtocol.Type.CONSOLE_RESULT,
+                                            requestId, myName, output)));
+                        break;
+                    }
+                    case WHO_IS_BOSS: {
+                        // 握手：代理端回应 I_AM_BOSS + 注册名
+                        String proxyName = org.windy.xingtubot.common.runtime.BotRuntimeState.getProxyServerName();
+                        sendBridgeResponse(org.windy.xingtubot.common.bridge.BridgeCodec.encode(
+                                org.windy.xingtubot.common.bridge.CrossServerProtocol.Type.I_AM_BOSS,
+                                proxyName != null ? proxyName : ""));
+                        break;
+                    }
+                    case I_AM_BOSS: {
+                        String proxyName = msg.field(0);
+                        if (proxyName != null && !proxyName.isEmpty()) {
+                            org.windy.xingtubot.common.runtime.BotRuntimeState.setProxyServerName(proxyName);
+                            getLogger().info("✅ 代理端注册名: " + proxyName);
+                        }
+                        break;
+                    }
+                    case SERVER_REGISTRY: {
+                        // 代理端广播的子服注册表：按端口匹配自动发现本服的代理名
+                        String registry = msg.field(0);
+                        if (registry == null || registry.isEmpty()) break;
+                        int myPort = Bukkit.getPort();
+                        for (String entry : registry.split(",")) {
+                            int eq = entry.indexOf('=');
+                            if (eq < 0) continue;
+                            String name = entry.substring(0, eq).trim();
+                            String addr = entry.substring(eq + 1).trim();
+                            int lastColon = addr.lastIndexOf(':');
+                            if (lastColon < 0) continue;
+                            try {
+                                int port = Integer.parseInt(addr.substring(lastColon + 1).trim());
+                                if (port == myPort) {
+                                    org.windy.xingtubot.common.runtime.BotRuntimeState.setProxyServerName(name);
+                                    getLogger().info("✅ [自动发现] 代理端注册名: " + name + " (端口匹配 " + port + ")");
+                                    break;
+                                }
+                            } catch (NumberFormatException ignored) {}
+                        }
+                        break;
+                    }
+                    case PAPI_RESOLVE: {
+                        String requestId = msg.field(0);
+                        String playerName = msg.field(1);
+                        String text = msg.field(2);
+                        Bukkit.getScheduler().runTask(this, () -> {
+                            String resolved = org.windy.xingtubot.bukkit.util.PapiResolver.resolve(playerName, text);
+                            sendBridgeResponse(org.windy.xingtubot.common.bridge.BridgeCodec.encode(
+                                    org.windy.xingtubot.common.bridge.CrossServerProtocol.Type.PAPI_RESULT,
+                                    requestId, resolved));
+                        });
+                        break;
+                    }
+                    default:
+                        break; // 其他类型（auth 相关）交给 xt-auth 的 SpigotBridge 处理
+                }
+            });
         }
 
         // 接线主动消息
@@ -230,6 +307,27 @@ public final class XingtuBot extends JavaPlugin implements Listener {
             allowed.add(trimmed);
         }
         return allowed.isEmpty() || allowed.contains(gid);
+    }
+
+    /** 运行时解析本服名称：优先代理端注册名（握手后可用），回退配置值。 */
+    private String resolveServerName() {
+        String proxy = org.windy.xingtubot.common.runtime.BotRuntimeState.getProxyServerName();
+        if (proxy != null && !proxy.isEmpty()) return proxy;
+        return getConfig().getString("server-name", "server");
+    }
+
+    /** 通过 Redis 信道发送响应（PluginMessage + Redis 双发）。 */
+    private void sendBridgeResponse(byte[] data) {
+        if (redisHolder != null) {
+            redisHolder.channel.broadcast(data);
+            return;
+        }
+        // 回退 PluginMessage（需要在线玩家作为载体）
+        Player carrier = Bukkit.getOnlinePlayers().stream().findFirst().orElse(null);
+        if (carrier != null && carrier.isOnline()) {
+            carrier.sendPluginMessage(this,
+                    org.windy.xingtubot.common.bridge.CrossServerProtocol.CHANNEL, data);
+        }
     }
 
     private void registerCommands() {

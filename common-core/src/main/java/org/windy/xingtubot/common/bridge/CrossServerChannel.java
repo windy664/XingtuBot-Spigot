@@ -24,12 +24,31 @@ public interface CrossServerChannel {
     void broadcast(byte[] data);
 
     /**
-     * 注册收到消息的回调。
+     * 设置唯一的消息回调（覆盖之前的）。
      *
      * @param handler (fromServer, data) — fromServer 是发送方 server-name
      */
     void setMessageHandler(BiConsumer<String, byte[]> handler);
 
+    /**
+     * 追加一个消息回调（与已有回调共存，所有回调都会被调用）。
+     *
+     * <p>用于多个模块各自处理不同类型的消息（如 core 处理 DO_CONSOLE，xt-auth 处理绑定）。
+     *
+     * @param handler (fromServer, data)
+     */
+    default void addMessageHandler(BiConsumer<String, byte[]> handler) {
+        // 默认实现：退化为 setMessageHandler（只有一个处理器）
+        setMessageHandler(handler);
+    }
+
     /** 关闭通道，释放资源。 */
     default void close() {}
+
+    /**
+     * 获取本通道的 server-name（如 "shelter"、"lobby"）。
+     *
+     <p>Redis 模式下用于握手中告诉对端自己叫什么名字；PluginMessage 模式通常不需要（从 ServerConnection 获取）。
+     */
+    default String getServerName() { return null; }
 }
