@@ -266,10 +266,14 @@ public class McmodApiService {
 
         debug("详情解析完成: 封面图=" + (image.isEmpty() ? "无" : image)
                 + ", 卡片 " + card.length() + " 字符");
-        // 整卡超长按换行分段发（不截断——内容多长发多长；QQ 群 markdown 单条有硬限，切多条避免整条失败）
-        for (String chunk : splitCard(card, DETAIL_CHUNK)) {
-            debug("发送 markdown 分片(" + chunk.length() + "字符):\n" + chunk);
-            event.replyMarkdown(chunk, null);
+        // 超长分段发，段间延迟保证顺序（QQ 异步发送不保序）
+        List<String> chunks = splitCard(card, DETAIL_CHUNK);
+        for (int i = 0; i < chunks.size(); i++) {
+            if (i > 0) {
+                try { Thread.sleep(300); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+            }
+            debug("发送 markdown 分片(" + chunks.get(i).length() + "字符)");
+            event.replyMarkdown(chunks.get(i), null);
         }
     }
 
@@ -344,7 +348,6 @@ public class McmodApiService {
             if (t.startsWith("运行环境")) env = strip(t, "运行环境");
             else if (t.startsWith("运作方式")) workmode = strip(t, "运作方式");
         }
-        String intro = introMarkdown(doc); // 保留原生排版(小标题→###、列表→-、段落)，非拍平
         if (cname.isEmpty() && ename.isEmpty()) cname = e.cname;
         String authors = extractAuthors(doc);       // best-effort：空则字段自动跳过
         String depends = extractDependencies(doc, e); // best-effort：空则字段自动跳过
@@ -358,16 +361,14 @@ public class McmodApiService {
                 .field("⚙", "运作", workmode)
                 .field("👤", "作者", trim(authors, 120))
                 .field("🔗", "前置", trim(depends, 180));
-        // 热评：标题独占一行，每条走 markdown 引用块（用户名加粗 + 赞数徽章，已在 hotComments 拼好）
+        // 热评
         if (!hot.isEmpty()) {
             md.line("💬 **热评**");
             for (String c : hot) md.line(c);
         }
         md.link("查看详情", e.url);
-        // 正文：一条分割线后直接跟原生 markdown 正文（全量，整卡超长由 sendDetail 分段发）
-        if (!intro.isEmpty()) {
-            md.line("").line("---").line("").line(intro);
-        }
+        // 不再拼 intro：mcmod 页面描述在卡片元数据之前，拼进来会被 splitCard 挤到前面导致乱序。
+        // 完整简介用户点"查看详情"在 mcmod 页面看。
         return md.build();
     }
 

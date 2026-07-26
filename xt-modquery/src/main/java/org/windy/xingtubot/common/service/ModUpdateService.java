@@ -1096,9 +1096,12 @@ public class ModUpdateService {
         } else {
             card = org.windy.xingtubot.common.util.Md.card("🆕", "模组更新提醒")
                     .subtitle("**" + entry.getDisplayName() + "** 已发布新版本")
-                    .field("🎮", "MC版本", entry.getMcVersion() + " | " + capitalize(entry.getLoader()))
-                    .link("查看版本", "https://modrinth.com/mod/" + entry.getSlug()
-                            + "/version/" + entry.getLastVersionId());
+                    .field("🎮", "MC版本", entry.getMcVersion() + " | " + capitalize(entry.getLoader()));
+            // 抓取更新日志（changelog）
+            String changelog = fetchModrinthChangelog(entry.getProjectId(), entry.getLastVersionId());
+            appendChangelog(card, changelog);
+            card.link("查看版本", "https://modrinth.com/mod/" + entry.getSlug()
+                    + "/version/" + entry.getLastVersionId());
         }
         String msg = card.build();
 
@@ -1174,6 +1177,26 @@ public class ModUpdateService {
             return null;
         } catch (Exception e) {
             return "查询 Modrinth 版本失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 拉取 Modrinth 版本的更新日志（changelog），自动翻译。
+     * 失败返回空字符串（不影响主流程）。
+     */
+    private String fetchModrinthChangelog(String projectId, String versionId) {
+        if (projectId == null || versionId == null) return "";
+        try {
+            String json = fetchJson(MODRINTH_API + "/project/" + projectId + "/version/" + versionId);
+            JsonObject root = JsonParser.parseString(json).getAsJsonObject();
+            String changelog = root.has("changelog") ? root.get("changelog").getAsString().trim() : "";
+            if (changelog.isEmpty()) return "";
+            // 限制长度，避免通知消息过长
+            if (changelog.length() > 600) changelog = changelog.substring(0, 600) + "…";
+            return translate(changelog);
+        } catch (Exception e) {
+            warn("拉取 Modrinth changelog 失败: " + e.getMessage());
+            return "";
         }
     }
 

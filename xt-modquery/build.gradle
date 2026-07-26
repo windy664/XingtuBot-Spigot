@@ -10,6 +10,7 @@ plugins {
 dependencies {
     compileOnly project(path: ':common-core', configuration: 'shadow')
     compileOnly project(':xt-ai')       // AiService 软依赖（LLM 辅助搜索）
+    testImplementation project(path: ':common-core', configuration: 'shadow')  // 测试时需要
 
     compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
 
@@ -19,6 +20,7 @@ dependencies {
 
     // gson 由平台运行期提供（Spigot/Velocity 自带 com.google.gson）
     compileOnly 'com.google.code.gson:gson:2.10.1'
+    testImplementation 'com.google.code.gson:gson:2.10.1'
 
     // ─── 本插件自有依赖（shadow 打包进 jar）───
     // 解析 mcmod 返回的 HTML 网页（搜索结果 / 模组详情）

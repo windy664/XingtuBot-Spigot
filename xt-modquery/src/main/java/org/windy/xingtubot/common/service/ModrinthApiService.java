@@ -603,28 +603,33 @@ public class ModrinthApiService {
                 }
             }
 
-            // 统一分段发送
-            for (String chunk : splitText(combined.toString(), DETAIL_CHUNK)) {
-                event.replyMarkdown(chunk, null);
+            // 统一分段发送，段间延迟保证顺序
+            List<String> chunks = splitText(combined.toString(), DETAIL_CHUNK);
+            for (int i = 0; i < chunks.size(); i++) {
+                if (i > 0) {
+                    try { Thread.sleep(300); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                }
+                event.replyMarkdown(chunks.get(i), null);
             }
         } else {
             // ---- 纯文本模式 ----
-            // 1. 元数据
             event.reply(formatDetailMeta(d));
 
-            // 2. 正文
             String body = pickBody(d);
             if (!body.isEmpty()) {
                 if (translator != null && translator.isEnabled()) {
                     body = translator.translateEnToZh(body);
                 }
                 body = cleanBodyForChat(body);
-                for (String chunk : splitText(body, DETAIL_CHUNK)) {
-                    event.reply(chunk);
+                List<String> chunks = splitText(body, DETAIL_CHUNK);
+                for (int i = 0; i < chunks.size(); i++) {
+                    if (i > 0) {
+                        try { Thread.sleep(300); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                    }
+                    event.reply(chunks.get(i));
                 }
             }
 
-            // 3. 画廊链接
             if (d.gallery != null && !d.gallery.isEmpty()) {
                 StringBuilder gb = new StringBuilder();
                 gb.append("🖼️ 画廊截图：\n");

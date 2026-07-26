@@ -50,6 +50,16 @@ subprojects {
             options.release.set(targetJavaVersion)
         }
     }
+
+    // ─── 测试框架 ───
+    dependencies {
+        testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
 }
 
 // 一键构建全部模块（./gradlew buildAll）

@@ -8,6 +8,7 @@ import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.platform.BotLogger;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Type;
 import java.net.URL;
@@ -95,10 +96,13 @@ public class SensitiveFilter {
         }
         this.replacement = replacement;
 
+        // 先加载本地词（立即可用），云端异步下载
         reloadLocalWords();
-
         if (enabled) {
+            if (logger != null) logger.info("[敏感词] 已启用, 本地 " + localWords.size() + " 词, 云端异步加载中...");
             reloadCloudWords();
+        } else {
+            if (logger != null) logger.info("[敏感词] 未启用");
         }
     }
 
@@ -107,43 +111,52 @@ public class SensitiveFilter {
         allWords.addAll(localWords);
     }
 
-    /** 异步下载云词库，合并到 allWords */
+    /** 异步下载云词库（带超时+重试），下载完自动合并到 allWords。 */
     public void reloadCloudWords() {
-        if (!enabled || cloudUrls.isEmpty()) {
-            if (logger != null) logger.info("[敏感词] 云端词库跳过（enabled=" + enabled + ", urls=" + cloudUrls.size() + "）, 本地词库: " + localWords.size() + " 词");
-            return;
-        }
-
+        if (!enabled || cloudUrls.isEmpty()) return;
         CompletableFuture.runAsync(() -> {
-            try {
-                Set<String> cloudWords = new HashSet<>();
-                Gson gson = new Gson();
+            int loaded = 0;
+            Gson gson = new Gson();
+            for (String url : cloudUrls) {
+                loaded += loadOneUrl(url, gson);
+            }
+            if (logger != null) logger.info("[敏感词] 云端加载完成, 成功 " + loaded + "/" + cloudUrls.size() + " 个源, 总计 " + allWords.size() + " 词");
+        });
+    }
 
-                for (String url : cloudUrls) {
-                    URL u = new URL(url);
-                    try (BufferedReader br = new BufferedReader(
-                            new InputStreamReader(u.openStream(), StandardCharsets.UTF_8))) {
-                        JsonObject json = JsonParser.parseReader(br).getAsJsonObject();
-                        Type listType = new TypeToken<List<String>>() {}.getType();
-                        List<String> words = gson.fromJson(json.getAsJsonArray("words"), listType);
-                        for (String w : words) {
-                            String low = w.toLowerCase();
-                            if (!cloudIgnored.contains(low)) {
-                                cloudWords.add(low);
-                            }
-                        }
+    /** 加载单个云端 URL，超时 10s，失败重试 1 次。返回加载词数。 */
+    private int loadOneUrl(String url, Gson gson) {
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) new URL(url).openConnection();
+                conn.setConnectTimeout(10_000);
+                conn.setReadTimeout(10_000);
+                conn.setRequestProperty("User-Agent", "XingtuBot/1.0");
+                if (conn.getResponseCode() != 200) {
+                    throw new IOException("HTTP " + conn.getResponseCode());
+                }
+                Set<String> cloudWords = new HashSet<>();
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                    JsonObject json = JsonParser.parseReader(br).getAsJsonObject();
+                    List<String> words = gson.fromJson(json.getAsJsonArray("words"), new TypeToken<List<String>>() {}.getType());
+                    for (String w : words) {
+                        String low = w.toLowerCase();
+                        if (!cloudIgnored.contains(low)) cloudWords.add(low);
                     }
                 }
-
-                synchronized (allWords) {
-                    allWords.addAll(cloudWords);
-                }
-
-                if (logger != null) logger.info("[敏感词] 云端词库已加载, 云端: " + cloudWords.size() + " 词, 总计: " + allWords.size() + " 词");
+                conn.disconnect();
+                synchronized (allWords) { allWords.addAll(cloudWords); }
+                return cloudWords.size();
             } catch (Exception e) {
-                if (logger != null) logger.warn("[敏感词] 云端词库加载失败: " + e.getMessage() + ", 本地词库: " + localWords.size() + " 词仍生效");
+                if (attempt < 2) {
+                    if (logger != null) logger.warn("[敏感词] " + url + " 第" + attempt + "次失败: " + e.getMessage() + ", 重试...");
+                    try { Thread.sleep(3000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                } else {
+                    if (logger != null) logger.warn("[敏感词] " + url + " 加载失败: " + e.getMessage());
+                }
             }
-        });
+        }
+        return 0;
     }
 
     /** 过滤器是否启用。 */

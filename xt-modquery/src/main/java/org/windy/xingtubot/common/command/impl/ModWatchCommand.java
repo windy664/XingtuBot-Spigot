@@ -144,8 +144,21 @@ public class ModWatchCommand implements BotCommand {
             return;
         }
 
+        // 支持直接贴 Modrinth URL（自动提取 slug，空格后可跟 mc版本 加载器）
+        String slug = extractModrinthSlug(arg);
         String[] addParts = arg.split("\\s+");
-        String slug = addParts[0];
+        if (slug != null) {
+            // URL 后面可能有空格分隔的额外参数：/modwatch add https://... 26.2 forge
+            String after = arg.substring(arg.indexOf(slug) + slug.length()).trim();
+            // 去掉 URL 尾部的 /versions /version/xxx 等路径
+            after = after.replaceFirst("^/versions?.*$", "").trim();
+            String[] extra = after.isEmpty() ? new String[0] : after.split("\\s+");
+            addParts = new String[1 + extra.length];
+            addParts[0] = slug;
+            System.arraycopy(extra, 0, addParts, 1, extra.length);
+        } else {
+            slug = addParts[0];
+        }
         String mcVer = addParts.length > 1 ? addParts[1] : null;
         String loader = addParts.length > 2 ? addParts[2] : null;
 
@@ -209,16 +222,32 @@ public class ModWatchCommand implements BotCommand {
     private void handleHelp(BotMessageContext event) {
         event.reply("📖 模组更新监控帮助（Modrinth）\n"
                 + "─────────────────\n"
-                + "/modwatch list — 查看 Modrinth 监控列表\n"
-                + "/modwatch add <slug> [mc版本] [加载器] — 添加 Modrinth 监控\n"
-                + "/modwatch remove <slug> — 移除 Modrinth 监控\n"
+                + "/modwatch add <slug或链接> [mc版本] [加载器]\n"
+                + "  /modwatch add create 1.20.1 forge\n"
+                + "  /modwatch add https://modrinth.com/mod/ala-industrial 26.2\n"
+                + "/modwatch list — 查看监控列表\n"
+                + "/modwatch remove <slug> — 移除监控\n"
                 + "/modwatch check [slug] — 立即检查更新\n"
-                + "/modwatch feed — 查看 Modrinth 新模组发现\n"
-                + "/modwatch feed check — 立即检查新模组\n"
-                + "/modwatch help — 显示此帮助\n"
+                + "/modwatch feed — 新模组发现\n"
                 + "─────────────────\n"
-                + "GitHub / Gitee 仓库追踪请用 /github 命令：\n"
-                + "  /github watch owner/repo          （GitHub）\n"
-                + "  /github watch gitee:owner/repo    （Gitee）");
+                + "GitHub / Gitee 追踪请用 /github 命令");
+    }
+
+    /**
+     * 从 Modrinth URL 提取 slug，非 URL 返回 null。
+     * 支持格式：https://modrinth.com/mod/create / https://modrinth.com/modpack/ftb 等
+     */
+    private static String extractModrinthSlug(String input) {
+        if (input == null) return null;
+        String lower = input.toLowerCase();
+        // 匹配 modrinth.com/mod/slug 或 modrinth.com/modpack/slug（后面可能跟 /version/xxx 等）
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("modrinth\\.com/(?:mod|modpack|shader|resourcepack|datapack)/([a-z0-9][a-z0-9_-]+)")
+                .matcher(lower);
+        if (m.find()) {
+            // 从原始 input（保持大小写）提取
+            return input.substring(m.start(1), m.end(1));
+        }
+        return null;
     }
 }

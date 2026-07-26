@@ -4,6 +4,7 @@
 dependencies {
     compileOnly project(path: ':common-core', configuration: 'shadow')
     compileOnly 'com.google.code.gson:gson:2.10.1'  // AiService 编译需要（运行期由平台提供）
+    testImplementation 'com.google.code.gson:gson:2.10.1'  // 测试时需要
 
     compileOnly 'org.spigotmc:spigot-api:1.12.2-R0.1-SNAPSHOT'
 

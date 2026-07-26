@@ -42,10 +42,10 @@ redis-password: ""
 sensitive-filter:
   Enable: true
   Replacement: '*'
+  # 本地补充词（用户自行填写，示例仅供参考，部署时请替换为自己的词库）
   Local:
-    - NMSL
-    - fuck
-    - shit
+    - "示例词1"
+    - "示例词2"
   Cloud-Thesaurus:
     Enabled: true
     Ignored: ['nt']
