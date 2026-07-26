@@ -36,11 +36,11 @@ redis-port: 6379
 redis-password: ""
 
 ####################################
-# 敏感词过滤（全局配置，供 xt-chatlink / xt-ai 等扩展共用）
-# 各扩展在自己 config 里用 sensitive-filter-chatlink / sensitive-filter-ai 开关控制是否应用
+# 敏感词过滤（全局配置，防机器人在QQ上发敏感内容被封）
+# 所有扩展统一走这里，不再各自配置开关
 ####################################
 sensitive-filter:
-  Enable: false
+  Enable: true
   Replacement: '*'
   Local:
     - NMSL
@@ -51,6 +51,7 @@ sensitive-filter:
     Ignored: ['nt']
     Urls:
       - 'https://raw.githubusercontent.com/Yurinann/Filter-Thesaurus-Cloud/main/database.json'
+      - 'https://raw.githubusercontent.com/konsheng/Sensitive-lexicon/main/ThirdPartyCompatibleFormats/TrChat/SensitiveLexicon.json'
   Ignored-Punctuations:
     - '!'
     - '.'
@@ -102,4 +103,13 @@ sensitive-filter:
     - '《'
     - '》'
     - '`'
+
+####################################
+# 敏感词自动过滤的 handler 列表
+# 列表中的 handler 发出的所有文本/Markdown 回复都会自动过敏感词
+# handler name：ai-chat(AI对话)、group-chat(群服互联)
+####################################
+sensitive-filter-handlers:
+  - "ai-chat"
+  - "group-chat"
 

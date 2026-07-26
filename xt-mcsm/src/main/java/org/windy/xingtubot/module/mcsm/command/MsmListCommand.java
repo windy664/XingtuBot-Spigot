@@ -64,7 +64,11 @@ public class MsmListCommand implements BotCommand {
 
                 for (JsonElement ie : instances) {
                     JsonObject inst = ie.getAsJsonObject();
-                    String name = str(inst, "nickname");
+                    // MCSM API 昵称在 config.nickname
+                    String name = "";
+                    JsonObject cfg = inst.getAsJsonObject("config");
+                    if (cfg != null) name = str(cfg, "nickname");
+                    if (name.isEmpty()) name = str(inst, "nickname");
                     if (name.isEmpty()) name = str(inst, "instanceUuid");
                     int status = getInt(inst, "status", -1);
                     String statusText = statusIcon(status);

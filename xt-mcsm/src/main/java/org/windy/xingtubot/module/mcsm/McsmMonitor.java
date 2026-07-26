@@ -112,7 +112,11 @@ public class McsmMonitor {
                         JsonObject inst = ie.getAsJsonObject();
                         String uuid = str(inst, "instanceUuid");
                         int status = getInt(inst, "status", -1);
-                        String nickname = str(inst, "nickname");
+                        // MCSM API 昵称在 config.nickname
+                        String nickname = "";
+                        JsonObject cfg = inst.getAsJsonObject("config");
+                        if (cfg != null) nickname = str(cfg, "nickname");
+                        if (nickname.isEmpty()) nickname = str(inst, "nickname");
                         if (nickname.isEmpty()) nickname = uuid;
 
                         nameCache.put(uuid, nickname);

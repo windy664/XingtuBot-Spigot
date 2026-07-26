@@ -45,27 +45,59 @@ public final class AdminStanceMemory {
     }
 
     /**
-     * 压缩：超过 MAX_RAW_RECENT 条时，旧消息合并成一条摘要。
-     * 例如 8 条 → 1 条摘要 + 7 条最近（但总数不超过 MAX_PER_GROUP）。
+     * 压缩：超过 MAX_PER_GROUP 时，旧的原始消息合并成一条摘要。
+     * 已有的摘要条目不再参与合并（避免嵌套前缀爆炸）。
      */
     private void compress(List<String> list) {
-        while (list.size() > MAX_PER_GROUP) {
-            // 需要压缩：把前 (size - MAX_RAW_RECENT + 1) 条合并
-            int mergeCount = list.size() - MAX_RAW_RECENT + 1;
-            if (mergeCount <= 0) break;
+        // 分离摘要和原始消息
+        List<String> summaries = new ArrayList<>();
+        List<String> raw = new ArrayList<>();
+        for (String item : list) {
+            if (item.startsWith(SUMMARY_PREFIX)) {
+                summaries.add(item);
+            } else {
+                raw.add(item);
+            }
+        }
 
-            StringBuilder merged = new StringBuilder("[以往观点摘要] ");
+        // 原始消息超限 → 旧的合并成一条摘要
+        if (raw.size() > MAX_RAW_RECENT) {
+            int mergeCount = raw.size() - MAX_RAW_RECENT + 1;
+            StringBuilder merged = new StringBuilder(SUMMARY_PREFIX);
             for (int i = 0; i < mergeCount; i++) {
                 if (i > 0) merged.append("｜");
-                merged.append(list.get(i));
+                merged.append(raw.get(i));
             }
-            // 移除被合并的，插入摘要
-            for (int i = 0; i < mergeCount; i++) {
-                list.remove(0);
+            // 保留未合并的原始消息
+            List<String> kept = new ArrayList<>(raw.subList(mergeCount, raw.size()));
+            // 旧摘要 + 新合并摘要（最多保留1条摘要）+ 未合并的原始消息
+            summaries.add(merged.toString());
+            if (summaries.size() > 1) {
+                // 多条摘要合并成一条
+                StringBuilder allSum = new StringBuilder(SUMMARY_PREFIX);
+                for (int i = 0; i < summaries.size(); i++) {
+                    String s = summaries.get(i);
+                    if (i > 0) allSum.append("｜");
+                    // 去掉已有前缀避免嵌套
+                    allSum.append(s.startsWith(SUMMARY_PREFIX)
+                            ? s.substring(SUMMARY_PREFIX.length()) : s);
+                }
+                summaries.clear();
+                summaries.add(allSum.toString());
             }
-            list.add(0, merged.toString());
+            raw = kept;
         }
+
+        // 重组：摘要在前，原始消息在后
+        list.clear();
+        list.addAll(summaries);
+        list.addAll(raw);
+
+        // 最终裁剪
+        while (list.size() > MAX_PER_GROUP) list.remove(list.size() - 1);
     }
+
+    private static final String SUMMARY_PREFIX = "[以往观点摘要] ";
 
     /**
      * 构建"超管观点"上下文，注入到 AI 系统提示中。

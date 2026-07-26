@@ -10,8 +10,7 @@ startsWith: ""
 # 游戏→QQ 聊天行 markdown 模板（{player}=玩家名、{message}=发言内容）
 chatlink-format: "💬 **{player}**：{message}"
 
-# 敏感词过滤（作用于群服互联双向）
-sensitive-filter-chatlink: true
+# 敏感词过滤已统一由 core sensitive-filter.Enable 控制，此处不再单独配置
 
 # 群服互联目标群。
 # "*" 或留空 = 继承核心 common-core 的 allowed-groups；填写具体群 = 在核心白名单内再缩小范围。

@@ -9,11 +9,9 @@ import org.windy.xingtubot.common.event.MessageReply;
 import org.windy.xingtubot.common.queue.KnownGroupStore;
 import org.windy.xingtubot.common.runtime.XingtuBotServiceImpl;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import org.windy.xingtubot.common.service.SensitiveFilter;
+
+import java.util.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -33,6 +31,9 @@ public class HandlerRegistry {
     private boolean initialized = false;
     private HandlerContext readyCtx;
     private volatile Consumer<String> gameEcho;
+    // 敏感词过滤：指定 handler name 列表，这些 handler 的输出自动走敏感词过滤
+    private volatile SensitiveFilter sensitiveFilter;
+    private volatile Set<String> sensitiveFilterHandlers = Collections.emptySet();
     // 当前正在加载的模块显示名（由 ModuleLoader 在 onEnable 前设置），
     // handler 注册时若自身 category 为空则自动继承。
     private volatile String currentModuleDisplayName;
@@ -53,6 +54,21 @@ public class HandlerRegistry {
 
     public void setGameEcho(Consumer<String> gameEcho) {
         this.gameEcho = gameEcho;
+    }
+
+    /**
+     * 设置敏感词过滤：filter=过滤器实例，handlerNames=需要过滤的 handler name 列表。
+     * 列表中的 handler 发出的所有文本/Markdown 回复都会自动过敏感词。
+     */
+    public void setSensitiveFilter(SensitiveFilter filter, List<String> handlerNames) {
+        this.sensitiveFilter = filter;
+        Set<String> set = new HashSet<>();
+        if (handlerNames != null) {
+            for (String h : handlerNames) {
+                if (h != null && !h.trim().isEmpty()) set.add(h.trim().toLowerCase());
+            }
+        }
+        this.sensitiveFilterHandlers = set;
     }
 
     public void setHookService(org.windy.xingtubot.common.runtime.XingtuBotServiceImpl hookService) {
@@ -226,9 +242,10 @@ public class HandlerRegistry {
             if (!matches(observer, msg, event)) {
                 continue;
             }
+            BotMessageEvent evt = maybeWrapWithFilter(observer.name(), event);
             pool.execute(() -> {
                 try {
-                    observer.handle(msg, event);
+                    observer.handle(msg, evt);
                 } catch (Exception e) {
                     log("Observer " + observer.name() + " failed: " + e.getMessage());
                 }
@@ -237,11 +254,12 @@ public class HandlerRegistry {
     }
 
     private void executeHandler(BotMessageHandler handler, String msg, BotMessageEvent event) {
-        if (hookService != null && !hookService.fireBeforeCommand(handler.name(), event)) {
+        BotMessageEvent evt = maybeWrapWithFilter(handler.name(), event);
+        if (hookService != null && !hookService.fireBeforeCommand(handler.name(), evt)) {
             return;
         }
         try {
-            handler.handle(msg, event);
+            handler.handle(msg, evt);
         } catch (Exception e) {
             log("Handler " + handler.name() + " failed: " + e.getMessage());
             try {
@@ -433,6 +451,22 @@ public class HandlerRegistry {
         if (logger != null) logger.accept(message);
     }
 
+    /**
+     * 如果 handler name 在 sensitive-filter-handlers 列表中，包装 event 的 reply 为自动过滤版。
+     */
+    private BotMessageEvent maybeWrapWithFilter(String handlerName, BotMessageEvent event) {
+        SensitiveFilter sf = this.sensitiveFilter;
+        if (sf == null || !sf.isEnabled() || handlerName == null) return event;
+        if (!sensitiveFilterHandlers.contains(handlerName.toLowerCase())) return event;
+        MessageReply reply = event.getReply();
+        if (reply == null) return event;
+        BotMessageEvent wrapped = new BotMessageEvent(
+                event.getConversationId(), event.getSenderId(), event.getMessage(),
+                new FilteringReply(reply, sf), event.getUsername(), event.getEventType());
+        wrapped.setImageUrls(event.getImageUrls());
+        return wrapped;
+    }
+
     /** 包装 handler，使其 category() 返回模块显示名（handler 自身 category 为空时生效）。 */
     private static class ModuleCategoryWrapper implements BotMessageHandler {
         private final BotMessageHandler delegate;
@@ -596,6 +630,28 @@ public class HandlerRegistry {
         private static boolean empty(String text) {
             return text == null || text.trim().isEmpty();
         }
+    }
+
+    /** 包装 MessageReply，对所有文本/Markdown 输出自动走敏感词过滤。 */
+    private static class FilteringReply implements MessageReply {
+        private final MessageReply delegate;
+        private final SensitiveFilter filter;
+
+        FilteringReply(MessageReply delegate, SensitiveFilter filter) {
+            this.delegate = delegate;
+            this.filter = filter;
+        }
+
+        @Override public void replyText(String text) { delegate.replyText(filter.filter(text)); }
+        @Override public void replyImage(String imageUrl, String content) { delegate.replyImage(imageUrl, filter.filter(content)); }
+        @Override public void replyImageData(byte[] imageBytes, String content) { delegate.replyImageData(imageBytes, filter.filter(content)); }
+        @Override public void replyVoice(String voiceUrl) { delegate.replyVoice(voiceUrl); }
+        @Override public void replyVoiceData(byte[] audioBytes) { delegate.replyVoiceData(audioBytes); }
+        @Override public void replyVideo(String videoUrl, String content) { delegate.replyVideo(videoUrl, filter.filter(content)); }
+        @Override public void replyEmbed(String embedJson) { delegate.replyEmbed(embedJson); }
+        @Override public void replyMarkdown(String content, String keyboardTemplateId) { delegate.replyMarkdown(filter.filter(content), keyboardTemplateId); }
+        @Override public void replyKeyboard(String markdownContent, String keyboardJson) { delegate.replyKeyboard(filter.filter(markdownContent), keyboardJson); }
+        @Override public void replyArk(String arkJson) { delegate.replyArk(arkJson); }
     }
 
     static String stripMarkdown(String md) {

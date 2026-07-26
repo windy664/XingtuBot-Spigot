@@ -25,12 +25,24 @@ public final class ConsoleExecutor {
 
     /**
      * 主线程执行 command，捕获输出，通过 callback 返回（多行用 \n 连接）。
+     *
+     * <p>三通道捕获：
+     * <ol>
+     *   <li>CapturingConsoleSender（伪 RCON）：拦截 sender.sendMessage()，覆盖 say/broadcast 等命令</li>
+     *   <li>Logger Handler：捕获 Logger.info() 输出</li>
+     *   <li>System.out 劫持：捕获 System.println() 输出</li>
+     * </ol>
      */
     public static void execute(Plugin plugin, String command, java.util.function.Consumer<String> callback) {
         Bukkit.getScheduler().runTask(plugin, () -> {
             List<String> lines = new ArrayList<>();
 
-            // 通道 1：Logger Handler
+            // 通道 1：CapturingConsoleSender（伪 RCON）—— 拦截 sender.sendMessage()
+            CapturingConsoleSender capturing = new CapturingConsoleSender(msg -> {
+                if (msg != null && !msg.trim().isEmpty()) lines.add(stripColor(msg));
+            });
+
+            // 通道 2：Logger Handler
             Logger root = Logger.getLogger("");
             Handler handler = new Handler() {
                 @Override
@@ -44,7 +56,7 @@ public final class ConsoleExecutor {
                 @Override public void close() { }
             };
 
-            // 通道 2：劫持 System.out
+            // 通道 3：劫持 System.out
             java.io.PrintStream oldOut = System.out;
             java.io.ByteArrayOutputStream captured = new java.io.ByteArrayOutputStream();
             java.io.PrintStream captureOut = new java.io.PrintStream(captured);
@@ -54,7 +66,8 @@ public final class ConsoleExecutor {
 
             boolean dispatched;
             try {
-                dispatched = Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+                // 用 CapturingConsoleSender 替代真实 ConsoleSender，拦截 sendMessage() 输出
+                dispatched = Bukkit.dispatchCommand(capturing, command);
             } catch (Exception e) {
                 root.removeHandler(handler);
                 System.setOut(oldOut);
@@ -67,6 +80,9 @@ public final class ConsoleExecutor {
                 System.setOut(oldOut);
                 root.removeHandler(handler);
                 captureOut.flush();
+
+                // flush CapturingConsoleSender 的缓冲
+                capturing.flush();
 
                 // 合并 System.out 捕获的输出
                 String outStr = captured.toString().trim();

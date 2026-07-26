@@ -30,6 +30,7 @@ public class BungeeCordBridge implements Listener {
     private final Map<String, Consumer<String>> consoleCallbacks = new ConcurrentHashMap<>();
     private final Map<String, Consumer<String>> papiCallbacks = new ConcurrentHashMap<>();
     private CrossServerChannel redisChannel;
+    private volatile java.util.Map<String, String> serversConfig = java.util.Collections.emptyMap();
 
     public BungeeCordBridge(ProxyServer proxy, Plugin plugin, String channel, Consumer<String> logger) {
         this.proxy = proxy;
@@ -38,6 +39,10 @@ public class BungeeCordBridge implements Listener {
         this.logger = logger;
         proxy.registerChannel(channel);
         proxy.getPluginManager().registerListener(plugin, this);
+    }
+
+    public void setServersConfig(java.util.Map<String, String> servers) {
+        this.serversConfig = servers != null ? servers : java.util.Collections.emptyMap();
     }
 
     public void setRedisChannel(CrossServerChannel redisChannel) {
@@ -49,6 +54,25 @@ public class BungeeCordBridge implements Listener {
             BridgeCodec.Decoded msg = BridgeCodec.decode(data);
             if (msg != null) handleDecoded(msg, fromServer, this.redisChannel::broadcast);
         });
+        // 广播子服注册表，让所有子服按端口自动发现自己的代理名
+        broadcastServerRegistry();
+    }
+
+    /**
+     * 通过 Redis 广播子服注册表（SERVER_REGISTRY），子服按端口匹配自动发现自己的代理名。
+     * 格式："name1=host1:port1,name2=host2:port2"
+     */
+    private void broadcastServerRegistry() {
+        if (redisChannel == null || serversConfig.isEmpty()) return;
+        StringBuilder sb = new StringBuilder();
+        for (java.util.Map.Entry<String, String> e : serversConfig.entrySet()) {
+            if (sb.length() > 0) sb.append(",");
+            sb.append(e.getKey()).append("=").append(e.getValue());
+        }
+        String registry = sb.toString();
+        byte[] data = BridgeCodec.encode(CrossServerProtocol.Type.SERVER_REGISTRY, registry);
+        redisChannel.broadcast(data);
+        log("[跨服] 已广播子服注册表: " + registry);
     }
 
     public void dispatchConsole(String targetServerName, String command, Consumer<String> onResult) {
@@ -129,8 +153,17 @@ public class BungeeCordBridge implements Listener {
     private void handleDecoded(BridgeCodec.Decoded msg, String proxyServerName, Consumer<byte[]> reply) {
         switch (msg.type) {
             case WHO_IS_BOSS:
-                reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS,
-                        proxyServerName != null ? proxyServerName : ""));
+                // PluginMessage 模式：proxyServerName 从 ServerConnection 获取，是该子服在代理端的真实注册名。
+                if (redisChannel == null) {
+                    reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS,
+                            proxyServerName != null ? proxyServerName : ""));
+                } else {
+                    // Redis 模式：fromServer="all" 无法确定是哪个子服发的。
+                    // 回 I_AM_BOSS（空串）让 xt-auth 的 brainConfirmed 生效（绑定检查/玩家锁依赖它）。
+                    // 同时广播 SERVER_REGISTRY 让子服按端口自动发现代理名。
+                    reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS, ""));
+                    broadcastServerRegistry();
+                }
                 break;
 
             case PAPI_RESULT: {

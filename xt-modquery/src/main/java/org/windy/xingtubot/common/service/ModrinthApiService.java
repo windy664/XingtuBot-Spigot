@@ -564,8 +564,9 @@ public class ModrinthApiService {
     }
 
     /**
-     * 发送模组/整合包完整详情（不截断，超长自动<b>分段多条</b>发，画廊全量）。
-     * 顺序：图标图 → 元数据卡片 → 正文（按换行分段，每段 ≤ {@link #DETAIL_CHUNK}）→ 全部画廊图。
+     * 发送模组/整合包完整详情（不截断，超长自动<b>分段多条</b>发，画廊内嵌正文）。
+     * 元数据卡片 + 正文 + 画廊图片合并为一个字符串，再统一分段，
+     * 避免多条独立消息被 QQ 打乱顺序。
      *
      * <p>正文不做字数上限——内容多长就发多长，只在超过单条限时切成多条，
      * 从而既不丢内容、也不会因单条超 QQ 硬限而整条发送失败。
@@ -573,34 +574,64 @@ public class ModrinthApiService {
      */
     public void sendDetail(org.windy.xingtubot.common.event.BotMessageContext event,
                            ProjectDetail d, boolean markdownEnabled) {
-        // 1. 元数据卡（图标已嵌进卡片首行的 markdown，带尺寸，不再单独发图片）
         if (markdownEnabled) {
-            event.replyMarkdown(buildMetaCard(d), null);
-        } else {
-            event.reply(formatDetailMeta(d));
-        }
-        // 2. 正文：完整不截断，超长按换行分段逐条发
-        String body = pickBody(d);
-        if (!body.isEmpty()) {
-            if (translator != null && translator.isEnabled()) {
-                body = translator.translateEnToZh(body);
-            }
-            body = markdownEnabled ? cleanBodyForMarkdown(body) : cleanBodyForChat(body);
-            for (String chunk : splitText(body, DETAIL_CHUNK)) {
-                if (markdownEnabled) event.replyMarkdown(chunk, null);
-                else event.reply(chunk);
-            }
-        }
-        // 3. 画廊：全部图片，嵌进 markdown（带默认 16:9 尺寸）；纯文本模式退化为链接行
-        if (d.gallery != null && !d.gallery.isEmpty()) {
-            int i = 1;
-            for (String img : d.gallery) {
-                if (markdownEnabled) {
-                    event.replyMarkdown("![截图" + i + " #" + SHOT_W + "px #" + SHOT_H + "px](" + img + ")", null);
-                } else {
-                    event.reply("🖼️ 截图 " + i + ": " + img);
+            // ---- Markdown 模式：元数据卡 + 正文 + 画廊 合并 ----
+            StringBuilder combined = new StringBuilder();
+
+            // 1. 元数据卡（图标 + 字段 + 链接）
+            combined.append(buildMetaCard(d));
+
+            // 2. 正文
+            String body = pickBody(d);
+            if (!body.isEmpty()) {
+                if (translator != null && translator.isEnabled()) {
+                    body = translator.translateEnToZh(body);
                 }
-                i++;
+                body = cleanBodyForMarkdown(body);
+                if (!body.isEmpty()) {
+                    combined.append("\n").append(body);
+                }
+            }
+
+            // 3. 画廊图片内嵌到正文末尾
+            if (d.gallery != null && !d.gallery.isEmpty()) {
+                combined.append("\n\n## 🖼️ 画廊\n");
+                for (int i = 0; i < d.gallery.size(); i++) {
+                    combined.append("\n![截图").append(i + 1)
+                            .append(" #").append(SHOT_W).append("px #").append(SHOT_H)
+                            .append("px](").append(d.gallery.get(i)).append(")\n");
+                }
+            }
+
+            // 统一分段发送
+            for (String chunk : splitText(combined.toString(), DETAIL_CHUNK)) {
+                event.replyMarkdown(chunk, null);
+            }
+        } else {
+            // ---- 纯文本模式 ----
+            // 1. 元数据
+            event.reply(formatDetailMeta(d));
+
+            // 2. 正文
+            String body = pickBody(d);
+            if (!body.isEmpty()) {
+                if (translator != null && translator.isEnabled()) {
+                    body = translator.translateEnToZh(body);
+                }
+                body = cleanBodyForChat(body);
+                for (String chunk : splitText(body, DETAIL_CHUNK)) {
+                    event.reply(chunk);
+                }
+            }
+
+            // 3. 画廊链接
+            if (d.gallery != null && !d.gallery.isEmpty()) {
+                StringBuilder gb = new StringBuilder();
+                gb.append("🖼️ 画廊截图：\n");
+                for (int i = 0; i < d.gallery.size(); i++) {
+                    gb.append(i + 1).append(". ").append(d.gallery.get(i)).append("\n");
+                }
+                event.reply(gb.toString());
             }
         }
     }

@@ -118,6 +118,7 @@ public class XingtuBotSpringApplication {
         // 敏感词过滤
         SensitiveFilter sf = SensitiveFilter.fromConfig(config, "sensitive-filter", logger);
         commandHandler.getHost().registerService(SensitiveFilter.class, sf);
+        commandHandler.getRegistry().setSensitiveFilter(sf, config.getStringList("sensitive-filter-handlers"));
 
         // 注册到 Spring 容器，供扩展插件注入
         registerBeans(appCtx, commandHandler);

@@ -38,9 +38,6 @@ public final class AiChatHandler implements BotMessageHandler {
 
     private static final String NO_REPLY = "NO_REPLY";
     private static final int MAX_INPUT_LENGTH = 300;
-    private static final List<String> ADMIN_ATTACK_WORDS = Arrays.asList(
-            "傻逼", "sb", "nt", "脑残", "废物", "垃圾", "滚", "闭嘴", "狗管理", "狗群主",
-            "权限狗", "滥权", "独裁", "玩不起", "装什么", "你算什么", "管理员算什么", "群主算什么");
 
     private final AiService aiService;
     private final AiService chimeInJudgeService;
@@ -145,24 +142,21 @@ public final class AiChatHandler implements BotMessageHandler {
             return true;
         }
 
-        // 触发条件3：自主参与（普通用户）
+        // 触发条件3：自主参与（普通用户，非攻击名单）
         if (event.isGroupMessage() && !event.isGroupAtMessage()) {
             // 管理员跳过自主参与（但攻击名单的管理员已在上面处理）
             if (permission != null && permission.isAdmin(senderId)) return false;
             if (!checkHourlyBudget()) return false;
             recordChimeInCandidate(event.getConversationId());
 
-            boolean possibleAdminAttack = mightBeAdminAttackLocally(msg, event.getConversationId());
-            if (!possibleAdminAttack && !canCasuallyChimeIn(event.getConversationId())) {
+            if (!canCasuallyChimeIn(event.getConversationId())) {
                 return false;
             }
 
             JudgeDecision decision = judgeChimeIn(msg, event.getConversationId());
-            if (!decision.shouldReply()) return false;
-            if (!decision.isAdminAttack() && possibleAdminAttack
-                    && !canCasuallyChimeIn(event.getConversationId())) {
-                return false;
-            }
+            // 普通用户只看 CHIME_IN / NO_REPLY；ADMIN_ATTACK 降级为 NO_REPLY
+            // （攻击行为只由 attack-targets 名单触发，不由 LLM 判断触发）
+            if (!decision.shouldReply() || decision.isAdminAttack()) return false;
             pendingJudgeDecisions.put(decisionKey(event, msg), decision);
             return true;
         }
@@ -288,28 +282,22 @@ public final class AiChatHandler implements BotMessageHandler {
 
         List<Map<String, String>> messages = new ArrayList<>();
         messages.add(createMessage("system",
-                "你是一个群聊消息分类器。判断这条消息应该怎么处理。" +
-                "只回复一个词：ADMIN_ATTACK / CHIME_IN / NO_REPLY。\n" +
-                "ADMIN_ATTACK = 直接辱骂、人身攻击、恶意嘲讽管理员/群主（注意：提建议、报bug、抱怨服务器问题不算攻击）\n" +
-                "CHIME_IN = 适合接句话，话题相关、自然插话\n" +
-                "NO_REPLY = 不用理\n" +
-                "重要：要求修东西、提意见、吐槽游戏bug、说服务器哪里不好，这些都不算ADMIN_ATTACK，只是正常反馈。"));
+                "群聊消息分类器。只回复：CHIME_IN 或 NO_REPLY。\n" +
+                "CHIME_IN=跟话题强相关/能帮上忙/有梗。NO_REPLY=话题换了/没你也行/不该插嘴。"));
 
         List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
         if (!ctx.isEmpty()) {
             StringBuilder recent = new StringBuilder();
-            recent.append("最近群聊：\n");
-            int start = Math.max(0, ctx.size() - 8);
+            recent.append("最近群聊（从旧到新，最后一条是最新消息）：\n");
+            int start = Math.max(0, ctx.size() - 15);
             for (int i = start; i < ctx.size(); i++) {
                 recent.append(ctx.get(i).toString()).append("\n");
             }
             messages.add(createMessage("user", recent.toString()));
         }
 
-        // 不注入stance memory，避免把普通消息误判为攻击
-
         messages.add(createMessage("user",
-                "已知管理员=" + buildAdminNamesContext(guildId) + "\n消息=" + msg));
+                "最新消息=" + msg + "\n你要不要插话？只回复 CHIME_IN 或 NO_REPLY。"));
 
         try {
             String decision = chimeInJudgeService.chat(messages);
@@ -320,30 +308,6 @@ public final class AiChatHandler implements BotMessageHandler {
         }
     }
 
-    private boolean mightBeAdminAttackLocally(String msg, String guildId) {
-        if (msg == null || msg.trim().isEmpty()) return false;
-        String lower = msg.toLowerCase(Locale.ROOT);
-
-        boolean hasAttackWord = false;
-        for (String word : ADMIN_ATTACK_WORDS) {
-            if (lower.contains(word.toLowerCase(Locale.ROOT))) {
-                hasAttackWord = true;
-                break;
-            }
-        }
-        if (!hasAttackWord) return false;
-
-        Set<String> names = guildId == null ? null : adminNamesByGroup.get(guildId);
-        if (names != null && !names.isEmpty()) {
-            String normalized = normalizeName(msg);
-            for (String name : names) {
-                if (!name.isEmpty() && normalized.contains(name)) return true;
-            }
-        }
-
-        return lower.contains("管理") || lower.contains("群主") || lower.contains("超管")
-                || lower.contains("admin") || lower.contains("owner");
-    }
 
     private void recordAdminName(String guildId, String username) {
         String normalized = normalizeName(username);
@@ -374,15 +338,15 @@ public final class AiChatHandler implements BotMessageHandler {
     }
 
     private boolean canCasuallyChimeIn(String guildId) {
-        int minMessages = Math.max(1, config.getInt("chime-in-min-messages", 5));
-        int maxMessages = Math.max(minMessages, config.getInt("chime-in-max-messages", 9));
-        long cooldownMs = Math.max(0, config.getInt("chime-in-cooldown-seconds", 120)) * 1000L;
+        int minMessages = Math.max(1, config.getInt("chime-in-min-messages", 3));
+        int maxMessages = Math.max(minMessages, config.getInt("chime-in-max-messages", 6));
+        long cooldownMs = Math.max(0, config.getInt("chime-in-cooldown-seconds", 60)) * 1000L;
         return getCadence(guildId).canReply(minMessages, maxMessages, cooldownMs);
     }
 
     private void markCasualChimeInReplied(String guildId) {
-        int minMessages = Math.max(1, config.getInt("chime-in-min-messages", 5));
-        int maxMessages = Math.max(minMessages, config.getInt("chime-in-max-messages", 9));
+        int minMessages = Math.max(1, config.getInt("chime-in-min-messages", 3));
+        int maxMessages = Math.max(minMessages, config.getInt("chime-in-max-messages", 6));
         getCadence(guildId).markReply(minMessages, maxMessages);
     }
 
@@ -480,7 +444,8 @@ public final class AiChatHandler implements BotMessageHandler {
             judgeDecision = judgeChimeIn(msg, guildId);
             if (!judgeDecision.shouldReply()) return;
         }
-        boolean adminAttack = judgeDecision.isAdminAttack();
+        // ADMIN_ATTACK 只对攻击名单用户生效；普通用户被 LLM 误判时降级
+        boolean adminAttack = judgeDecision.isAdminAttack() && isAttackTarget(senderId);
 
         // 单用户频率限制（@触发也受限，但阈值更高）
         if (!senderIsAdmin) {
@@ -568,9 +533,7 @@ public final class AiChatHandler implements BotMessageHandler {
         if (!isDirectAt && isNoReply(trimmed)) return;
 
         String out = trimmed;
-        if (sensitiveFilter != null && config.getBoolean("sensitive-filter-ai", true)) {
-            out = sensitiveFilter.filter(out);
-        }
+        // 敏感词过滤已由 core 的 sensitive-filter-handlers 统一处理，不再在此处过滤
 
         // 发文字
         if (!out.isEmpty()) {

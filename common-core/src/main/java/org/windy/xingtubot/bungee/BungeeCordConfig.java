@@ -109,6 +109,32 @@ public class BungeeCordConfig implements BotConfig {
         return Collections.emptyList();
     }
 
+    /**
+     * 获取 BungeeCord servers 映射（name→address）。
+     * config.yml 中 servers 是嵌套结构：servers.{name}.address，需特殊提取。
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, String> getServersAddressMap() {
+        Object val = getNested("servers");
+        if (!(val instanceof Map)) return Collections.emptyMap();
+        Map<String, String> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> e : ((Map<?, ?>) val).entrySet()) {
+            String name = String.valueOf(e.getKey());
+            Object serverObj = e.getValue();
+            String address = null;
+            if (serverObj instanceof Map) {
+                Object addr = ((Map<?, ?>) serverObj).get("address");
+                if (addr != null) address = String.valueOf(addr);
+            } else if (serverObj instanceof String) {
+                address = (String) serverObj;
+            }
+            if (address != null && !address.isEmpty()) {
+                result.put(name, address);
+            }
+        }
+        return result;
+    }
+
     private Object getNested(String path) {
         String[] parts = path.split("\\.");
         Map<String, Object> current = data;

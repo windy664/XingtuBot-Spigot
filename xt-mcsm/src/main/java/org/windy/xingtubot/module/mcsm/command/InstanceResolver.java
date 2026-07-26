@@ -104,7 +104,11 @@ public class InstanceResolver {
                     for (JsonElement ie : instances) {
                         JsonObject inst = ie.getAsJsonObject();
                         String uuid = str(inst, "instanceUuid");
-                        String nickname = str(inst, "nickname");
+                        // MCSM API 昵称在 config.nickname，不在顶层
+                        String nickname = "";
+                        JsonObject cfg = inst.getAsJsonObject("config");
+                        if (cfg != null) nickname = str(cfg, "nickname");
+                        if (nickname.isEmpty()) nickname = str(inst, "nickname");
                         if (nickname.isEmpty()) nickname = uuid;
                         String key = nickname.toLowerCase();
                         newCache.put(key, new Ref(uuid, daemonId, nickname));

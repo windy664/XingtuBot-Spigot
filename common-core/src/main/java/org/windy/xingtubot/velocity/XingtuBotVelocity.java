@@ -103,8 +103,9 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
             ChannelIdentifier bridgeChannel = MinecraftChannelIdentifier.from(CrossServerProtocol.CHANNEL);
             bridge = new VelocityBridge(proxy, this, bridgeChannel, logger::warn);
             velocityBridge = bridge;
-            // 子服注册表（name→address），用于 Redis 广播 SERVER_REGISTRY 让子服自动发现代理名
-            bridge.setServersConfig(config.getStringMap("servers"));
+            // 子服注册表（name→address），从 velocity.toml 的 [servers] 段读取，
+            // 用于 Redis 广播 SERVER_REGISTRY 让子服自动发现代理名。
+            bridge.setServersConfig(readVelocityTomlServers(dataDir));
             // 跨服 Redis 信道（通用基础设施，配置在核心 config）：由核心创建并注入到 bridge。
             redisHolder = CrossServerChannelFactory.create(config, false, botLogger);
             if (redisHolder != null) {
@@ -136,6 +137,8 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         // 敏感词过滤（全局单例，供 xt-chatlink / xt-ai 等扩展消费）
         SensitiveFilter sf = SensitiveFilter.fromConfig(config, "sensitive-filter", botLogger);
         commandHandler.getHost().registerService(SensitiveFilter.class, sf);
+        // 指定 handler 自动走敏感词：配置 sensitive-filter-handlers: [ai-chat, ...]
+        commandHandler.getRegistry().setSensitiveFilter(sf, config.getStringList("sensitive-filter-handlers"));
         proxy.getCommandManager().register("vxtb", new VxtbCommand());
         proxy.getCommandManager().register("qq", new QQCommand(config));
 
@@ -227,6 +230,56 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * 从 velocity.toml 的 [servers] 段读取子服注册表（name→address）。
+     * 简单解析：找 [servers] 块，逐行读 key = "value"。
+     */
+    private java.util.Map<String, String> readVelocityTomlServers(Path dataDir) {
+        java.util.Map<String, String> result = new java.util.LinkedHashMap<>();
+        // velocity.toml 在代理工作目录（Velocity 启动时的 cwd）
+        Path cwd = java.nio.file.Paths.get(System.getProperty("user.dir", ".")).toAbsolutePath();
+        Path toml = cwd.resolve("velocity.toml");
+        if (!java.nio.file.Files.exists(toml)) {
+            // 兜底：dataDir 的上两级
+            Path abs = dataDir.toAbsolutePath();
+            if (abs.getParent() != null && abs.getParent().getParent() != null) {
+                toml = abs.getParent().getParent().resolve("velocity.toml");
+            }
+        }
+        if (!java.nio.file.Files.exists(toml)) {
+            logger.warn("[跨服] 找不到 velocity.toml, 已尝试: " + cwd.resolve("velocity.toml"));
+            return result;
+        }
+        logger.info("[跨服] 读取 velocity.toml: " + toml);
+        try {
+            java.util.List<String> lines = java.nio.file.Files.readAllLines(toml, java.nio.charset.StandardCharsets.UTF_8);
+            boolean inServers = false;
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (trimmed.startsWith("[")) {
+                    inServers = "[servers]".equals(trimmed);
+                    continue;
+                }
+                if (!inServers || trimmed.isEmpty() || trimmed.startsWith("#")) continue;
+                // 跳过多行数组（如 try = [...]）
+                if (trimmed.startsWith("[")) continue;
+                int eq = trimmed.indexOf('=');
+                if (eq < 0) continue;
+                String key = trimmed.substring(0, eq).trim();
+                String val = trimmed.substring(eq + 1).trim();
+                // 只处理带引号的字符串值（server 地址），跳过数组/内联表
+                if (val.length() < 2 || !val.startsWith("\"") || !val.endsWith("\"")) continue;
+                val = val.substring(1, val.length() - 1);
+                if (!key.isEmpty() && !val.isEmpty()) {
+                    result.put(key, val);
+                }
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return result;
     }
 
     private void initOpenidNameCache() {

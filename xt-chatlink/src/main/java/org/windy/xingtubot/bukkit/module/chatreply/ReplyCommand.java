@@ -55,13 +55,10 @@ public class ReplyCommand implements CommandExecutor {
             return true;
         }
 
-        // 敏感词替换（玩家回 QQ 群，属群服互联，按 chatlink 开关）
-        ChatreplyModule cm = ChatreplyModule.getInstance();
-        if (cm != null && cm.getConfig().getBoolean("sensitive-filter-chatlink", true)) {
-            SensitiveFilter filter = ChatreplyModule.getSensitiveFilter();
-            if (filter != null) {
-                replyContent = filter.filter(replyContent);
-            }
+        // 敏感词替换（由 core sensitive-filter.Enable 统一控制）
+        SensitiveFilter sf = ChatreplyModule.getSensitiveFilter();
+        if (sf != null) {
+            replyContent = sf.filter(replyContent);
         }
 
         String outbound = player.getName() + "：" + replyContent;

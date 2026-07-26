@@ -82,6 +82,8 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
             bridge = new BungeeCordBridge(getProxy(), this,
                     CrossServerProtocol.CHANNEL,
                     getLogger()::info);
+            // 子服注册表（name→address），从 BungeeCord config.yml 的 servers 段读取
+            bridge.setServersConfig(config.getServersAddressMap());
             // 跨服 Redis 信道（通用基础设施，配置在核心 config）：由核心创建并注入到 bridge。
             redisHolder = CrossServerChannelFactory.create(
                     config, false, new BungeeCordBotLogger(getLogger()));
@@ -109,6 +111,7 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
         SensitiveFilter sf = SensitiveFilter.fromConfig(config, "sensitive-filter",
                 new BungeeCordBotLogger(getLogger()));
         commandHandler.getHost().registerService(SensitiveFilter.class, sf);
+        commandHandler.getRegistry().setSensitiveFilter(sf, config.getStringList("sensitive-filter-handlers"));
         registerCommands();
 
         // 收到消息后的统一处理

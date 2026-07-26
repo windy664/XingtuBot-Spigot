@@ -92,13 +92,10 @@ public class GameChatForwarder implements Listener {
         }
 
         String message = event.getMessage();
-        // 游戏→QQ：玩家发言进群前过滤敏感词（群服互联开关）
-        ChatreplyModule cm = ChatreplyModule.getInstance();
-        if (cm != null && cm.getConfig().getBoolean("sensitive-filter-chatlink", true)) {
-            SensitiveFilter filter = ChatreplyModule.getSensitiveFilter();
-            if (filter != null) {
-                message = filter.filter(message);
-            }
+        // 游戏→QQ：玩家发言进群前过滤敏感词（由 core sensitive-filter.Enable 统一控制）
+        SensitiveFilter sf = ChatreplyModule.getSensitiveFilter();
+        if (sf != null) {
+            message = sf.filter(message);
         }
         // 主动推送走 markdown（加粗名等修饰生效）；队列兜底走纯文本（被动通道会再统一转义）
         final String md = org.windy.xingtubot.chatlink.util.ChatlinkFormat.markdown(gameFormat, player.getName(), message);

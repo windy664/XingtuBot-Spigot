@@ -175,8 +175,10 @@ public class VelocityBridge {
                     reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS,
                             proxyServerName != null ? proxyServerName : ""));
                 } else {
-                    // Redis 模式：无法确定是哪个子服发的（fromServer="all"），
-                    // 广播 SERVER_REGISTRY 让所有子服按端口自动发现代理名。
+                    // Redis 模式：fromServer="all" 无法确定是哪个子服发的。
+                    // 回 I_AM_BOSS（空串）让 xt-auth 的 brainConfirmed 生效（绑定检查/玩家锁依赖它）。
+                    // 同时广播 SERVER_REGISTRY 让子服按端口自动发现代理名。
+                    reply.accept(BridgeCodec.encode(CrossServerProtocol.Type.I_AM_BOSS, ""));
                     broadcastServerRegistry();
                 }
                 break;

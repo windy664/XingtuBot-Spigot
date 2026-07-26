@@ -68,6 +68,12 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         // 跨服 Redis 信道（通用基础设施，配置在核心 config）：核心创建并注册到服务总线，
         redisHolder = CrossServerChannelFactory.create(
                 new SpigotConfig(config), true, new SpigotBotLogger(getLogger()));
+        if (redisHolder != null) {
+            String serverName = org.windy.xingtubot.common.runtime.BotRuntimeState.getProxyServerName();
+            String fallback = config.getString("server-name", "server");
+            getLogger().info("[跨服] Redis 信道已启用, server-name=" +
+                    (serverName != null ? serverName : fallback) + " (等待代理端 SERVER_REGISTRY 自动发现)");
+        }
         if (redisHolder != null && spigotCommandHandler != null) {
             spigotCommandHandler.getHost().registerService(
                     CrossServerChannel.class, redisHolder.channel);

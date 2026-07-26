@@ -45,8 +45,8 @@ public final class GuildMessageListener {
 
         // 解析消息里的 @提及：<@openid> → @昵称
         String resolved = OpenidNameCache.getInstance().resolveMentions(rawContent);
-        // QQ→游戏：群消息进游戏前过滤敏感词
-        if (sensitiveFilter != null && plugin.getConfig().getBoolean("sensitive-filter-chatlink", true)) {
+        // QQ→游戏：群消息进游戏前过滤敏感词（由 core sensitive-filter.Enable 统一控制）
+        if (sensitiveFilter != null) {
             resolved = sensitiveFilter.filter(resolved);
         }
         final String content = resolved;

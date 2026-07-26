@@ -60,7 +60,7 @@ public class SensitiveFilter {
         char replacement = repStr.isEmpty() ? '*' : repStr.charAt(0);
 
         return new SensitiveFilter(
-                enabled && cloudEnabled,
+                enabled, // 只要 Enable=true 就生效，云端词库是增强不是前提
                 localWords,
                 cloudIgnored,
                 cloudUrls,
@@ -109,7 +109,10 @@ public class SensitiveFilter {
 
     /** 异步下载云词库，合并到 allWords */
     public void reloadCloudWords() {
-        if (!enabled || cloudUrls.isEmpty()) return;
+        if (!enabled || cloudUrls.isEmpty()) {
+            if (logger != null) logger.info("[敏感词] 云端词库跳过（enabled=" + enabled + ", urls=" + cloudUrls.size() + "）, 本地词库: " + localWords.size() + " 词");
+            return;
+        }
 
         CompletableFuture.runAsync(() -> {
             try {
@@ -136,11 +139,21 @@ public class SensitiveFilter {
                     allWords.addAll(cloudWords);
                 }
 
-                if (logger != null) logger.info("[敏感词] 云端词库已重载, 大小: " + allWords.size());
+                if (logger != null) logger.info("[敏感词] 云端词库已加载, 云端: " + cloudWords.size() + " 词, 总计: " + allWords.size() + " 词");
             } catch (Exception e) {
-                if (logger != null) logger.warn("[敏感词] 无法下载云端词库: " + e.getMessage());
+                if (logger != null) logger.warn("[敏感词] 云端词库加载失败: " + e.getMessage() + ", 本地词库: " + localWords.size() + " 词仍生效");
             }
         });
+    }
+
+    /** 过滤器是否启用。 */
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    /** 当前词库大小（本地+云端）。 */
+    public int wordCount() {
+        return allWords.size();
     }
 
     /**
