@@ -162,15 +162,35 @@ public final class AdminStanceMemory {
             Map<String, List<String>> loaded = GSON.fromJson(r,
                     new TypeToken<Map<String, List<String>>>() {}.getType());
             if (loaded != null) {
+                boolean dirty = false;
                 for (Map.Entry<String, List<String>> e : loaded.entrySet()) {
-                    List<String> list = Collections.synchronizedList(new ArrayList<>(e.getValue()));
-                    // 裁剪到上限
+                    List<String> list = Collections.synchronizedList(new ArrayList<>());
+                    for (String item : e.getValue()) {
+                        String cleaned = stripNestedSummaryPrefix(item);
+                        if (cleaned != item) dirty = true;
+                        if (!cleaned.isEmpty()) list.add(cleaned);
+                    }
                     while (list.size() > MAX_PER_GROUP) list.remove(0);
                     stances.put(e.getKey(), list);
                 }
+                if (dirty) save(); // 修复后回写磁盘
             }
         } catch (Exception ignored) {
         }
+    }
+
+    /** 去除嵌套的 [以往观点摘要] 前缀，提取实际内容。 */
+    private static String stripNestedSummaryPrefix(String s) {
+        if (s == null) return "";
+        // 反复剥掉 [以往观点摘要] 前缀直到没有
+        while (s.startsWith(SUMMARY_PREFIX)) {
+            s = s.substring(SUMMARY_PREFIX.length());
+        }
+        // 剥掉残余的嵌套前缀（没有空格分隔的情况）
+        while (s.startsWith("[以往观点摘要]")) {
+            s = s.substring("[以往观点摘要]".length());
+        }
+        return s.trim();
     }
 
     private void save() {

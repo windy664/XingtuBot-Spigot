@@ -62,7 +62,9 @@ public final class XingtuBot extends JavaPlugin implements Listener {
         } else {
             startBot(config);
         }
-        registerCommands();
+        if (!slave) {
+            registerCommands();
+        }
         enableModules(config, slave);
 
         // 跨服 Redis 信道（通用基础设施，配置在核心 config）：核心创建并注册到服务总线，

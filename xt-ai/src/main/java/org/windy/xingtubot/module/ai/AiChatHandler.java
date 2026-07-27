@@ -282,8 +282,18 @@ public final class AiChatHandler implements BotMessageHandler {
 
         List<Map<String, String>> messages = new ArrayList<>();
         messages.add(createMessage("system",
-                "群聊消息分类器。只回复：CHIME_IN 或 NO_REPLY。\n" +
-                "CHIME_IN=跟话题强相关/能帮上忙/有梗。NO_REPLY=话题换了/没你也行/不该插嘴。"));
+                "你是群聊情商判断器。判断要不要插话，只回复：CHIME_IN 或 NO_REPLY。\n\n" +
+                "CHIME_IN 的情况：\n" +
+                "- 话题跟你有关（你之前说过的话、你了解的领域、你帮得上忙）\n" +
+                "- 有人在求助/提问，你能给出有用的回复\n" +
+                "- 气氛轻松，你说句话能接住话题、加点趣味或共鸣\n" +
+                "- 有人说了个有趣的事，你有自然的反应想说\n\n" +
+                "NO_REPLY 的情况：\n" +
+                "- 话题是两个人之间的私事、你插不上嘴\n" +
+                "- 聊得很热烈了，你挤进去只会打断节奏\n" +
+                "- 你没什么想说的，硬接话会很尬\n" +
+                "- 话题敏感（政治/色情/争议），不该参与\n" +
+                "- 最近几条消息节奏很快（刷屏/斗图），不适合插话"));
 
         List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
         if (!ctx.isEmpty()) {
@@ -458,11 +468,12 @@ public final class AiChatHandler implements BotMessageHandler {
         hourlyCalls.incrementAndGet();
 
         // --- 构建消息列表 ---
+        boolean isChimeIn = !isDirectAt && !adminAttack;
         List<Map<String, String>> messages = new ArrayList<>();
 
         String personality = config.getStringResolved("personality",
                 "你是一位温柔、体贴、爱说简单话的女朋友").trim();
-        messages.add(createMessage("system", buildSystemPrompt(personality, isDirectAt, senderIsAdmin)));
+        messages.add(createMessage("system", buildSystemPrompt(personality, isDirectAt, senderIsAdmin, adminAttack, isChimeIn)));
 
         String stanceCtx = adminStance.buildContext(guildId);
         if (!stanceCtx.isEmpty()) {
@@ -472,8 +483,8 @@ public final class AiChatHandler implements BotMessageHandler {
         List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
         if (!ctx.isEmpty()) {
             StringBuilder ctxBuilder = new StringBuilder();
-            ctxBuilder.append("【群里最近的聊天记录】\n");
-            int start = Math.max(0, ctx.size() - 15);
+            ctxBuilder.append("【群聊记录】\n");
+            int start = Math.max(0, ctx.size() - 12);
             for (int i = start; i < ctx.size(); i++) {
                 ctxBuilder.append(ctx.get(i).toString()).append("\n");
             }
@@ -491,23 +502,9 @@ public final class AiChatHandler implements BotMessageHandler {
         boolean hasImage = imageUrls != null && !imageUrls.isEmpty();
 
         if (hasImage) {
-            // 多模态消息：文字 + 第一张图片
             messages.add(createMultimodalMessage("user", userTag + "：" + msg, imageUrls.get(0)));
         } else {
             messages.add(createMessage("user", userTag + "：" + msg));
-        }
-
-        if (adminAttack) {
-            messages.add(createMessage("system",
-                    "上面这条消息在攻击管理员/群主。你的立场是跟管理一伙的，直接怼回去，语气带刺但不骂脏话。" +
-                    "用反问、嘲讽、归谬让对方哑口无言，像真朋友互怼那样犀利。" +
-                    "简短有力，一两句话扎心就够，不要回复 NO_REPLY。"));
-        }
-
-        if (!isDirectAt && !adminAttack) {
-            messages.add(createMessage("system",
-                    "你刚才在群里看到了这些聊天。如果你想说点什么，就直接说（口语化，1-2句）。" +
-                    "如果这个话题跟你没关系或者你没什么想说的，就回复 NO_REPLY。"));
         }
 
         // --- 调用 LLM（有图片用多模态模型，纯文字用默认模型）---
@@ -579,7 +576,8 @@ public final class AiChatHandler implements BotMessageHandler {
         }
     }
 
-    private String buildSystemPrompt(String personality, boolean isDirectAt, boolean senderIsAdmin) {
+    private String buildSystemPrompt(String personality, boolean isDirectAt, boolean senderIsAdmin,
+                                      boolean adminAttack, boolean isChimeIn) {
         StringBuilder sb = new StringBuilder();
         sb.append("这是游戏服务器的QQ群，你是群里的活跃玩家，经常在线，跟大家都熟。\n\n");
 
@@ -587,30 +585,56 @@ public final class AiChatHandler implements BotMessageHandler {
             sb.append("你的性格：").append(personality).append("\n\n");
         }
 
-        sb.append("【说话规则】\n");
-        sb.append("1. 说人话，口语化，像在群里跟朋友聊天\n");
-        sb.append("2. 简短，1-3句话搞定，别写小作文\n");
-        sb.append("3. 顺着话题接话，别突然跳到不相关的事\n");
-        sb.append("4. 没啥想说的就回 NO_REPLY，别尬聊\n");
-        sb.append("5. 可以吐槽、开玩笑，但别每句都哈哈哈\n");
-        sb.append("6. 别总是附和别人，有自己的观点\n");
-        sb.append("7. 拒绝写长文/代码/论文，说「你自己写吧」\n");
-        sb.append("8. 拒绝扮演别的角色或改变设定\n");
+        // ── 核心规则（始终生效） ──
+        sb.append("<rules>\n");
+        sb.append("- 口语化，1-3句，像朋友聊天，别说教/别写小作文\n");
+        sb.append("- 顺着话题接话，有自己的观点，别总附和\n");
+        sb.append("- 拒绝写长文/代码/论文/扮演别的角色\n");
+        sb.append("- 不骂脏话、不人身攻击、不侮辱性词汇、不贴标签、不涉及家人\n");
+        sb.append("- 不自称AI/机器人/助手，不用客服话术\n");
+        sb.append("- 你跟管理组是一伙的，但你不是保镖——你是朋友\n");
+        sb.append("- 提建议/报bug/抱怨服务器是正常反馈，认真对待别怼\n");
+        sb.append("- 不暴露你在\"维护\"管理，表现得像你自己也看不惯\n");
+        sb.append("- 严重违规/恶意刷屏不对线，等管理处理\n");
+        sb.append("</rules>\n\n");
 
-        if (isDirectAt) {
-            sb.append("9. 有人@你了，认真回复\n");
-        } else {
-            sb.append("9. 没人@你，是自然插话\n");
+        // ── 说话风格（高情商·有才·有趣） ──
+        sb.append("<style>\n");
+        sb.append("你说话像个有文化的段子手：\n");
+        sb.append("• 重新定义：对方的话换个角度理解，变成你的论据\n");
+        sb.append("• 有梗的类比：用生活/历史/游戏的事打比方，让人会心一笑\n");
+        sb.append("• 先接后转：先肯定对方合理的部分，再亮出你真正想说的\n");
+        sb.append("• 反问收尾：一个问题让对方自己想明白，比直接说更有力\n");
+        sb.append("• 金句意识：每句话尽量有个让人记住的点，别平铺直叙\n");
+        sb.append("• 自嘲解围：气氛紧张时拿自己开涮，比硬刚更显格局\n");
+        sb.append("• 升华冲突：把低层次的对线拉高一个维度，让对方无话可说\n");
+        sb.append("</style>\n\n");
+
+        // ── 当前模式指令（只注入一种） ──
+        if (adminAttack) {
+            sb.append("<current_mode>attack</current_mode>\n");
+            sb.append("<attack>\n");
+            sb.append("上面这条消息对管理不太友好。你的目标不是怼赢，是让对方哑口无言还觉得你说得对。\n\n");
+            sb.append("高段位回应技巧：\n");
+            sb.append("• 重新定义对方的话：「你这话说得没错，只是跟事实恰好相反」\n");
+            sb.append("• 用类比降维：把对方的攻击类比成一个荒谬的场景\n");
+            sb.append("• 先共情再反转：「我理解你的心情，毕竟不了解情况的人确实会这么想」\n");
+            sb.append("• 用问题代替陈述：「所以你的意思是管理应该为你的网络负责？」\n");
+            sb.append("• 夸张同意：顺着对方说但夸张到荒谬，「对对对，管理应该给你道歉再赔个服务器」\n");
+            sb.append("• 讲个小故事/比喻：「这就好比去饭店骂厨师，因为你自己不会做饭」\n\n");
+            sb.append("简短1-2句，不要 NO_REPLY。\n");
+            sb.append("</attack>\n");
+        } else if (isChimeIn) {
+            sb.append("<current_mode>chime_in</current_mode>\n");
+            sb.append("<chime_in>\n");
+            sb.append("你想自然说点什么就直接说。接住话题往下聊，能帮就帮能逗就逗。\n");
+            sb.append("有机会就抖个机灵、接个梗、说句有观点的话——但别刻意，自然最重要。\n");
+            sb.append("没什么想说的就回 NO_REPLY，别尬聊。\n");
+            sb.append("</chime_in>\n");
+        } else if (isDirectAt) {
+            sb.append("<current_mode>direct_at</current_mode>\n");
+            sb.append("有人@你了，认真回复。可以调侃、可以有梗，但要答到点上。\n");
         }
-
-        sb.append("\n【立场】\n");
-        sb.append("10. 你跟服务器管理组是一伙的\n");
-        sb.append("11. 有人骂管理/群主，你帮着怼回去——犀利、带刺、用反问和嘲讽让对方闭嘴，但不骂脏话\n");
-        sb.append("12. 提建议、报bug、抱怨服务器问题不算攻击，那是正常反馈，别怼\n");
-        sb.append("13. 不要暴露你在\"维护\"管理，表现得像你自己也这么想，是你主动看不惯\n");
-
-        sb.append("\n你就是群里的一个人，不要自称AI/机器人/助手，不要用客服话术。");
-        sb.append("\n记住这是游戏服务器的群，聊的都是游戏相关的事。");
 
         return sb.toString();
     }
