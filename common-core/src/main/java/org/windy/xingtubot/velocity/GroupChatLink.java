@@ -170,6 +170,26 @@ public class GroupChatLink {
         return true;
     }
 
+    /**
+     * 后台/手动回复最近活跃的群（Markdown 通道，保留格式）。
+     * 与 {@link #replyToLastGroup} 的区别：走 {@code sendGroupMarkdown} 而非纯文本。
+     */
+    public boolean replyToLastGroupMarkdown(String markdownContent) {
+        final ProactiveSender s = sender();
+        final String gid = bridgeTarget();
+        if (s != null && s.isReady() && isGroupAllowed(gid)) {
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                if (!s.sendGroupMarkdown(gid, markdownContent) && !fallbackReply(markdownContent)) {
+                    queueFallback(gid, markdownContent);
+                }
+            });
+            return true;
+        }
+        if (fallbackReply(markdownContent)) return true;
+        queueFallback(gid, markdownContent);
+        return true;
+    }
+
     /** 群 → 服：把群消息显示给所有在线玩家。 */
     public void onGroupMessage(BotMessageContext event, String sender, String content) {
         // 解析消息中的 @提及：<@openid> → @昵称

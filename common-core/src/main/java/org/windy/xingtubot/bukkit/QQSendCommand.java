@@ -7,6 +7,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.windy.xingtubot.common.qq.QqOpenApiClient;
 import org.windy.xingtubot.common.queue.PendingMessageQueue;
+import org.windy.xingtubot.common.util.Md;
 
 import java.util.Collections;
 import java.util.List;
@@ -43,7 +44,7 @@ public class QQSendCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0) {
             sender.sendMessage("§e用法: /qq <消息内容>");
-            sender.sendMessage("§7向 QQ 群发送消息（需群里最近有人说话）");
+            sender.sendMessage("§7向 QQ 群发送消息，支持 markdown 格式（**粗体** *斜体* `代码`）");
             return true;
         }
 
@@ -73,14 +74,16 @@ public class QQSendCommand implements CommandExecutor, TabCompleter {
             senderName = "控制台";
         }
 
-        String message = "📢 [" + senderName + "] " + content;
+        // 标题用纯文本，正文保留 markdown 格式
+        String header = "📢 \\[" + Md.plain(senderName) + "\\] ";
+        String markdown = header + content;
 
-        // 优先走主动消息
+        // 优先走主动消息（markdown 通道）
         QqOpenApiClient api = this.apiClient;
         String gid = this.defaultGroupOpenid;
         if (api != null && gid != null) {
             try {
-                api.sendProactiveGroupMessage(gid, message);
+                api.sendProactiveGroupMarkdown(gid, markdown);
                 sender.sendMessage("§a✅ 已发送到 QQ 群: " + content);
                 return true;
             } catch (Exception e) {
@@ -89,11 +92,12 @@ public class QQSendCommand implements CommandExecutor, TabCompleter {
             }
         }
 
-        // 被动模式：有目标群按群定向入队，否则进全局队列
+        // 被动模式：有目标群按群定向入队，否则进全局队列（队列走纯文本，避免markdown残留）
+        String plainMessage = "📢 [" + senderName + "] " + content;
         if (gid != null) {
-            queue.offer(gid, message);
+            queue.offer(gid, plainMessage);
         } else {
-            queue.offer(message);
+            queue.offer(plainMessage);
         }
         sender.sendMessage("§a✅ 已加入推送队列，下次群里有人 @机器人 时一起发出");
         return true;

@@ -2,6 +2,8 @@ package org.windy.xingtubot.module.ai;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import org.windy.xingtubot.common.ai.AiService;
+import org.windy.xingtubot.common.platform.BotLogger;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -14,23 +16,34 @@ import java.util.concurrent.ConcurrentHashMap;
  * 用于让 AI 在群聊中自然地站在超管一方。
  *
  * <p>持久化到 JSON 文件，重启不丢失。每群最多保留 10 条。
+ * <p>原始立场超过阈值时，自动调用 LLM 压缩成摘要，节省 system prompt token。
  */
 public final class AdminStanceMemory {
 
     private static final int MAX_PER_GROUP = 10;
-    private static final int MAX_RAW_RECENT = 5;
+    private static final int COMPRESS_THRESHOLD = 5; // 原始条目超过此值触发 LLM 压缩
     private static final Gson GSON = new Gson();
+    private static final String SUMMARY_PREFIX = "[以往观点摘要] ";
 
     private final ConcurrentHashMap<String, List<String>> stances = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Boolean> pendingCompress = new ConcurrentHashMap<>();
     private final File file;
+    private volatile AiService aiService;
+    private volatile BotLogger logger;
 
     public AdminStanceMemory(File dataDir) {
         this.file = new File(dataDir, "admin_stance.json");
         load();
     }
 
+    /** 注入 LLM 服务，启用自动压缩（不注入则只做截断兜底）。 */
+    public void setAiService(AiService aiService, BotLogger logger) {
+        this.aiService = aiService;
+        this.logger = logger;
+    }
+
     /**
-     * 记录一条超管发言（自动持久化，旧消息自动压缩）。
+     * 记录一条超管发言（自动持久化，攒够阈值异步 LLM 压缩）。
      */
     public void record(String guildId, String content) {
         if (guildId == null || content == null || content.trim().isEmpty()) return;
@@ -39,65 +52,80 @@ public final class AdminStanceMemory {
             // 去重
             if (!list.isEmpty() && list.get(list.size() - 1).equals(content.trim())) return;
             list.add(content.trim());
-            compress(list);
         }
         save();
+        // 异步检查是否需要压缩
+        maybeCompressAsync(guildId, list);
     }
 
     /**
-     * 压缩：超过 MAX_PER_GROUP 时，旧的原始消息合并成一条摘要。
-     * 已有的摘要条目不再参与合并（避免嵌套前缀爆炸）。
+     * 原始条目超过阈值时，异步调用 LLM 压缩成摘要。
+     * 不阻塞 record() 调用。
      */
-    private void compress(List<String> list) {
-        // 分离摘要和原始消息
-        List<String> summaries = new ArrayList<>();
-        List<String> raw = new ArrayList<>();
-        for (String item : list) {
-            if (item.startsWith(SUMMARY_PREFIX)) {
-                summaries.add(item);
-            } else {
-                raw.add(item);
-            }
+    private void maybeCompressAsync(String guildId, List<String> list) {
+        int rawCount = countRaw(list);
+        if (rawCount <= COMPRESS_THRESHOLD) return;
+        if (aiService == null) return; // 无 LLM，跳过
+        if (pendingCompress.putIfAbsent(guildId, Boolean.TRUE) != null) return; // 已有压缩在跑
+
+        // 快照当前条目用于异步处理
+        List<String> snapshot;
+        synchronized (list) {
+            snapshot = new ArrayList<>(list);
         }
 
-        // 原始消息超限 → 旧的合并成一条摘要
-        if (raw.size() > MAX_RAW_RECENT) {
-            int mergeCount = raw.size() - MAX_RAW_RECENT + 1;
-            StringBuilder merged = new StringBuilder(SUMMARY_PREFIX);
-            for (int i = 0; i < mergeCount; i++) {
-                if (i > 0) merged.append("｜");
-                merged.append(raw.get(i));
+        new Thread(() -> {
+            try {
+                doCompress(guildId, snapshot);
+            } finally {
+                pendingCompress.remove(guildId);
             }
-            // 保留未合并的原始消息
-            List<String> kept = new ArrayList<>(raw.subList(mergeCount, raw.size()));
-            // 旧摘要 + 新合并摘要（最多保留1条摘要）+ 未合并的原始消息
-            summaries.add(merged.toString());
-            if (summaries.size() > 1) {
-                // 多条摘要合并成一条
-                StringBuilder allSum = new StringBuilder(SUMMARY_PREFIX);
-                for (int i = 0; i < summaries.size(); i++) {
-                    String s = summaries.get(i);
-                    if (i > 0) allSum.append("｜");
-                    // 去掉已有前缀避免嵌套
-                    allSum.append(s.startsWith(SUMMARY_PREFIX)
-                            ? s.substring(SUMMARY_PREFIX.length()) : s);
-                }
-                summaries.clear();
-                summaries.add(allSum.toString());
-            }
-            raw = kept;
-        }
-
-        // 重组：摘要在前，原始消息在后
-        list.clear();
-        list.addAll(summaries);
-        list.addAll(raw);
-
-        // 最终裁剪
-        while (list.size() > MAX_PER_GROUP) list.remove(list.size() - 1);
+        }, "admin-stance-compress-" + guildId).start();
     }
 
-    private static final String SUMMARY_PREFIX = "[以往观点摘要] ";
+    private int countRaw(List<String> list) {
+        int count = 0;
+        for (String item : list) {
+            if (!item.startsWith(SUMMARY_PREFIX)) count++;
+        }
+        return count;
+    }
+
+    /**
+     * LLM 压缩：把所有条目（旧摘要 + 原始消息）交给 LLM 合并成一句精炼摘要。
+     */
+    private void doCompress(String guildId, List<String> snapshot) {
+        // 构建压缩 prompt
+        StringBuilder input = new StringBuilder();
+        for (String item : snapshot) {
+            input.append("- ").append(item).append("\n");
+        }
+
+        String prompt = "以下是管理员在QQ群里说过的话，请用1-2句中文总结他的核心立场和观点，" +
+                "保留具体态度和偏好，丢掉无关细节。直接输出摘要，不要加任何前缀。\n\n" + input;
+
+        try {
+            String summary = aiService.chat(prompt);
+            if (summary == null || summary.trim().isEmpty()) return;
+
+            String compressed = SUMMARY_PREFIX + summary.trim();
+            List<String> list = stances.get(guildId);
+            if (list == null) return;
+
+            synchronized (list) {
+                list.clear();
+                list.add(compressed);
+            }
+            save();
+            if (logger != null) {
+                logger.info("[AI] 群 " + guildId + " 超管立场已压缩（" + snapshot.size() + "条 → 1条摘要）");
+            }
+        } catch (Exception e) {
+            if (logger != null) {
+                logger.warn("[AI] 超管立场压缩失败: " + e.getMessage());
+            }
+        }
+    }
 
     /**
      * 构建"超管观点"上下文，注入到 AI 系统提示中。

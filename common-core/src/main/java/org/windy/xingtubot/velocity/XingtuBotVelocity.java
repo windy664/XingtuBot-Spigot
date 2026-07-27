@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import com.velocitypowered.api.proxy.messages.ChannelIdentifier;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import org.windy.xingtubot.common.config.BotConfig;
+import org.windy.xingtubot.common.util.Md;
 import org.windy.xingtubot.common.util.Pretty;
 import org.windy.xingtubot.common.bot.BotLauncher;
 import org.windy.xingtubot.common.bridge.CrossServerProtocol;
@@ -468,7 +469,7 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
             String[] args = invocation.arguments();
 
             if (args.length == 0) {
-                sender.sendMessage(Component.text("用法: /qq <消息内容>"));
+                sender.sendMessage(Component.text("用法: /qq <消息内容>（支持 markdown：**粗体** *斜体* `代码`）"));
                 return;
             }
 
@@ -493,11 +494,12 @@ public class XingtuBotVelocity implements org.windy.xingtubot.common.module.Xing
                 senderName = ((Player) sender).getUsername();
             }
 
-            String message = "📢 [" + senderName + "] " + content;
+            String header = "📢 \\[" + Md.plain(senderName) + "\\] ";
+            String markdown = header + content;
 
             GroupChatLink gcl = commandHandler != null && commandHandler.getHost() != null
                     ? commandHandler.getHost().getService(GroupChatLink.class) : null;
-            if (gcl != null && gcl.replyToLastGroup(message)) {
+            if (gcl != null && gcl.replyToLastGroupMarkdown(markdown)) {
                 sender.sendMessage(Component.text("✅ 已发送到 QQ 群: " + content));
             } else {
                 sender.sendMessage(Component.text("⚠️ 发送失败（无可用通信通道）"));

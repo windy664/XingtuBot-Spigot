@@ -209,7 +209,7 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
             @Override
             public void execute(CommandSender sender, String[] args) {
                 if (args.length == 0) {
-                    sender.sendMessage(new TextComponent("§e用法: /bqq <消息内容>"));
+                    sender.sendMessage(new TextComponent("§e用法: /bqq <消息内容>（支持 markdown）"));
                     return;
                 }
                 StringBuilder sb = new StringBuilder();
@@ -221,11 +221,12 @@ public class XingtuBotBungeeCord extends Plugin implements Listener, XingtuBotHo
                 if (content.isEmpty()) { sender.sendMessage(new TextComponent("❌ 消息内容不能为空")); return; }
 
                 String senderName = sender instanceof ProxiedPlayer ? ((ProxiedPlayer) sender).getName() : "控制台";
-                String message = "📢 [" + senderName + "] " + content;
+                String header = "📢 \\[" + org.windy.xingtubot.common.util.Md.plain(senderName) + "\\] ";
+                String markdown = header + content;
 
                 BungeeCordGroupChatLink gcl = commandHandler.getHost() != null
                         ? commandHandler.getHost().getService(BungeeCordGroupChatLink.class) : null;
-                if (gcl != null && gcl.replyToLastGroup(message)) {
+                if (gcl != null && gcl.replyToLastGroupMarkdown(markdown)) {
                     sender.sendMessage(new TextComponent("✅ 已发送到 QQ 群: " + content));
                 } else {
                     sender.sendMessage(new TextComponent("⚠️ 发送失败（无可用通信通道）"));

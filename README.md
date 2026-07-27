@@ -18,7 +18,7 @@ QQ 群 ↔ Minecraft 服务器的多功能桥接机器人。
 
 **单机 Bukkit：** jar 放入 `plugins/`，填 `openapi-app-id` 和 `openapi-client-secret`，重启。
 
-**代理 + 子服：** Velocity 当大脑跑 bot，Bukkit 子服 `server-role: slave`，跨服走 Redis。
+**代理 + 子服：** Velocity 当大脑跑 bot，Bukkit 子服自动探测代理（ProxyDetector），跨服走 Redis。
 
 详见 [Wiki](https://github.com/windy664/XingtuBot-Spigot/wiki)。
 

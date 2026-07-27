@@ -120,6 +120,25 @@ public class BungeeCordGroupChatLink implements Listener {
         return true;
     }
 
+    /**
+     * Markdown 通道回复最近活跃的群，保留格式。
+     */
+    public boolean replyToLastGroupMarkdown(String markdownContent) {
+        final ProactiveSender s = sender();
+        final String gid = bridgeTarget();
+        if (s != null && s.isReady() && isGroupAllowed(gid)) {
+            CompletableFuture.runAsync(() -> {
+                if (!s.sendGroupMarkdown(gid, markdownContent) && !fallbackReply(markdownContent)) {
+                    queueFallback(gid, markdownContent);
+                }
+            });
+            return true;
+        }
+        if (fallbackReply(markdownContent)) return true;
+        queueFallback(gid, markdownContent);
+        return true;
+    }
+
     private boolean isGroupAllowed(String gid) {
         return gid != null && (allowedGroups.contains("*") || allowedGroups.contains(gid));
     }
