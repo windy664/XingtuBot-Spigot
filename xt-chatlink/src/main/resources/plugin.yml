@@ -4,6 +4,8 @@ main: org.windy.xingtubot.ext.xtchatlink.ChatlinkBukkitPlugin
 authors: [ 风吟 ]
 depend:
   - XingtuBot
+softdepend:
+  - XingtuBot-Auth   # ChatImage 模组探测复用其内置 PacketEvents（软依赖：不装则探测降级，不影响本插件）
 commands:
   messagereply:
     description: 回复某位群成员

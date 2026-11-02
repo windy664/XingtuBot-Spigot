@@ -1,6 +1,14 @@
 # 群服互联功能开关
 chatreply-enable: true
 
+# QQ 图片在游戏内的显示方式（按玩家是否安装 ChatImage 模组逐玩家分流）
+#   auto   = 探测：装 ChatImage 的玩家收 [[CICode,...]]（模组自动渲染成聊天栏图片），
+#            未装的收可点击的 [图片] 链接（浏览器打开原图）。
+#            探测依赖 XingtuBot-Auth（提供 PacketEvents）；未装时回退为全 CICode（与旧行为一致）。
+#   cicode = 全部按 CICode 文本转发（旧行为）
+#   link   = 全部按 [图片] 可点击链接转发
+chatlink-image-format: "auto"
+
 # 游戏内聊天格式前缀
 chat-format: "🐧§cQQ群 §7| §f"
 

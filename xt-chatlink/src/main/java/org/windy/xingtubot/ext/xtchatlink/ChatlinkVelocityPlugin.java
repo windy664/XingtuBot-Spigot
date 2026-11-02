@@ -2,6 +2,7 @@ package org.windy.xingtubot.ext.xtchatlink;
 
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Dependency;
@@ -15,6 +16,7 @@ import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ExtensionBootstrap;
 import org.windy.xingtubot.common.module.XingtuBotHost;
 import org.windy.xingtubot.common.module.XingtuBotHostProvider;
+import org.windy.xingtubot.common.chatlink.ChatImageTracker;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.module.ChatlinkModule;
 import org.windy.xingtubot.velocity.GroupChatLink;
@@ -34,7 +36,8 @@ import java.util.List;
         version = "2.2.1",
         authors = {"风吟"},
         dependencies = {
-                @Dependency(id = "xingtubotvelocity")
+                @Dependency(id = "xingtubotvelocity"),
+                @Dependency(id = "xingtubot-auth")  // ChatImage 探测复用 xt-auth 内置的 PacketEvents（须先初始化）
         }
 )
 public class ChatlinkVelocityPlugin {
@@ -44,6 +47,7 @@ public class ChatlinkVelocityPlugin {
     private final Path dataDir;
     private BotModule module;
     private GroupChatLink groupChatLink;
+    private ChatImageTracker imageTracker;
 
     @Inject
     public ChatlinkVelocityPlugin(ProxyServer proxy, Logger logger, @DataDirectory Path dataDir) {
@@ -80,6 +84,18 @@ public class ChatlinkVelocityPlugin {
         if (config.getBoolean("chatreply-enable", true) && host != null) {
             groupChatLink = new GroupChatLink(proxy, this,
                     config.getString("chat-format", "§b[QQ群] §f"));
+
+            // ===== ChatImage 模组探测（复用 xt-auth 内置并初始化的 PacketEvents，绝不自行 build/init）=====
+            imageTracker = new org.windy.xingtubot.common.chatlink.ChatImageTracker();
+            imageTracker.setMode(org.windy.xingtubot.common.chatlink.ChatImageTracker
+                    .parseMode(config.getString("chatlink-image-format", "auto")));
+            if (!org.windy.xingtubot.chatlink.detect.ChatImageDetection.tryAttach(imageTracker, botLogger)
+                    && imageTracker.getMode() == org.windy.xingtubot.common.chatlink.ChatImageTracker.Mode.AUTO) {
+                // 无探测能力（未装 xt-auth）：AUTO 回退为全 CICode，保持旧行为
+                imageTracker.setMode(org.windy.xingtubot.common.chatlink.ChatImageTracker.Mode.CICODE);
+            }
+            groupChatLink.setChatImageTracker(imageTracker);
+
             // 注入调试日志器：核心调试开关开启时在群服互联两条链路入口/兜底打点
             groupChatLink.setLogger(botLogger);
             // game→QQ 聊天行 markdown 模板（{player}/{message}）
@@ -115,6 +131,13 @@ public class ChatlinkVelocityPlugin {
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
         ExtensionBootstrap.disable(module);
+        org.windy.xingtubot.chatlink.detect.ChatImageDetection.detach();
+    }
+
+    /** 玩家断线清 ChatImage 标记（重新入服会重新广播频道注册）。 */
+    @Subscribe
+    public void onDisconnect(DisconnectEvent event) {
+        if (imageTracker != null) imageTracker.forget(event.getPlayer().getUniqueId());
     }
 
     private void warnNoConcreteGroup(List<String> groups, BotLogger logger) {

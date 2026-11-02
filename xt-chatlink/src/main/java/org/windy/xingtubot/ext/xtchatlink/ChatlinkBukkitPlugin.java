@@ -20,6 +20,7 @@ public final class ChatlinkBukkitPlugin extends JavaPlugin {
 
     private BotModule module;
     private ChatreplyModule chatreplyModule;
+    private org.windy.xingtubot.common.chatlink.ChatImageTracker imageTracker;
 
     @Override
     public void onEnable() {
@@ -32,16 +33,33 @@ public final class ChatlinkBukkitPlugin extends JavaPlugin {
 
         YamlBotConfig config = new YamlBotConfig(getDataFolder(), getClass().getClassLoader());
 
+        // ===== ChatImage 模组探测（复用 xt-auth 内置并初始化的 PacketEvents，绝不自行 build/init）=====
+        imageTracker = new org.windy.xingtubot.common.chatlink.ChatImageTracker();
+        imageTracker.setMode(org.windy.xingtubot.common.chatlink.ChatImageTracker
+                .parseMode(config.getString("chatlink-image-format", "auto")));
+        if (!org.windy.xingtubot.chatlink.detect.ChatImageDetection.tryAttach(imageTracker, logger)
+                && imageTracker.getMode() == org.windy.xingtubot.common.chatlink.ChatImageTracker.Mode.AUTO) {
+            // 无探测能力（未装 xt-auth）：AUTO 回退为全 CICode，保持旧行为
+            imageTracker.setMode(org.windy.xingtubot.common.chatlink.ChatImageTracker.Mode.CICODE);
+        }
+        // 玩家退服清标记（频道注册每次入服重新广播，重进即恢复探测）
+        getServer().getPluginManager().registerEvents(new org.bukkit.event.Listener() {
+            @org.bukkit.event.EventHandler
+            public void onQuit(org.bukkit.event.player.PlayerQuitEvent e) {
+                imageTracker.forget(e.getPlayer().getUniqueId());
+            }
+        }, this);
+
         // QQ→游戏：注册 GameChatBridge（用 xt-chatlink 自己的 GuildMessageListener，带 group openid 拼回复按钮）。
         // 必须在 ExtensionBootstrap.enable 之前注册——ChatlinkModule.onEnable 会 getService(GameChatBridge) 拿它。
         if (host != null) {
+            final org.windy.xingtubot.common.chatlink.ChatImageTracker tracker = imageTracker;
             host.registerService(ChatlinkModule.GAME_BRIDGE_SERVICE,
                     (java.util.function.BiConsumer<org.windy.xingtubot.common.event.BotMessageContext, String>) (botEvent, content) ->
                             org.windy.xingtubot.bukkit.module.chatreply.listener.GuildMessageListener.broadcastToGame(
                                     this, botEvent.getSenderId(), botEvent.getUsername(),
-                                    // 群图片 → ChatImage 码：装 mod 的玩家看到图，没装的看到文本，游戏照常
-                                    org.windy.xingtubot.common.image.ChatImageCode.appendTo(
-                                            content, botEvent.getImageUrls(), botEvent.getUsername()),
+                                    // 正文原样传入；图片由广播器按玩家分流（装 ChatImage → CICode，未装 → [图片] 可点击）
+                                    content, botEvent.getImageUrls(), tracker,
                                     botEvent.getConversationId(),
                                     ChatreplyModule.getSensitiveFilter(),
                                     openid -> {
@@ -97,5 +115,6 @@ public final class ChatlinkBukkitPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         ExtensionBootstrap.disable(module);
+        org.windy.xingtubot.chatlink.detect.ChatImageDetection.detach();
     }
 }

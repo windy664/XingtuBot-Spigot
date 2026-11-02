@@ -47,10 +47,8 @@ public class BotCommandHandler extends AbstractCommandHandler {
                 (java.util.function.BiConsumer<org.windy.xingtubot.common.event.BotMessageContext, String>) (event, content) -> {
             GroupChatLink gcl = getHost().getService(GroupChatLink.class);
             if (gcl != null) {
-                // 群图片 → ChatImage CICode：装 mod 的玩家看到图，没装的看到文本（对齐 Bukkit 端）
-                String withImg = org.windy.xingtubot.common.image.ChatImageCode.appendTo(
-                        content, event.getImageUrls(), senderNameOf(event));
-                gcl.onGroupMessage(event, senderNameOf(event), withImg);
+                // 图片在 GroupChatLink 里按玩家分流渲染（装 ChatImage → CICode；未装 → [图片] 可点击）
+                gcl.onGroupMessage(event, senderNameOf(event), content);
             }
         });
     }

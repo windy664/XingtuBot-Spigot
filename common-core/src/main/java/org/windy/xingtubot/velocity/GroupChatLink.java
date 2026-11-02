@@ -8,7 +8,11 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.windy.xingtubot.common.chatlink.ChatImageTracker;
 import org.windy.xingtubot.common.event.BotMessageContext;
+import org.windy.xingtubot.common.image.ChatImageCode;
 import org.windy.xingtubot.common.module.capability.ProactiveSender;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.poll.OpenidNameCache;
@@ -53,6 +57,9 @@ public class GroupChatLink {
     private volatile org.windy.xingtubot.common.service.SensitiveFilter sensitiveFilter;
     // 调试日志（可 null）。仅核心调试开关开启时输出，供排查群服互联链路用。
     private volatile BotLogger logger;
+
+    // ChatImage 模组玩家标记（null=未接探测层，图片一律按回退模式渲染）。
+    private volatile ChatImageTracker imageTracker;
 
     // 最近一条群消息事件 + 到期时间（用于服→群挂靠回复额度，被动模式兜底）
     private final AtomicReference<Holder> lastGroupMsg = new AtomicReference<>();
@@ -99,6 +106,14 @@ public class GroupChatLink {
     /** 注入调试日志器（仅核心调试开关开启时打点；传 null 关闭）。 */
     public void setLogger(BotLogger logger) {
         this.logger = logger;
+    }
+
+    /**
+     * 注入 ChatImage 模组探测标记器（xt-chatlink 检测层喂状态，复用 xt-auth 的 PacketEvents）。
+     * null=未接探测（如未装 xt-auth），此时 AUTO 语义由调用方降级处理。
+     */
+    public void setChatImageTracker(ChatImageTracker tracker) {
+        this.imageTracker = tracker;
     }
 
     /** 调试日志：有 logger 且核心调试开关开启才输出（实时跟随 /xtb debug）。 */
@@ -190,7 +205,7 @@ public class GroupChatLink {
         return true;
     }
 
-    /** 群 → 服：把群消息显示给所有在线玩家。 */
+    /** 群 → 服：把群消息显示给所有在线玩家（图片按玩家是否装 ChatImage 分流渲染）。 */
     public void onGroupMessage(BotMessageContext event, String sender, String content) {
         // 解析消息中的 @提及：<@openid> → @昵称
         content = OpenidNameCache.getInstance().resolveMentions(content);
@@ -200,13 +215,45 @@ public class GroupChatLink {
             lastGroupOpenid = event.getConversationId();
         }
         lastGroupMsg.set(new Holder(event));
-        Component line = Component.text(chatFormat + sender + "：" + content);
+
+        final List<String> imageUrls = event.getImageUrls() == null
+                ? Collections.emptyList() : event.getImageUrls();
+        final String head = chatFormat + sender + "：";
+        // 装 ChatImage 的玩家：正文追加 CICode，模组自动渲染成聊天栏图片；
+        // 未装的玩家：正文 + [图片] 可点击链接（浏览器打开原图）。
+        final LegacyComponentSerializer legacy = LegacyComponentSerializer.legacySection();
+        final Component plainLine = legacy.deserialize(head + content);
+        final Component cicodeLine = imageUrls.isEmpty() ? plainLine
+                : legacy.deserialize(head + ChatImageCode.appendTo(content, imageUrls, sender));
+        final Component linkLine = imageUrls.isEmpty() ? plainLine
+                : buildImageLinkLine(head, content, imageUrls);
+
         for (Player p : proxy.getAllPlayers()) {
+            Component line = plainLine;
+            if (!imageUrls.isEmpty()) {
+                ChatImageTracker tracker = imageTracker;
+                boolean wantsCicode = tracker == null || tracker.wantsCicode(p.getUniqueId());
+                line = wantsCicode ? cicodeLine : linkLine;
+            }
             p.sendMessage(line);
         }
         debug("[Chatlink] QQ→game 广播：发送者=" + sender
                 + " 群=" + event.getConversationId()
+                + " 图片=" + imageUrls.size()
                 + " 在线玩家=" + proxy.getPlayerCount());
+    }
+
+    /** 未装 ChatImage 的玩家：正文 + 每张图一个 [图片]，点击用浏览器打开原链接。 */
+    private static Component buildImageLinkLine(String head, String content, List<String> urls) {
+        Component line = LegacyComponentSerializer.legacySection().deserialize(head + content);
+        for (String url : urls) {
+            if (url == null || url.trim().isEmpty()) continue;
+            line = line.append(Component.text(" [图片]", NamedTextColor.AQUA, TextDecoration.UNDERLINED)
+                    .clickEvent(ClickEvent.openUrl(url.trim()))
+                    .hoverEvent(HoverEvent.showText(Component.text(
+                            "点击在浏览器查看图片（未安装 ChatImage 模组）").color(NamedTextColor.GRAY))));
+        }
+        return line;
     }
 
     /** 服 → 群：玩家在游戏里打字 → 广播到 allowed-groups 里配置的每个具体群。 */
