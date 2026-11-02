@@ -40,7 +40,7 @@ public final class ChatlinkBukkitPlugin extends JavaPlugin {
                             org.windy.xingtubot.bukkit.module.chatreply.listener.GuildMessageListener.broadcastToGame(
                                     this, botEvent.getSenderId(), botEvent.getUsername(),
                                     // 群图片 → ChatImage 码：装 mod 的玩家看到图，没装的看到文本，游戏照常
-                                    org.windy.xingtubot.chatlink.util.ChatImageCode.appendTo(
+                                    org.windy.xingtubot.common.image.ChatImageCode.appendTo(
                                             content, botEvent.getImageUrls(), botEvent.getUsername()),
                                     botEvent.getConversationId(),
                                     ChatreplyModule.getSensitiveFilter(),

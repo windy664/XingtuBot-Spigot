@@ -1,9 +1,14 @@
-package org.windy.xingtubot.chatlink.util;
+package org.windy.xingtubot.common.image;
 
 import java.util.List;
 
 /**
- * ChatImage CICode helper used by the chatlink extension.
+ * ChatImage（https://github.com/kitUIN/ChatImage）CICode 拼码工具。
+ *
+ * <p>群服互联 QQ→游戏 方向把群图片 URL 拼成 {@code [[CICode,url=...,name=...]]}：
+ * 装 ChatImage mod 的客户端自动渲染为聊天栏图片，没装的看到原始文本，游戏照常。
+ * 放 common-core 是因为 Velocity 端（BotCommandHandler 的 gameBridge）与
+ * Bukkit 端（xt-chatlink 的 GuildMessageListener）都要用。
  */
 public final class ChatImageCode {
 
