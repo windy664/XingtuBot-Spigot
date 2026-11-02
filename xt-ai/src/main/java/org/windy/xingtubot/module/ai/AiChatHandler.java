@@ -7,6 +7,7 @@ import org.windy.xingtubot.common.event.BotMessageContext;
 import org.windy.xingtubot.common.handler.HandlerContext;
 import org.windy.xingtubot.common.handler.BotMessageHandler;
 import org.windy.xingtubot.common.platform.BotLogger;
+import org.windy.xingtubot.common.runtime.BotRuntimeState;
 import org.windy.xingtubot.common.service.SensitiveFilter;
 
 import java.util.*;
@@ -294,7 +295,8 @@ public final class AiChatHandler implements BotMessageHandler {
                 "- 聊得很热烈了，你挤进去只会打断节奏\n" +
                 "- 你没什么想说的，硬接话会很尬\n" +
                 "- 话题敏感（政治/色情/争议），不该参与\n" +
-                "- 最近几条消息节奏很快（刷屏/斗图），不适合插话"));
+                "- 最近几条消息节奏很快（刷屏/斗图），不适合插话\n\n" +
+                "你在群里的名字是「" + BotRuntimeState.getBotName() + "」；群聊记录里以它开头的消息是你自己发的，不算别人说话。"));
 
         List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
         if (!ctx.isEmpty()) {
@@ -541,7 +543,7 @@ public final class AiChatHandler implements BotMessageHandler {
             }
         }
 
-        String botName = org.windy.xingtubot.common.runtime.BotRuntimeState.getBotName();
+        String botName = BotRuntimeState.getBotName();
         groupContext.record(guildId, botName, out);
         List<Map<String, String>> history = replyMemory.getMessages(memKey);
         history.add(createMessage("user", userTag + "：" + msg));
@@ -580,7 +582,10 @@ public final class AiChatHandler implements BotMessageHandler {
     private String buildSystemPrompt(String personality, boolean isDirectAt, boolean senderIsAdmin,
                                       boolean adminAttack, boolean isChimeIn) {
         StringBuilder sb = new StringBuilder();
-        sb.append("这是游戏服务器的QQ群，你是群里的活跃玩家，经常在线，跟大家都熟。\n\n");
+        String botName = BotRuntimeState.getBotName();
+        sb.append("这是游戏服务器的QQ群，你是群里的活跃玩家，经常在线，跟大家都熟。\n");
+        sb.append("你在群里的名字是「").append(botName).append("」；群聊记录里「")
+          .append(botName).append("：」开头的消息都是你自己说过的话，不是别人说的。\n\n");
 
         if (!personality.isEmpty()) {
             sb.append("你的性格：").append(personality).append("\n\n");

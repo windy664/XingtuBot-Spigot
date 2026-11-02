@@ -2,8 +2,10 @@ package org.windy.xingtubot.module.ai;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.windy.xingtubot.common.ai.AiService;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -135,6 +137,73 @@ class AdminStanceMemoryTest {
         assertTrue(mem.mightConflict("g1", "我觉得 应该 开启 创造模式"));
         // 不相关消息 → 不冲突
         assertFalse(mem.mightConflict("g1", "今天 天气 真好"));
+    }
+
+    // ===== md 文件持久化 =====
+
+    @Test
+    void mdFileCreated(@TempDir File dir) {
+        AdminStanceMemory mem = new AdminStanceMemory(dir);
+        mem.record("g1", "md文件测试");
+
+        assertTrue(new File(dir, "admin_stance.md").exists(), "应生成 admin_stance.md");
+        assertFalse(new File(dir, "admin_stance.json").exists(), "不应再写 json");
+    }
+
+    // ===== 旧 json 迁移 =====
+
+    @Test
+    void migrationFromLegacyJson(@TempDir File dir) throws Exception {
+        java.util.Map<String, List<String>> legacy = new java.util.LinkedHashMap<>();
+        legacy.put("g1", java.util.Arrays.asList(
+                "[以往观点摘要] 旧摘要：管理员支持创造模式",
+                "新观点：反对PvP"));
+        Files.write(new File(dir, "admin_stance.json").toPath(),
+                new com.google.gson.Gson().toJson(legacy).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        AdminStanceMemory mem = new AdminStanceMemory(dir);
+        String ctx = mem.buildContext("g1");
+        assertTrue(ctx.contains("管理员支持创造模式"), "旧摘要应迁入长期记忆: " + ctx);
+        assertTrue(ctx.contains("反对PvP"), "旧原始条目应迁入待归纳: " + ctx);
+        assertTrue(new File(dir, "admin_stance.md").exists(), "迁移后应生成 md");
+        assertFalse(new File(dir, "admin_stance.json").exists(), "迁移后应删除旧 json");
+    }
+
+    // ===== AI 自更新压缩 =====
+
+    @Test
+    void aiCompressRewritesMemory(@TempDir File dir) throws Exception {
+        AdminStanceMemory mem = new AdminStanceMemory(dir);
+        mem.setAiService(new AiService("k", "http://127.0.0.1:1", "test") {
+            @Override
+            public String chat(String userMessage) {
+                return "```markdown\n管理员坚定支持创造模式\n```";
+            }
+        }, null);
+
+        for (int i = 0; i < 6; i++) {
+            mem.record("g1", "观点" + i);
+        }
+
+        // 等待异步压缩完成
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            String ctx = mem.buildContext("g1");
+            if (ctx.contains("坚定支持创造模式") && !ctx.contains("观点0")) break;
+            Thread.sleep(50);
+        }
+
+        String ctx = mem.buildContext("g1");
+        assertTrue(ctx.contains("坚定支持创造模式"), "AI 摘要应写入上下文: " + ctx);
+        assertFalse(ctx.contains("观点0"), "压缩后待归纳应清空: " + ctx);
+        assertFalse(ctx.contains("```"), "代码块围栏应被剥掉: " + ctx);
+        assertFalse(ctx.contains("[以往观点摘要]"), "不应出现摘要前缀: " + ctx);
+
+        // md 文件本身也要更新
+        String md = new String(Files.readAllBytes(new File(dir, "admin_stance.md").toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(md.contains("坚定支持创造模式"), "摘要应回写 md 文件: " + md);
+        assertFalse(md.contains("观点0"), "待归纳应从 md 文件清除: " + md);
     }
 
     // ===== 工具 =====

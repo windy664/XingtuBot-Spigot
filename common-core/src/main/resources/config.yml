@@ -24,11 +24,11 @@ allowed-groups:
 # 仅在「代理大脑 + Bukkit 子服」部署下有意义；单机本地大脑用不到。
 #   plugin-message = 原生插件消息（默认，零依赖）。靠玩家连接转发：子服发包需该子服有在线玩家当”载体”，
 #                    控制台下发到”空子服”会失败。
-#   redis          = Redis 发布订阅（推荐）。无需在线玩家即可双向通信，
+#   redis          = Redis 发布订阅（可选）。无需在线玩家即可双向通信，
 #                    控制台也能下发到没人的子服；需一台 Redis。
 #
-# ⚠️ 全网一致：代理大脑与所有 Bukkit 子服必须填【相同】的 cross-server-channel，且连同一台 Redis。
-cross-server-channel: redis
+# ⚠️ 全网一致：代理大脑与所有 Bukkit 子服必须填【相同】的 cross-server-channel；用 redis 时还要连同一台 Redis。
+cross-server-channel: plugin-message
 
 # Redis 连接（仅当 cross-server-channel 为 redis 且 redis-host 非空时启用）。
 redis-host: "127.0.0.1"
