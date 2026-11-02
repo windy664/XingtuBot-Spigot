@@ -58,6 +58,15 @@ public class QqBot {
         return !recentEventIds.add(eventKey);
     }
 
+    // 表情包/贴纸的内联形态：<face ...> 商城表情标签直接混在正文里，游戏端渲染不了，属噪音
+    private static final java.util.regex.Pattern FACE_TAG =
+            java.util.regex.Pattern.compile("(?i)<face[^>]*>");
+
+    // 正文内联的 QQ 多媒体下载链接（表情包/贴纸图片，临时 rkey 签名，可能不带协议头；
+    // 末段排除常见中英文标点/引号/括号，避免把跟在 URL 后面的标点吃进链接）。
+    private static final java.util.regex.Pattern INLINE_MEDIA_URL = java.util.regex.Pattern.compile(
+            "(?:https?://)?multimedia\\.nt\\.qq\\.com\\.cn/download\\?[^\\s，。；！？,;!?\"'”’」』）)】]+");
+
     public QqBot(PlatformAdapter adapter, QqOpenApiClient api, Set<String> allowedGroups) {
         this.adapter = adapter;
         this.api = api;
@@ -141,6 +150,21 @@ public class QqBot {
                         }
                     }
                 }
+            }
+
+            // 表情包/贴纸常以内联形式混在正文（<face ...> 标签 + 多媒体下载链接，无 attachments）：
+            // 剥掉 face 标签噪音；下载链接抽出进 imageUrls 并从正文移除，
+            // 避免「裸 URL 原文 + CICode」在游戏里重复显示。attachments 与正文重复的链接也在此去重。
+            if (content != null && !content.isEmpty()) {
+                content = FACE_TAG.matcher(content).replaceAll(" ").trim();
+                java.util.regex.Matcher m = INLINE_MEDIA_URL.matcher(content);
+                while (m.find()) {
+                    String u = m.group();
+                    String norm = u.startsWith("http") ? u : "https://" + u; // QQ 偶尔不带协议头
+                    if (!imageUrls.contains(norm)) imageUrls.add(norm);
+                }
+                content = INLINE_MEDIA_URL.matcher(content).replaceAll(" ")
+                        .replaceAll("\\s+", " ").trim();
             }
 
             String groupOpenid = optString(d, "group_openid");
