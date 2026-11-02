@@ -38,6 +38,16 @@ public abstract class AbstractCommandHandler {
 
     protected AbstractCommandHandler(BotConfig config, BotLogger logger, File dataFolder,
                                      Object platformContext) {
+        // 超管未配置提醒：admin-openids 为空或只剩空串（默认模板形态）时，所有超管指令无人可用。
+        // 三端命令中心构造时各刷一次，避免「配漏了还以为功能坏了」的排查成本。
+        boolean hasAdmin = false;
+        for (String id : config.getStringList("admin-openids")) {
+            if (id != null && !id.trim().isEmpty()) { hasAdmin = true; break; }
+        }
+        if (!hasAdmin) {
+            logger.warn("⚠️ 未配置超管（config.yml 的 admin-openids 为空）——执行/绑定管理等超管指令将无人可用");
+            logger.warn("   群里发「id」可查用户 ID，填入 admin-openids 后重启生效");
+        }
         this.permission = (openid -> config.getStringList("admin-openids").contains(openid));
 
         registry = new HandlerRegistry(permission, m -> logger.info("[群指令] " + m));
