@@ -22,32 +22,10 @@ public final class CrossServerProtocol {
         // ===== Spigot → Velocity（手脚上报大脑）=====
         /** 握手探测：子服问代理「机器人是不是你在管」。字段：server 名。 */
         WHO_IS_BOSS,
-        /** 玩家加入子服，上报给大脑判断绑定状态（未绑定则大脑回提示）。字段：player。 */
-        PLAYER_JOIN,
-        /** 玩家在游戏内声明了 QQ 号，上报给大脑算头像、存 pending。字段：player, qq。 */
-        DECLARE_QQ,
-        /** 玩家退出，清理其 pending。字段：player。 */
-        PLAYER_QUIT,
 
         // ===== Velocity → Spigot（大脑派活给手脚）=====
-        /** 代理回应握手：机器人由我（代理）主导，子服请当手脚。无额外字段。 */
+        /** 代理回应握手：机器人由我（代理）主导，子服请当手脚。字段：代理端注册名。 */
         I_AM_BOSS,
-        /** 让子服把某玩家标记为「等待输入QQ号」（未绑定时）。字段：player。 */
-        NEED_QQ,
-        /** 让子服清除某玩家的「等待输入QQ号」状态（已声明/绑定）。字段：player。 */
-        CLEAR_QQ,
-        /** 让子服对某玩家执行免密码注册（绑定成功后）。字段：player。 */
-        DO_REGISTER,
-        /** 让子服对某玩家执行强制登录。字段：player。 */
-        DO_LOGIN,
-        /** 给某在线玩家发一条游戏内消息。字段：player, message。 */
-        MSG_PLAYER,
-
-        // ===== 数据查询（SQLite 模式下子服向大脑查绑定）=====
-        /** 子服查询：某玩家是否已绑定。字段：requestId, player。 */
-        QUERY_BOUND,
-        /** 大脑回应查询。字段：requestId, "1"/"0"。 */
-        QUERY_BOUND_RESULT,
 
         // ===== 后台命令（超管群里控服）=====
         /** 大脑广播控制台命令；子服匹配自己的 server-name 才执行。字段：targetServerName, requestId, command。 */
@@ -63,12 +41,12 @@ public final class CrossServerProtocol {
 
         // ===== 子服自动发现 =====
         /** 代理端广播子服注册表（name=address 对），子服按端口匹配自动发现自己的代理名。字段：registryStr。 */
-        SERVER_REGISTRY,
+        SERVER_REGISTRY
 
-        // ===== 绑定数据跨服查询 =====
-        /** 子服向大脑查询：某 openid 绑定了哪个玩家。字段：requestId, openid。 */
-        QUERY_BINDING_BY_OPENID,
-        /** 大脑回传绑定查询结果。字段：requestId, playerName（空=未绑定）。 */
-        BINDING_RESULT
+        // ===== 历史遗留类型已移除 =====
+        // 自研锁改为代理端 packetevents 闭环后，以下类型无发送方或无接收方，已删除：
+        // PLAYER_JOIN / PLAYER_QUIT / DECLARE_QQ（手脚上报，大脑不再消费）
+        // NEED_QQ / CLEAR_QQ / DO_REGISTER / DO_LOGIN / MSG_PLAYER（大脑派活，改为代理层直控）
+        // QUERY_BOUND / QUERY_BOUND_RESULT / QUERY_BINDING_BY_OPENID / BINDING_RESULT（无调用链）
     }
 }

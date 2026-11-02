@@ -27,7 +27,7 @@ public final class AuthModule implements BotModule {
     private final Object platformPlugin;
     private final Object platformDataDir;
     // 代理大脑（Velocity/BungeeCord）侧的认证适配器：群里「登录」/「绑定」命中后，
-    // 通过它把 DO_LOGIN/DO_REGISTER 下发到玩家所在子服解锁。由平台主类在 enable 前注入。
+    // 通过它直接在代理端解锁/发消息（packetevents 锁在代理层闭环）。由平台主类在 enable 前注入。
     // 本地 Bukkit 大脑模式不用它（绑定/解锁由平台 WhitelistModule 接管），保持 null。
     private AuthAdapter authAdapter;
     // 本地白名单模式（单机 Bukkit 即大脑）：绑定 + 锁 + 群验证由平台侧 WhitelistModule 接管，
@@ -54,7 +54,7 @@ public final class AuthModule implements BotModule {
     }
 
     /**
-     * 注入代理大脑侧的认证适配器（DO_LOGIN/DO_REGISTER 下发通道）。
+     * 注入代理大脑侧的认证适配器（代理端直通解锁/发消息通道）。
      * 必须在 {@link #onEnable} 之前调用（即 ExtensionBootstrap.enable 之前）。
      */
     public void setAuthAdapter(AuthAdapter authAdapter) {
