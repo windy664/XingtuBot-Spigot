@@ -77,6 +77,8 @@ public class QQGatewayClient {
     private final ScheduledExecutorService scheduler;
     private volatile ScheduledFuture<?> heartbeatTask;
     private volatile ScheduledFuture<?> tokenRefreshTask;
+    // 待执行的重连任务句柄：排新任务前先取消旧的，防止多轮断连把定时器叠成连环重连（issue #2）
+    private volatile ScheduledFuture<?> reconnectTask;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicBoolean manualStop = new AtomicBoolean(false);
 
@@ -149,6 +151,7 @@ public class QQGatewayClient {
     // ========================= 连接 =========================
 
     private void connect() {
+        reconnectTask = null; // 本任务已在执行，句柄消费掉（避免下轮 scheduleReconnect 误取消到已完成任务——无害但状态不干净）
         try {
             // 清理旧连接
             GatewayWebSocket old = currentWs;
@@ -240,7 +243,15 @@ public class QQGatewayClient {
         }
     }
 
-    private void onWsClose(int code, String reason) {
+    private void onWsClose(GatewayWebSocket ws, int code, String reason) {
+        // 僵尸连接守卫（issue #2）：connect() 换代时会主动 close 被挤掉的旧连接，
+        // 旧连接自己的 onClose 也会触发。不是 currentWs = 已被取代的旧连接，直接闭嘴——
+        // 否则它会走到尾部 scheduleReconnect 再排一个 connect，把刚连上的健康连接又挤掉，
+        // 定时器层层叠加，最终变成「每 60 秒一轮」的无限重连循环。
+        if (ws != currentWs) {
+            debugLog("旧连接关闭已忽略（被新连接取代）code=" + code);
+            return;
+        }
         String meaning;
         switch (code) {
             case 4001: meaning = "参数错误"; break;
@@ -547,11 +558,15 @@ public class QQGatewayClient {
             return;
         }
 
+        // 只允许存在一个待执行的重连任务：排新任务前取消旧的（否则多来源触发会叠加，issue #2）
+        ScheduledFuture<?> prev = reconnectTask;
+        if (prev != null) prev.cancel(false);
+
         long delay = delayMs >= 0 ? delayMs :
                 RECONNECT_DELAYS[Math.min(reconnectAttempts, RECONNECT_DELAYS.length - 1)];
         reconnectAttempts++;
         debugLog("第 " + reconnectAttempts + " 次重连，" + delay + "ms 后...");
-        scheduler.schedule(this::connect, delay, TimeUnit.MILLISECONDS);
+        reconnectTask = scheduler.schedule(this::connect, delay, TimeUnit.MILLISECONDS);
     }
 
     // ========================= Token / Gateway API =========================
@@ -637,7 +652,7 @@ public class QQGatewayClient {
 
         @Override
         public void onClose(int code, String reason, boolean remote) {
-            onWsClose(code, reason);
+            onWsClose(this, code, reason);
         }
 
         @Override
