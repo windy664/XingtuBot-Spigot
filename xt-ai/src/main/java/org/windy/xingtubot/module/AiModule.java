@@ -6,6 +6,8 @@ import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ModuleContext;
 import org.windy.xingtubot.module.ai.AiChatHandler;
 
+import java.util.List;
+
 /**
  * AI 对话模块：LLM 聊天 observer + 注册 AiService 供其他附属软依赖。
  */
@@ -43,13 +45,13 @@ public final class AiModule implements BotModule {
         AiService chimeInJudgeService = createChimeInJudgeService(config, apiKey);
         ctx.registerService(AiService.class, aiService);
 
-        // 注册 AI 聊天 observer（知识库从服务总线懒查询，xt-group 未装/晚装都安全）
+        // 注册 AI 聊天 observer（知识库走服务总线软依赖：xt-group 未装/晚装都安全）
         AiChatHandler handler = new AiChatHandler(
                 aiService, chimeInJudgeService, config, ctx.logger(),
                 ctx.registry()::isHandledByCommand,
                 ctx.permission(),
                 ctx.dataFolder(),
-                () -> ctx.getService(org.windy.xingtubot.common.ai.BotKnowledgeProvider.class));
+                () -> knowledgeLines(ctx));
         ctx.registry().registerObserver(handler);
 
         String omniModel = config.getString("llm-model-omni", "mimo-v2-omni");
@@ -70,5 +72,21 @@ public final class AiModule implements BotModule {
         if (baseUrl.isEmpty()) return null;
 
         return new AiService(apiKey, baseUrl, model);
+    }
+
+    /**
+     * 附属间软依赖：xt-group 把问答知识以 JDK {@code Supplier<List<String>>} 注册在
+     * 服务总线 key "xingtubot.knowledge" 下（JDK 类型跨 classloader 可见，无需共同接口/反射）。
+     * xt-group 未装时总线查不到，返回 null。
+     */
+    @SuppressWarnings("unchecked")
+    private static List<String> knowledgeLines(ModuleContext ctx) {
+        Object service = ctx.getServiceObject("xingtubot.knowledge");
+        if (!(service instanceof java.util.function.Supplier)) return null;
+        try {
+            return ((java.util.function.Supplier<List<String>>) service).get();
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

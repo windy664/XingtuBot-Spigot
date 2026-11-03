@@ -72,9 +72,9 @@ public final class GroupFeaturesModule implements BotModule {
             imagesDir.mkdirs();
             CustomReplyService customReply = new CustomReplyService(
                     repliesFile, imagesDir, textImage, placeholders, m -> ctx.logger().info(m));
-            // 问答同时作为 AI 的服务器知识库（xt-ai 懒查询，无编译依赖）
-            ctx.registerService(org.windy.xingtubot.common.ai.BotKnowledgeProvider.class,
-                    new ReplyKnowledgeProvider(customReply));
+            // 问答同时作为 AI 的服务器知识库：JDK Supplier 注册在 String key 下，
+            // xt-ai 软依赖查找（反射都不需要，JDK 类型跨 classloader 可见）
+            ctx.registerService("xingtubot.knowledge", new ReplyKnowledgeProvider(customReply));
             if (customReply.count() > 0) {
                 ctx.registry().register(new CustomReplyHandler(customReply));
             }

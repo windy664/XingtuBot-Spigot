@@ -1,7 +1,6 @@
 package org.windy.xingtubot.module.ai;
 
 import org.windy.xingtubot.common.ai.AiService;
-import org.windy.xingtubot.common.ai.BotKnowledgeProvider;
 import org.windy.xingtubot.common.handler.PermissionChecker;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageContext;
@@ -25,7 +24,7 @@ import java.util.function.Supplier;
  * <ol>
  *   <li><b>旁听</b>：所有群消息记录到 {@link GroupContextMemory}，AI 知道群里在聊什么。</li>
  *   <li><b>超管立场</b>：长期记忆超管的观点（{@link AdminStanceMemory}），有人跟超管观点冲突时主动反驳。</li>
- *   <li><b>服务器知识库</b>：xt-group 的自定义问答经 {@link BotKnowledgeProvider} 注入系统词，
+ *   <li><b>服务器知识库</b>：xt-group 的自定义问答经服务总线（JDK Supplier 软依赖）注入系统词，
  *       玩家换着问法问服务器问题时也能按配置口径回答。</li>
  *   <li><b>@触发</b>：@机器人 时直接回复（跳过已注册命令和配置的关键词黑名单）。</li>
  *   <li><b>自主参与</b>：傻模型判断是否值得接话（{@link ChimeInController}），并用群聊节奏限制普通插话。跳过命令消息。</li>
@@ -53,8 +52,8 @@ public final class AiChatHandler implements BotMessageHandler {
     private final AdminStanceMemory adminStance;
     private final AiGuards guards;
     private final ChimeInController chimeIn;
-    // 服务器知识库来源（服务总线懒查询，xt-group 可能比 xt-ai 晚加载，不能缓存 null）
-    private final Supplier<BotKnowledgeProvider> knowledgeSource;
+    // 服务器知识库来源（服务总线懒查询的 Supplier<List<String>>，xt-group 未装时取到 null）
+    private final Supplier<List<String>> knowledgeSource;
 
     public AiChatHandler(AiService aiService, BotConfig config, BotLogger logger,
                          BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
@@ -64,7 +63,7 @@ public final class AiChatHandler implements BotMessageHandler {
 
     public AiChatHandler(AiService aiService, AiService chimeInJudgeService, BotConfig config, BotLogger logger,
                          BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
-                         java.io.File dataDir, Supplier<BotKnowledgeProvider> knowledgeSource) {
+                         java.io.File dataDir, Supplier<List<String>> knowledgeSource) {
         this.aiService = aiService;
         this.config = config;
         this.logger = logger;
@@ -289,15 +288,13 @@ public final class AiChatHandler implements BotMessageHandler {
      */
     private String knowledgeContext() {
         if (!config.getBoolean("ai-knowledge-from-replies", true) || knowledgeSource == null) return "";
-        BotKnowledgeProvider provider;
+        List<String> lines;
         try {
-            provider = knowledgeSource.get();
+            lines = knowledgeSource.get();
         } catch (Exception e) {
             return "";
         }
-        if (provider == null) return "";
-        List<String> lines = provider.knowledgeLines();
-        if (lines.isEmpty()) return "";
+        if (lines == null || lines.isEmpty()) return "";
 
         int maxChars = Math.max(200, config.getInt("ai-knowledge-max-chars", 1500));
         StringBuilder body = new StringBuilder();
