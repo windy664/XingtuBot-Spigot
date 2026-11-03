@@ -1,4 +1,15 @@
+<div align="center">
+
+<img src="assets/banner.svg" alt="XingtuBot-Spigot" width="100%">
+
+</div>
+
 # XingtuBot-Spigot
+
+![Platform](https://img.shields.io/badge/Platform-Spigot%20%2F%20Paper-62bda8?style=flat-square&logo=minecraft&logoColor=white)
+![Minecraft](https://img.shields.io/badge/MC-1.12%2B-8a9a5b?style=flat-square)
+![Java](https://img.shields.io/badge/Java-8%2B-f89820?style=flat-square&logo=openjdk&logoColor=white)
+![Proxy](https://img.shields.io/badge/Proxy-Velocity%20%2F%20BungeeCord-1e5c97?style=flat-square)
 
 QQ 群 ↔ Minecraft 服务器的多功能桥接机器人。
 
