@@ -6,12 +6,20 @@ import org.windy.xingtubot.common.util.Md;
 
 import java.security.MessageDigest;
 import java.time.LocalDate;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 趣味随机：运势 / 骰子 / 选择。纯本地，零依赖零成本。
+ *
+ * <p>运势每人每天一次：结果按 openid+日期定种子（确定性），重复查询只会被告知已抽过——
+ * 限次状态放内存即可，重启后再查也抽不出不同的卡，不存在「重抽」空间。
  */
 public class FortuneCommand implements BotCommand {
+
+    /** 每人每天一次：openid → 最近查询日期（ISO），进程内存态。 */
+    private final Map<String, String> lastFortuneDate = new ConcurrentHashMap<>();
 
     private static final String[] LEVELS = {
             "大吉", "中吉", "小吉", "吉", "末吉", "凶", "大凶"
@@ -31,7 +39,16 @@ public class FortuneCommand implements BotCommand {
     @Override
     public void handle(String message, BotMessageContext event) {
         if (message.equals("运势")) {
-            event.replyMarkdown(fortuneCard(event.getSenderId()), null);
+            String openid = event.getSenderId();
+            String today = LocalDate.now().toString();
+            if (openid != null && !openid.isEmpty()) {
+                String prev = lastFortuneDate.put(openid, today);
+                if (today.equals(prev)) {
+                    event.reply("今天已经查过运势啦，每人每天一次哦～ 明天再来 🔮");
+                    return;
+                }
+            }
+            event.replyMarkdown(fortuneCard(openid), null);
         } else if (message.equals("骰子") || message.equalsIgnoreCase("roll")) {
             event.reply("🎲 你掷出了 " + (ThreadLocalRandom.current().nextInt(100) + 1) + " 点");
         } else if (message.startsWith("选择")) {
