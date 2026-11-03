@@ -114,9 +114,15 @@ public class CustomReplyService {
         }
     }
 
-    /** 纯查询：是否有匹配的 trigger（不发送消息）。 */
-    public boolean canHandle(BotMessageContext event) {
-        String msg = event.getMessage() == null ? "" : event.getMessage().trim();
+    /**
+     * 纯查询：消息是否命中 trigger（不发送消息）。
+     * 必须传 Dispatcher 传入的消息本体（可能是 nonce 探测用的假消息），不能回读 event——
+     * HandlerRegistry 靠「真消息命中、假消息不命中」判定本 handler 是触发词型，
+     * 从而把命中消息当命令处理、跳过 AI observer；若读 event.getMessage() 探测结果
+     * 恒为真，会被误判成 catch-all，触发词消息会同时派发给 AI，造成问答 + AI 双回复。
+     */
+    public boolean canHandle(String message) {
+        String msg = message == null ? "" : message.trim();
         if (msg.isEmpty()) return false;
         for (CustomReply r : replies) {
             if (r.matches(msg)) return true;
@@ -193,6 +199,35 @@ public class CustomReplyService {
             }
         }
         return triggers;
+    }
+
+    /**
+     * 知识行（触发词 → 回答内容），供 AI 模块注入系统词当服务器知识库。
+     * 只取有文字内容的类型；图片/文字生图条目跳过。
+     * @param maxContentChars 单条回答的最大长度，超出截断加省略号（<=0 不截断）
+     */
+    public List<String> knowledgeLines(int maxContentChars) {
+        List<String> out = new ArrayList<>();
+        for (CustomReply r : replies) {
+            if (r.type == CustomReply.Type.IMAGE || r.type == CustomReply.Type.TEXTIMAGE) continue;
+            String content = r.content == null ? "" : r.content.trim();
+            if (content.isEmpty()) continue;
+            if (maxContentChars > 0 && content.length() > maxContentChars) {
+                content = content.substring(0, maxContentChars) + "…";
+            }
+            String match = r.match == CustomReply.Match.EQUALS ? "" : "（" + matchName(r.match) + "匹配）";
+            out.add(r.trigger + match + " → " + content);
+        }
+        return out;
+    }
+
+    private static String matchName(CustomReply.Match m) {
+        switch (m) {
+            case CONTAINS:    return "包含";
+            case STARTS_WITH: return "前缀";
+            case REGEX:       return "正则";
+            default:          return "等于";
+        }
     }
 
     // ---- helpers ----
