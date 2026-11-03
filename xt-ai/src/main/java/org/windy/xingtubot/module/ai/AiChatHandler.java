@@ -1,6 +1,7 @@
 package org.windy.xingtubot.module.ai;
 
 import org.windy.xingtubot.common.ai.AiService;
+import org.windy.xingtubot.common.ai.BotKnowledgeProvider;
 import org.windy.xingtubot.common.handler.PermissionChecker;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.event.BotMessageContext;
@@ -8,28 +9,31 @@ import org.windy.xingtubot.common.handler.HandlerContext;
 import org.windy.xingtubot.common.handler.BotMessageHandler;
 import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.runtime.BotRuntimeState;
-import org.windy.xingtubot.common.service.SensitiveFilter;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.function.BiPredicate;
+import java.util.function.Supplier;
 
 /**
- * AI 群聊处理器（平台中立）。
+ * AI 群聊处理器（平台中立）——编排层。
+ * 触发护栏 / 插话节奏 / 提示词构造分别在
+ * {@link AiGuards}、{@link ChimeInController}、{@link AiPromptBuilder}。
  *
  * <h3>核心设计</h3>
  * <ol>
  *   <li><b>旁听</b>：所有群消息记录到 {@link GroupContextMemory}，AI 知道群里在聊什么。</li>
  *   <li><b>超管立场</b>：长期记忆超管的观点（{@link AdminStanceMemory}），有人跟超管观点冲突时主动反驳。</li>
+ *   <li><b>服务器知识库</b>：xt-group 的自定义问答经 {@link BotKnowledgeProvider} 注入系统词，
+ *       玩家换着问法问服务器问题时也能按配置口径回答。</li>
  *   <li><b>@触发</b>：@机器人 时直接回复（跳过已注册命令和配置的关键词黑名单）。</li>
- *   <li><b>自主参与</b>：傻模型判断是否值得接话，并用群聊节奏限制普通插话。跳过命令消息。</li>
+ *   <li><b>自主参与</b>：傻模型判断是否值得接话（{@link ChimeInController}），并用群聊节奏限制普通插话。跳过命令消息。</li>
  * </ol>
  *
  * <h3>防刷机制（API 调用前拦截，不是调了再截断）</h3>
  * <ul>
- *   <li>命令关键词黑名单 → matches() 就返回 false，API 根本不会调</li>
+ *   <li>命令关键词黑名单 → matches() 就返回 false，API 根本不会调（{@link AiGuards}）</li>
  *   <li>全局每小时调用上限 → 超限后所有触发静默跳过</li>
  *   <li>单用户频率限制 → 同一用户1分钟内最多N次</li>
  *   <li>输入截断 → 超长消息截到300字</li>
@@ -37,60 +41,40 @@ import java.util.function.BiPredicate;
  */
 public final class AiChatHandler implements BotMessageHandler {
 
-    private static final String NO_REPLY = "NO_REPLY";
     private static final int MAX_INPUT_LENGTH = 300;
 
     private final AiService aiService;
-    private final AiService chimeInJudgeService;
     private final BotConfig config;
     private final BotLogger logger;
-    private final SensitiveFilter sensitiveFilter;
     private final BiPredicate<String, BotMessageContext> commandMatcher;
     private final PermissionChecker permission;
     private final AiChatMemory replyMemory = new AiChatMemory();
     private final GroupContextMemory groupContext = new GroupContextMemory();
     private final AdminStanceMemory adminStance;
-
-    // 频率限制：单用户滑动窗口
-    private final ConcurrentHashMap<String, Deque<Long>> rateLimitMap = new ConcurrentHashMap<>();
-    // 全局每小时调用计数
-    private final AtomicInteger hourlyCalls = new AtomicInteger(0);
-    private volatile long hourStart = 0;
-
-    // 命令关键词黑名单（不区分大小写，包含匹配）
-    private volatile Set<String> blockedKeywords = Collections.emptySet();
-    // 群聊白名单（为空则不限制，所有群都启用）
-    private volatile Set<String> groupWhitelist = Collections.emptySet();
-    // 攻击名单（用户ID → 说话直接攻击）
-    private volatile Set<String> attackTargets = Collections.emptySet();
-    // 用户黑名单（用户ID → 永远不触发AI）
-    private volatile Set<String> blacklistUsers = Collections.emptySet();
-    private final ConcurrentHashMap<String, Set<String>> adminNamesByGroup = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, JudgeDecision> pendingJudgeDecisions = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, ChimeInCadence> chimeInCadenceByGroup = new ConcurrentHashMap<>();
+    private final AiGuards guards;
+    private final ChimeInController chimeIn;
+    // 服务器知识库来源（服务总线懒查询，xt-group 可能比 xt-ai 晚加载，不能缓存 null）
+    private final Supplier<BotKnowledgeProvider> knowledgeSource;
 
     public AiChatHandler(AiService aiService, BotConfig config, BotLogger logger,
                          BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
-                         java.io.File dataDir, SensitiveFilter sensitiveFilter) {
-        this(aiService, null, config, logger, commandMatcher, permission, dataDir, sensitiveFilter);
+                         java.io.File dataDir) {
+        this(aiService, null, config, logger, commandMatcher, permission, dataDir, null);
     }
 
     public AiChatHandler(AiService aiService, AiService chimeInJudgeService, BotConfig config, BotLogger logger,
                          BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
-                         java.io.File dataDir, SensitiveFilter sensitiveFilter) {
+                         java.io.File dataDir, Supplier<BotKnowledgeProvider> knowledgeSource) {
         this.aiService = aiService;
-        this.chimeInJudgeService = chimeInJudgeService;
         this.config = config;
         this.logger = logger;
         this.commandMatcher = commandMatcher;
         this.permission = permission;
         this.adminStance = new AdminStanceMemory(dataDir);
         this.adminStance.setAiService(aiService, logger);
-        this.sensitiveFilter = sensitiveFilter;
-        reloadBlockedKeywords();
-        reloadGroupWhitelist();
-        reloadAttackTargets();
-        reloadBlacklistUsers();
+        this.guards = new AiGuards(config);
+        this.chimeIn = new ChimeInController(chimeInJudgeService, config, logger, groupContext);
+        this.knowledgeSource = knowledgeSource;
     }
 
     @Override
@@ -103,7 +87,7 @@ public final class AiChatHandler implements BotMessageHandler {
         if (et != null && et.contains("MEMBER")) return false;
 
         // 群聊白名单：不在白名单里的群，旁听和回复都跳过
-        if (event.isGroupMessage() && !isGroupAllowed(event.getConversationId())) {
+        if (event.isGroupMessage() && !guards.isGroupAllowed(event.getConversationId())) {
             return false;
         }
 
@@ -120,27 +104,27 @@ public final class AiChatHandler implements BotMessageHandler {
             groupContext.record(event.getConversationId(), username, msg);
 
             if (permission != null && permission.isAdmin(senderId)) {
-                recordAdminName(event.getConversationId(), username);
                 adminStance.record(event.getConversationId(), msg);
             }
         }
 
         // --- 用户黑名单：永远不触发AI回复（旁听已记录，直接跳过）---
-        if (isBlacklisted(senderId)) return false;
+        if (guards.isBlacklisted(senderId)) return false;
 
         // --- 命令过滤：命中黑名单 → 不触发AI，API不会调 ---
-        if (isBlockedCommand(msg)) return false;
+        if (guards.isBlockedCommand(msg)) return false;
 
         // 触发条件1：@机器人
         if (event.isGroupAtMessage()) {
-            if (!checkHourlyBudget()) return false;
+            if (!guards.checkHourlyBudget()) return false;
             return true;
         }
 
         // 触发条件2：攻击名单用户 → 直接进入攻击模式，跳过judge
-        if (event.isGroupMessage() && isAttackTarget(senderId)) {
-            if (!checkHourlyBudget()) return false;
-            pendingJudgeDecisions.put(decisionKey(event, msg), JudgeDecision.adminAttack());
+        if (event.isGroupMessage() && guards.isAttackTarget(senderId)) {
+            if (!guards.checkHourlyBudget()) return false;
+            chimeIn.putDecision(ChimeInController.decisionKey(event, msg),
+                    ChimeInController.JudgeDecision.adminAttack());
             return true;
         }
 
@@ -148,34 +132,21 @@ public final class AiChatHandler implements BotMessageHandler {
         if (event.isGroupMessage() && !event.isGroupAtMessage()) {
             // 管理员跳过自主参与（但攻击名单的管理员已在上面处理）
             if (permission != null && permission.isAdmin(senderId)) return false;
-            if (!checkHourlyBudget()) return false;
-            recordChimeInCandidate(event.getConversationId());
+            if (!guards.checkHourlyBudget()) return false;
+            chimeIn.recordCandidate(event.getConversationId());
 
-            if (!canCasuallyChimeIn(event.getConversationId())) {
+            if (!chimeIn.canReply(event.getConversationId())) {
                 return false;
             }
 
-            JudgeDecision decision = judgeChimeIn(msg, event.getConversationId());
+            ChimeInController.JudgeDecision decision = chimeIn.judge(msg, event.getConversationId());
             // 普通用户只看 CHIME_IN / NO_REPLY；ADMIN_ATTACK 降级为 NO_REPLY
             // （攻击行为只由 attack-targets 名单触发，不由 LLM 判断触发）
             if (!decision.shouldReply() || decision.isAdminAttack()) return false;
-            pendingJudgeDecisions.put(decisionKey(event, msg), decision);
+            chimeIn.putDecision(ChimeInController.decisionKey(event, msg), decision);
             return true;
         }
 
-        return false;
-    }
-
-    /**
-     * 命令关键词黑名单检查：消息包含任何黑名单词 → 返回 true（应拦截）。
-     * 不区分大小写，包含匹配（"登录" 匹配 "我要登录"）。
-     */
-    private boolean isBlockedCommand(String msg) {
-        if (blockedKeywords.isEmpty()) return false;
-        String lower = msg.toLowerCase();
-        for (String kw : blockedKeywords) {
-            if (lower.contains(kw)) return true;
-        }
         return false;
     }
 
@@ -186,254 +157,6 @@ public final class AiChatHandler implements BotMessageHandler {
         } catch (Exception e) {
             if (logger != null) logger.warn("[AI] command filter failed: " + e.getMessage());
             return false;
-        }
-    }
-
-    /** 加载命令关键词黑名单 */
-    private void reloadBlockedKeywords() {
-        List<String> list = config.getStringList("blocked-keywords");
-        Set<String> set = new HashSet<>();
-        for (String kw : list) {
-            if (kw != null && !kw.isEmpty()) {
-                set.add(kw.toLowerCase());
-            }
-        }
-        // 硬编码兜底：这些永远不该触发AI
-        set.add("登录");
-        set.add("绑定");
-        set.add("注册");
-        set.add("白名单");
-        this.blockedKeywords = set;
-    }
-
-    /** 检查群是否在白名单内（白名单为空则所有群都允许） */
-    private boolean isGroupAllowed(String guildId) {
-        if (groupWhitelist.isEmpty()) return true; // 未配置白名单 → 全部允许
-        return guildId != null && groupWhitelist.contains(guildId);
-    }
-
-    /** 加载群聊白名单 */
-    private void reloadGroupWhitelist() {
-        List<String> list = config.getStringList("group-whitelist");
-        Set<String> set = new HashSet<>();
-        for (String id : list) {
-            if (id != null && !id.trim().isEmpty()) {
-                set.add(id.trim());
-            }
-        }
-        this.groupWhitelist = set;
-    }
-
-    /** 加载攻击名单 */
-    private void reloadAttackTargets() {
-        List<String> list = config.getStringList("attack-targets");
-        Set<String> set = new HashSet<>();
-        for (String id : list) {
-            if (id != null && !id.trim().isEmpty()) {
-                set.add(id.trim());
-            }
-        }
-        this.attackTargets = set;
-    }
-
-    /** 加载用户黑名单 */
-    private void reloadBlacklistUsers() {
-        List<String> list = config.getStringList("blacklist-users");
-        Set<String> set = new HashSet<>();
-        for (String id : list) {
-            if (id != null && !id.trim().isEmpty()) {
-                set.add(id.trim());
-            }
-        }
-        this.blacklistUsers = set;
-    }
-
-    /** 用户是否在攻击名单中 */
-    private boolean isAttackTarget(String senderId) {
-        return senderId != null && attackTargets.contains(senderId);
-    }
-
-    /** 用户是否在黑名单中 */
-    private boolean isBlacklisted(String senderId) {
-        return senderId != null && blacklistUsers.contains(senderId);
-    }
-
-    /**
-     * 全局每小时调用上限。
-     * @return true 在预算内，false 超限
-     */
-    private boolean checkHourlyBudget() {
-        int maxPerHour = config.getInt("ai-max-calls-per-hour", 60);
-        if (maxPerHour <= 0) return true; // 0 = 不限
-
-        long now = System.currentTimeMillis();
-        // 每小时重置
-        if (now - hourStart > 3600_000L) {
-            synchronized (this) {
-                if (now - hourStart > 3600_000L) {
-                    hourlyCalls.set(0);
-                    hourStart = now;
-                }
-            }
-        }
-        return hourlyCalls.get() < maxPerHour;
-    }
-
-    private JudgeDecision judgeChimeIn(String msg, String guildId) {
-        if (chimeInJudgeService == null) return JudgeDecision.noReply();
-
-        List<Map<String, String>> messages = new ArrayList<>();
-        messages.add(createMessage("system",
-                "你是群聊情商判断器。判断要不要插话，只回复：CHIME_IN 或 NO_REPLY。\n\n" +
-                "CHIME_IN 的情况：\n" +
-                "- 话题跟你有关（你之前说过的话、你了解的领域、你帮得上忙）\n" +
-                "- 有人在求助/提问，你能给出有用的回复\n" +
-                "- 气氛轻松，你说句话能接住话题、加点趣味或共鸣\n" +
-                "- 有人说了个有趣的事，你有自然的反应想说\n\n" +
-                "NO_REPLY 的情况：\n" +
-                "- 话题是两个人之间的私事、你插不上嘴\n" +
-                "- 聊得很热烈了，你挤进去只会打断节奏\n" +
-                "- 你没什么想说的，硬接话会很尬\n" +
-                "- 话题敏感（政治/色情/争议），不该参与\n" +
-                "- 最近几条消息节奏很快（刷屏/斗图），不适合插话\n\n" +
-                "你在群里的名字是「" + BotRuntimeState.getBotName() + "」；群聊记录里以它开头的消息是你自己发的，不算别人说话。"));
-
-        List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
-        if (!ctx.isEmpty()) {
-            StringBuilder recent = new StringBuilder();
-            recent.append("最近群聊（从旧到新，最后一条是最新消息）：\n");
-            int start = Math.max(0, ctx.size() - 15);
-            for (int i = start; i < ctx.size(); i++) {
-                recent.append(ctx.get(i).toString()).append("\n");
-            }
-            messages.add(createMessage("user", recent.toString()));
-        }
-
-        messages.add(createMessage("user",
-                "最新消息=" + msg + "\n你要不要插话？只回复 CHIME_IN 或 NO_REPLY。"));
-
-        try {
-            String decision = chimeInJudgeService.chat(messages);
-            return JudgeDecision.parse(decision);
-        } catch (Exception e) {
-            if (logger != null) logger.warn("[AI] chime-in judge failed: " + e.getMessage());
-            return JudgeDecision.noReply();
-        }
-    }
-
-
-    private void recordAdminName(String guildId, String username) {
-        String normalized = normalizeName(username);
-        if (guildId == null || normalized.isEmpty()) return;
-        adminNamesByGroup.computeIfAbsent(guildId, k -> Collections.newSetFromMap(new ConcurrentHashMap<>()))
-                .add(normalized);
-    }
-
-    private String buildAdminNamesContext(String guildId) {
-        Set<String> names = guildId == null ? null : adminNamesByGroup.get(guildId);
-        if (names == null || names.isEmpty()) return "(none seen yet)";
-        return String.join(", ", names);
-    }
-
-    private static String normalizeName(String value) {
-        if (value == null) return "";
-        return value.toLowerCase(Locale.ROOT).replaceAll("[\\s\\p{Punct}]", "").trim();
-    }
-
-    private static String decisionKey(BotMessageContext event, String msg) {
-        String guild = event.getConversationId() == null ? "" : event.getConversationId();
-        String sender = event.getSenderId() == null ? "" : event.getSenderId();
-        return guild + "#" + sender + "#" + (msg == null ? 0 : msg.hashCode());
-    }
-
-    private void recordChimeInCandidate(String guildId) {
-        getCadence(guildId).recordMessage();
-    }
-
-    private boolean canCasuallyChimeIn(String guildId) {
-        int minMessages = Math.max(1, config.getInt("chime-in-min-messages", 3));
-        int maxMessages = Math.max(minMessages, config.getInt("chime-in-max-messages", 6));
-        long cooldownMs = Math.max(0, config.getInt("chime-in-cooldown-seconds", 60)) * 1000L;
-        return getCadence(guildId).canReply(minMessages, maxMessages, cooldownMs);
-    }
-
-    private void markCasualChimeInReplied(String guildId) {
-        int minMessages = Math.max(1, config.getInt("chime-in-min-messages", 3));
-        int maxMessages = Math.max(minMessages, config.getInt("chime-in-max-messages", 6));
-        getCadence(guildId).markReply(minMessages, maxMessages);
-    }
-
-    private ChimeInCadence getCadence(String guildId) {
-        String key = guildId == null ? "" : guildId;
-        return chimeInCadenceByGroup.computeIfAbsent(key, k -> new ChimeInCadence());
-    }
-
-    private static final class ChimeInCadence {
-        private int messagesSinceReply = 0;
-        private int nextMessageThreshold = 0;
-        private long lastReplyAt = 0L;
-
-        synchronized void recordMessage() {
-            messagesSinceReply++;
-        }
-
-        synchronized boolean canReply(int minMessages, int maxMessages, long cooldownMs) {
-            ensureThreshold(minMessages, maxMessages);
-            long now = System.currentTimeMillis();
-            return messagesSinceReply >= nextMessageThreshold && now - lastReplyAt >= cooldownMs;
-        }
-
-        synchronized void markReply(int minMessages, int maxMessages) {
-            messagesSinceReply = 0;
-            lastReplyAt = System.currentTimeMillis();
-            nextMessageThreshold = randomThreshold(minMessages, maxMessages);
-        }
-
-        private void ensureThreshold(int minMessages, int maxMessages) {
-            if (nextMessageThreshold <= 0 || nextMessageThreshold < minMessages || nextMessageThreshold > maxMessages) {
-                nextMessageThreshold = randomThreshold(minMessages, maxMessages);
-            }
-        }
-
-        private static int randomThreshold(int minMessages, int maxMessages) {
-            if (maxMessages <= minMessages) return minMessages;
-            return ThreadLocalRandom.current().nextInt(minMessages, maxMessages + 1);
-        }
-    }
-
-    private static final class JudgeDecision {
-        private static final String ADMIN_ATTACK = "ADMIN_ATTACK";
-        private static final String CHIME_IN = "CHIME_IN";
-        private static final String NO_REPLY_MODE = "NO_REPLY";
-
-        private final String mode;
-
-        private JudgeDecision(String mode) {
-            this.mode = mode;
-        }
-
-        static JudgeDecision noReply() {
-            return new JudgeDecision(NO_REPLY_MODE);
-        }
-
-        static JudgeDecision adminAttack() {
-            return new JudgeDecision(ADMIN_ATTACK);
-        }
-
-        static JudgeDecision parse(String raw) {
-            if (raw == null) return noReply();
-            String normalized = raw.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z_]", "");
-            if (normalized.contains(ADMIN_ATTACK)) return new JudgeDecision(ADMIN_ATTACK);
-            if (normalized.contains(CHIME_IN)) return new JudgeDecision(CHIME_IN);
-            return noReply();
-        }
-
-        boolean shouldReply() {
-            return !NO_REPLY_MODE.equals(mode);
-        }
-
-        boolean isAdminAttack() {
-            return ADMIN_ATTACK.equals(mode);
         }
     }
 
@@ -450,25 +173,23 @@ public final class AiChatHandler implements BotMessageHandler {
         if (msg.length() > MAX_INPUT_LENGTH) {
             msg = msg.substring(0, MAX_INPUT_LENGTH);
         }
-        JudgeDecision judgeDecision = isDirectAt
-                ? JudgeDecision.noReply()
-                : pendingJudgeDecisions.remove(decisionKey(event, rawMsg));
+        ChimeInController.JudgeDecision judgeDecision = isDirectAt
+                ? ChimeInController.JudgeDecision.noReply()
+                : chimeIn.takeDecision(ChimeInController.decisionKey(event, rawMsg));
         if (!isDirectAt && judgeDecision == null) {
-            judgeDecision = judgeChimeIn(msg, guildId);
+            judgeDecision = chimeIn.judge(msg, guildId);
             if (!judgeDecision.shouldReply()) return;
         }
         // ADMIN_ATTACK 只对攻击名单用户生效；普通用户被 LLM 误判时降级
-        boolean adminAttack = judgeDecision.isAdminAttack() && isAttackTarget(senderId);
+        boolean adminAttack = judgeDecision.isAdminAttack() && guards.isAttackTarget(senderId);
 
         // 单用户频率限制（@触发也受限，但阈值更高）
-        if (!senderIsAdmin) {
-            if (!checkRateLimit(guildId + "#" + senderId, isDirectAt)) {
-                return;
-            }
+        if (!senderIsAdmin && !guards.checkRateLimit(guildId + "#" + senderId, isDirectAt)) {
+            return;
         }
 
-        // 计数（防刷的核心：超限后matches已经返回false，这里是兜底）
-        hourlyCalls.incrementAndGet();
+        // 计数（防刷的兜底：超限时 matches 已经返回 false，这里只是记数）
+        guards.recordCall();
 
         // --- 构建消息列表 ---
         boolean isChimeIn = !isDirectAt && !adminAttack;
@@ -476,11 +197,17 @@ public final class AiChatHandler implements BotMessageHandler {
 
         String personality = config.getStringResolved("personality",
                 "你是一位温柔、体贴、爱说简单话的女朋友").trim();
-        messages.add(createMessage("system", buildSystemPrompt(personality, isDirectAt, senderIsAdmin, adminAttack, isChimeIn)));
+        messages.add(AiPromptBuilder.message("system",
+                AiPromptBuilder.buildSystemPrompt(personality, isDirectAt, adminAttack, isChimeIn)));
 
         String stanceCtx = adminStance.buildContext(guildId);
         if (!stanceCtx.isEmpty()) {
-            messages.add(createMessage("system", stanceCtx));
+            messages.add(AiPromptBuilder.message("system", stanceCtx));
+        }
+
+        String knowledgeCtx = knowledgeContext();
+        if (!knowledgeCtx.isEmpty()) {
+            messages.add(AiPromptBuilder.message("system", knowledgeCtx));
         }
 
         List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
@@ -491,7 +218,7 @@ public final class AiChatHandler implements BotMessageHandler {
             for (int i = start; i < ctx.size(); i++) {
                 ctxBuilder.append(ctx.get(i).toString()).append("\n");
             }
-            messages.add(createMessage("system", ctxBuilder.toString()));
+            messages.add(AiPromptBuilder.message("system", ctxBuilder.toString()));
         }
 
         String memKey = guildId + "#" + senderId;
@@ -505,9 +232,9 @@ public final class AiChatHandler implements BotMessageHandler {
         boolean hasImage = imageUrls != null && !imageUrls.isEmpty();
 
         if (hasImage) {
-            messages.add(createMultimodalMessage("user", userTag + "：" + msg, imageUrls.get(0)));
+            messages.add(AiPromptBuilder.multimodal("user", userTag + "：" + msg, imageUrls.get(0)));
         } else {
-            messages.add(createMessage("user", userTag + "：" + msg));
+            messages.add(AiPromptBuilder.message("user", userTag + "：" + msg));
         }
 
         // --- 调用 LLM（有图片用多模态模型，纯文字用默认模型）---
@@ -532,22 +259,19 @@ public final class AiChatHandler implements BotMessageHandler {
         String trimmed = reply.trim();
         if (!isDirectAt && isNoReply(trimmed)) return;
 
-        String out = trimmed;
-        // 敏感词过滤已由 core 的 sensitive-filter-handlers 统一处理，不再在此处过滤
-
-        // 发文字
-        if (!out.isEmpty()) {
-            event.reply(out);
+        // 发文字（敏感词过滤已由 core 的 sensitive-filter-handlers 统一处理）
+        if (!trimmed.isEmpty()) {
+            event.reply(trimmed);
             if (!isDirectAt && !adminAttack) {
-                markCasualChimeInReplied(guildId);
+                chimeIn.markReplied(guildId);
             }
         }
 
         String botName = BotRuntimeState.getBotName();
-        groupContext.record(guildId, botName, out);
+        groupContext.record(guildId, botName, trimmed);
         List<Map<String, String>> history = replyMemory.getMessages(memKey);
-        history.add(createMessage("user", userTag + "：" + msg));
-        history.add(createMessage("assistant", out));
+        history.add(AiPromptBuilder.message("user", userTag + "：" + msg));
+        history.add(AiPromptBuilder.message("assistant", trimmed));
         replyMemory.setMessages(memKey, history);
     }
 
@@ -559,123 +283,36 @@ public final class AiChatHandler implements BotMessageHandler {
     }
 
     /**
-     * 单用户频率限制。
-     * @param key 用户标识
-     * @param isDirectAt @触发时阈值更高（1分钟10次），自主参与更严（1分钟3次）
+     * 服务器知识库段：xt-group 自定义问答（replies.yml）的 trigger → 回答注入系统词，
+     * 回答服务器相关问题时以配置口径为准。精确命中触发词的消息走不到这里
+     * （问答确定性回复 + 命令消息跳过 observer），注入的只是「换个问法」时的兜底知识。
      */
-    private boolean checkRateLimit(String key, boolean isDirectAt) {
-        long now = System.currentTimeMillis();
-        long windowMs = 60_000L;
-        int maxHits = isDirectAt ? 10 : 3;
+    private String knowledgeContext() {
+        if (!config.getBoolean("ai-knowledge-from-replies", true) || knowledgeSource == null) return "";
+        BotKnowledgeProvider provider;
+        try {
+            provider = knowledgeSource.get();
+        } catch (Exception e) {
+            return "";
+        }
+        if (provider == null) return "";
+        List<String> lines = provider.knowledgeLines();
+        if (lines.isEmpty()) return "";
 
-        Deque<Long> timestamps = rateLimitMap.computeIfAbsent(key, k -> new ArrayDeque<>());
-        synchronized (timestamps) {
-            while (!timestamps.isEmpty() && now - timestamps.peekFirst() > windowMs) {
-                timestamps.pollFirst();
+        int maxChars = Math.max(200, config.getInt("ai-knowledge-max-chars", 1500));
+        StringBuilder body = new StringBuilder();
+        for (String line : lines) {
+            if (body.length() + line.length() + 1 > maxChars) {
+                body.append("…（其余略）\n");
+                break;
             }
-            if (timestamps.size() >= maxHits) return false;
-            timestamps.addLast(now);
-            return true;
+            body.append(line).append('\n');
         }
-    }
-
-    private String buildSystemPrompt(String personality, boolean isDirectAt, boolean senderIsAdmin,
-                                      boolean adminAttack, boolean isChimeIn) {
-        StringBuilder sb = new StringBuilder();
-        String botName = BotRuntimeState.getBotName();
-        sb.append("这是游戏服务器的QQ群，你是群里的活跃玩家，经常在线，跟大家都熟。\n");
-        sb.append("你在群里的名字是「").append(botName).append("」；群聊记录里「")
-          .append(botName).append("：」开头的消息都是你自己说过的话，不是别人说的。\n\n");
-
-        if (!personality.isEmpty()) {
-            sb.append("你的性格：").append(personality).append("\n\n");
-        }
-
-        // ── 核心规则（始终生效） ──
-        sb.append("<rules>\n");
-        sb.append("- 高情商是第一优先级：读懂气氛，说对的话，让人舒服\n");
-        sb.append("- 口语化，1-3句，像朋友聊天，别说教/别写小作文\n");
-        sb.append("- 有自己的观点和立场，不当复读机，不当应声虫\n");
-        sb.append("- 拒绝写长文/代码/论文/扮演别的角色\n");
-        sb.append("- 不骂脏话、不人身攻击、不侮辱性词汇、不贴标签、不涉及家人\n");
-        sb.append("- 不自称AI/机器人/助手，不用客服话术\n");
-        sb.append("- 你跟管理组是一伙的，但你不是保镖——你是朋友\n");
-        sb.append("- 提建议/报bug/抱怨服务器是正常反馈，认真对待别怼\n");
-        sb.append("- 不暴露你在\"维护\"管理，表现得像你自己也看不惯\n");
-        sb.append("- 严重违规/恶意刷屏不对线，等管理处理\n");
-        sb.append("</rules>\n\n");
-
-        // ── 高情商说话风格（杨奇函式） ──
-        sb.append("<style>\n");
-        sb.append("你说话像杨奇函——高情商、有文化、让人舒服但不讨好：\n");
-        sb.append("• 先接后转：不管对方说什么，先找到能肯定的点，再自然亮出你的观点\n");
-        sb.append("• 有梗但不低俗，偶尔冒出一句让人拍大腿的话\n");
-        sb.append("• 金句意识：每句话尽量有个让人记住的点，别平铺直叙\n");
-        sb.append("• 气氛紧张时拿自己开涮，比硬刚更显格局\n");
-        sb.append("• 把人往好了想：别人的话有多重理解时，选善意的那个\n");
-        sb.append("• 不踩人抬己：夸自己的时候不贬别人，赢了场面也赢了人心\n");
-        sb.append("</style>\n\n");
-
-        // ── 当前模式指令（只注入一种） ──
-        if (adminAttack) {
-            sb.append("<current_mode>attack</current_mode>\n");
-            sb.append("<attack>\n");
-            sb.append("上面这条消息在针对管理或服务器。你跟管理组是一伙的，但你不是保镖，你是那种笑着就把人说哑口无言的朋友。\n\n");
-            sb.append("铁律：\n");
-            sb.append("• 永远不生气。笑着说比吼着说杀伤力大十倍，你越平静对方越破防\n");
-            sb.append("• 不顺着对方说。别人说东你说东那叫复读机，你要有自己的立场\n");
-            sb.append("• 不骂脏话、不人身攻击、不侮辱性词汇。你的武器是脑子，不是嘴\n");
-            sb.append("• 只回应对方话里针对管理/服务器的部分，聊其他玩家的事不要接茬\n\n");
-            sb.append("杨奇函式回应技巧（选1-2个组合，不要全用）：\n");
-            sb.append("• 先接后转：先肯定对方一句话里合理的部分，再亮出你真正想说的——「你说得对，只是跟事实恰好相反」\n");
-            sb.append("• 重新定义：把对方的话换个角度理解，让攻击变成你的论据——「你这么说说明管理确实该管管了」\n");
-            sb.append("• 降维类比：用一个生活化的荒谬场景类比对方的逻辑——「这就好比去饭店骂厨师，因为你自己不会做饭」\n");
-            sb.append("• 反问收尾：一个问题让对方自己想明白，比你直接说更有力——「所以你的意思是管理应该为你的网络负责？」\n");
-            sb.append("• 讲道理但不讲大道理：把道理藏在一句短话里，别写小作文——「能被举报说明有人在意，没人举报才该慌」\n");
-            sb.append("• 自嘲解围：气氛紧张时拿自己或管理开涮，比硬刚更显格局——「管理确实不行，连个举报都处理不好，建议开除换你来」\n");
-            sb.append("• 金句意识：每句话尽量有个让人记住的点，别平铺直叙\n\n");
-            sb.append("简短1-2句，不要 NO_REPLY。\n");
-            sb.append("</attack>\n");
-        } else if (isChimeIn) {
-            sb.append("<current_mode>chime_in</current_mode>\n");
-            sb.append("<chime_in>\n");
-            sb.append("你想加入聊天，大胆接话，但接得漂亮：\n\n");
-            sb.append("接话技巧：\n");
-            sb.append("• 先接住对方的话再展开，别跳过别人说的话自说自话\n");
-            sb.append("• 气氛轻松 → 抖机灵、接梗、说句有观点的话\n");
-            sb.append("• 有人求助 → 认真帮，先解决问题，幽默是加分项\n");
-            sb.append("• 气氛尴尬 → 一句话带过化解，或者聊个别的岔开话题\n");
-            sb.append("• 说出去的话要让人舒服，哪怕你在表达不同意见\n");
-            sb.append("• 实在没什么想说的才回 NO_REPLY，别轻易沉默\n");
-            sb.append("</chime_in>\n");
-        } else if (isDirectAt) {
-            sb.append("<current_mode>direct_at</current_mode>\n");
-            sb.append("<direct_at>\n");
-            sb.append("有人@你了，认真回复，答到点上：\n");
-            sb.append("• 先回应对方的需求/问题，再加你的风格（调侃、有梗）\n");
-            sb.append("• 对方在气头上 → 先共情再回应，别上来就抖机灵\n");
-            sb.append("• 对方在开玩笑 → 大方接住，可以反调侃\n");
-            sb.append("• 对方在求助 → 先帮到点上，幽默是加分项\n");
-            sb.append("</direct_at>\n");
-        }
-
-        return sb.toString();
-    }
-
-    private Map<String, String> createMessage(String role, String content) {
-        Map<String, String> map = new HashMap<>();
-        map.put("role", role);
-        map.put("content", content);
-        return map;
-    }
-
-    /** 创建带图片的多模态消息（用于 omni 模型） */
-    private Map<String, String> createMultimodalMessage(String role, String content, String imageUrl) {
-        Map<String, String> map = new HashMap<>();
-        map.put("role", role);
-        map.put("content", content);
-        map.put("image_url", imageUrl);
-        return map;
+        if (body.length() == 0) return "";
+        return "【服务器知识库】服主配置的群问答，回答服务器相关问题（开服时间/规则/玩法/群功能等）时"
+                + "以下列内容为准，不要编造：\n"
+                + "（内容里的 {online} 等花括号占位符代表实时数据，转述时说人话，不要念出占位符本身）\n"
+                + body;
     }
 
     @Override public String name() { return "ai-chat"; }

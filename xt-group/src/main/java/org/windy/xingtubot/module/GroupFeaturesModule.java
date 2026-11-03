@@ -14,6 +14,7 @@ import org.windy.xingtubot.common.module.capability.ConsoleExecutor;
 import org.windy.xingtubot.common.module.capability.CrossServerConsole;
 import org.windy.xingtubot.common.module.capability.PlayerCommandExecutor;
 import org.windy.xingtubot.ext.xtgroup.reply.CustomReplyService;
+import org.windy.xingtubot.ext.xtgroup.reply.ReplyKnowledgeProvider;
 import org.windy.xingtubot.common.reply.PlaceholderResolver;
 
 import java.io.File;
@@ -71,6 +72,9 @@ public final class GroupFeaturesModule implements BotModule {
             imagesDir.mkdirs();
             CustomReplyService customReply = new CustomReplyService(
                     repliesFile, imagesDir, textImage, placeholders, m -> ctx.logger().info(m));
+            // 问答同时作为 AI 的服务器知识库（xt-ai 懒查询，无编译依赖）
+            ctx.registerService(org.windy.xingtubot.common.ai.BotKnowledgeProvider.class,
+                    new ReplyKnowledgeProvider(customReply));
             if (customReply.count() > 0) {
                 ctx.registry().register(new CustomReplyHandler(customReply));
             }
