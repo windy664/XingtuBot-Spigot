@@ -24,8 +24,8 @@ import java.util.function.Supplier;
  * <ol>
  *   <li><b>旁听</b>：所有群消息记录到 {@link GroupContextMemory}，AI 知道群里在聊什么。</li>
  *   <li><b>超管立场</b>：长期记忆超管的观点（{@link AdminStanceMemory}），有人跟超管观点冲突时主动反驳。</li>
- *   <li><b>服务器知识库</b>：xt-group 的自定义问答经服务总线（JDK Supplier 软依赖）注入系统词，
- *       玩家换着问法问服务器问题时也能按配置口径回答。</li>
+ *   <li><b>服务器知识库</b>：xt-group 的自定义问答经服务总线（JDK Supplier 软依赖）取来，
+ *       词汇级粗检索挑 top-K 注入系统词，玩家换着问法问服务器问题时也能按配置口径回答。</li>
  *   <li><b>@触发</b>：@机器人 时直接回复（跳过已注册命令和配置的关键词黑名单）。</li>
  *   <li><b>自主参与</b>：傻模型判断是否值得接话（{@link ChimeInController}），并用群聊节奏限制普通插话。跳过命令消息。</li>
  * </ol>
@@ -204,7 +204,7 @@ public final class AiChatHandler implements BotMessageHandler {
             messages.add(AiPromptBuilder.message("system", stanceCtx));
         }
 
-        String knowledgeCtx = knowledgeContext();
+        String knowledgeCtx = knowledgeContext(msg);
         if (!knowledgeCtx.isEmpty()) {
             messages.add(AiPromptBuilder.message("system", knowledgeCtx));
         }
@@ -282,11 +282,12 @@ public final class AiChatHandler implements BotMessageHandler {
     }
 
     /**
-     * 服务器知识库段：xt-group 自定义问答（replies.yml）的 trigger → 回答注入系统词，
-     * 回答服务器相关问题时以配置口径为准。精确命中触发词的消息走不到这里
-     * （问答确定性回复 + 命令消息跳过 observer），注入的只是「换个问法」时的兜底知识。
+     * 服务器知识库段：xt-group 自定义问答（replies.yml）经服务总线软依赖取来后，
+     * 按词汇级粗检索挑与这条消息最相关的 top-K 注入系统词（{@link KnowledgeRetriever}）。
+     * 无重叠时不注入（零 token）；精确命中触发词的消息走不到这里
+     * （问答确定性回复 + 命令消息跳过 observer）。
      */
-    private String knowledgeContext() {
+    private String knowledgeContext(String message) {
         if (!config.getBoolean("ai-knowledge-from-replies", true) || knowledgeSource == null) return "";
         List<String> lines;
         try {
@@ -296,9 +297,13 @@ public final class AiChatHandler implements BotMessageHandler {
         }
         if (lines == null || lines.isEmpty()) return "";
 
+        int topK = Math.max(1, config.getInt("ai-knowledge-top-k", 3));
+        List<String> picked = KnowledgeRetriever.topK(lines, message, topK);
+        if (picked.isEmpty()) return "";
+
         int maxChars = Math.max(200, config.getInt("ai-knowledge-max-chars", 1500));
         StringBuilder body = new StringBuilder();
-        for (String line : lines) {
+        for (String line : picked) {
             if (body.length() + line.length() + 1 > maxChars) {
                 body.append("…（其余略）\n");
                 break;
@@ -306,8 +311,8 @@ public final class AiChatHandler implements BotMessageHandler {
             body.append(line).append('\n');
         }
         if (body.length() == 0) return "";
-        return "【服务器知识库】服主配置的群问答，回答服务器相关问题（开服时间/规则/玩法/群功能等）时"
-                + "以下列内容为准，不要编造：\n"
+        return "【服务器知识库】与这条消息可能相关的服主配置问答，回答服务器相关问题时"
+                + "以下列内容为准，不要编造；若列出的问答与问题无关就忽略，别硬套：\n"
                 + "（内容里的 {online} 等花括号占位符代表实时数据，转述时说人话，不要念出占位符本身）\n"
                 + body;
     }
