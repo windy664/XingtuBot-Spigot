@@ -58,7 +58,8 @@ public class QqBot {
         return !recentEventIds.add(eventKey);
     }
 
-    // 表情包/贴纸的内联形态：<face ...> 商城表情标签直接混在正文里，游戏端渲染不了，属噪音
+    // 表情包/贴纸的内联形态：<face ...> QQ 表情标签直接混在正文里（Type=6 商城贴纸还自带
+    // 多媒体下载链接），游戏端渲染不了标签本身
     private static final java.util.regex.Pattern FACE_TAG =
             java.util.regex.Pattern.compile("(?i)<face[^>]*>");
 
@@ -153,18 +154,26 @@ public class QqBot {
             }
 
             // 表情包/贴纸常以内联形式混在正文（<face ...> 标签 + 多媒体下载链接，无 attachments）：
-            // 剥掉 face 标签噪音；下载链接抽出进 imageUrls 并从正文移除，
-            // 避免「裸 URL 原文 + CICode」在游戏里重复显示。attachments 与正文重复的链接也在此去重。
+            // face 标签是 QQ 表情，游戏端只占位为 [表情]，不按图片转发（不进 imageUrls，
+            // 不会被 chatlink 渲染成 CICode/[图片]）；贴纸自带的内联下载链接是表情本体，一并从正文剥掉。
+            // 无 face 标签的裸内联多媒体链接仍按图片抽进 imageUrls（ChatImage 按玩家分流渲染），
+            // 并从正文移除，避免「裸 URL 原文 + CICode」重复显示；attachments 与正文重复的链接也在此去重。
             if (content != null && !content.isEmpty()) {
-                content = FACE_TAG.matcher(content).replaceAll(" ").trim();
-                java.util.regex.Matcher m = INLINE_MEDIA_URL.matcher(content);
-                while (m.find()) {
-                    String u = m.group();
-                    String norm = u.startsWith("http") ? u : "https://" + u; // QQ 偶尔不带协议头
-                    if (!imageUrls.contains(norm)) imageUrls.add(norm);
+                boolean hasFace = FACE_TAG.matcher(content).find();
+                if (hasFace) {
+                    content = FACE_TAG.matcher(content).replaceAll("[表情]").trim();
+                    content = INLINE_MEDIA_URL.matcher(content).replaceAll(" ")
+                            .replaceAll("\\s+", " ").trim();
+                } else {
+                    java.util.regex.Matcher m = INLINE_MEDIA_URL.matcher(content);
+                    while (m.find()) {
+                        String u = m.group();
+                        String norm = u.startsWith("http") ? u : "https://" + u; // QQ 偶尔不带协议头
+                        if (!imageUrls.contains(norm)) imageUrls.add(norm);
+                    }
+                    content = INLINE_MEDIA_URL.matcher(content).replaceAll(" ")
+                            .replaceAll("\\s+", " ").trim();
                 }
-                content = INLINE_MEDIA_URL.matcher(content).replaceAll(" ")
-                        .replaceAll("\\s+", " ").trim();
             }
 
             String groupOpenid = optString(d, "group_openid");
