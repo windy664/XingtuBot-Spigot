@@ -37,6 +37,8 @@ class AdminStanceMemoryTest {
     @Test
     void compressPreservesRecentMessages(@TempDir File dir) {
         AdminStanceMemory mem = new AdminStanceMemory(dir);
+        // 待归纳原文默认不注入，需要显式开启
+        mem.configure(true, true, 5, null);
         String guild = "test-guild";
 
         for (int i = 0; i < 12; i++) {
@@ -70,6 +72,8 @@ class AdminStanceMemoryTest {
     @Test
     void deduplication(@TempDir File dir) {
         AdminStanceMemory mem = new AdminStanceMemory(dir);
+
+        mem.configure(true, true, 5, null);
         String guild = "test-guild";
 
         mem.record(guild, "相同消息");
@@ -92,6 +96,8 @@ class AdminStanceMemoryTest {
     @Test
     void buildContextContainsHeader(@TempDir File dir) {
         AdminStanceMemory mem = new AdminStanceMemory(dir);
+
+        mem.configure(true, true, 5, null);
         mem.record("g1", "测试观点");
 
         String ctx = mem.buildContext("g1");
@@ -104,11 +110,14 @@ class AdminStanceMemoryTest {
     @Test
     void persistAndReload(@TempDir File dir) {
         AdminStanceMemory mem1 = new AdminStanceMemory(dir);
+
+        mem1.configure(true, true, 5, null);
         mem1.record("g1", "持久化测试1");
         mem1.record("g1", "持久化测试2");
 
         // 重新加载
         AdminStanceMemory mem2 = new AdminStanceMemory(dir);
+        mem2.configure(true, true, 5, null);
         String ctx = mem2.buildContext("g1");
         assertTrue(ctx.contains("持久化测试1"));
         assertTrue(ctx.contains("持久化测试2"));
@@ -162,6 +171,8 @@ class AdminStanceMemoryTest {
                 new com.google.gson.Gson().toJson(legacy).getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
         AdminStanceMemory mem = new AdminStanceMemory(dir);
+
+        mem.configure(true, true, 5, null);
         String ctx = mem.buildContext("g1");
         assertTrue(ctx.contains("管理员支持创造模式"), "旧摘要应迁入长期记忆: " + ctx);
         assertTrue(ctx.contains("反对PvP"), "旧原始条目应迁入待归纳: " + ctx);
@@ -206,7 +217,119 @@ class AdminStanceMemoryTest {
         assertFalse(md.contains("观点0"), "待归纳应从 md 文件清除: " + md);
     }
 
+    // ===== 隐私过滤 =====
+
+    @Test
+    void privateMessageNotRecorded(@TempDir File dir) throws Exception {
+        AdminStanceMemory mem = new AdminStanceMemory(dir);
+
+        mem.configure(true, true, 5, null);
+        mem.record("g1", "服务器宣传帖曾被MC百科删除");
+        mem.record("g1", "我最近经济拮据，服务器每月180续费才勉强续命");
+        mem.record("g1", "我的Google账号被封了，Gemini登录不上");
+
+        String ctx = mem.buildContext("g1");
+        assertFalse(ctx.contains("经济拮据"), "财务隐私不应进入上下文: " + ctx);
+        assertFalse(ctx.contains("Google账号被封"), "账号状态隐私不应进入上下文: " + ctx);
+        assertTrue(ctx.contains("MC百科"), "正常的服务器相关发言应保留: " + ctx);
+
+        // 也不应落盘
+        String md = readMd(dir);
+        assertFalse(md.contains("经济拮据"), "财务隐私不应写入 md: " + md);
+        assertFalse(md.contains("Google账号被封"), "账号隐私不应写入 md: " + md);
+    }
+
+    @Test
+    void privateSummarySanitized(@TempDir File dir) throws Exception {
+        AdminStanceMemory mem = new AdminStanceMemory(dir);
+        mem.setAiService(new AiService("k", "http://127.0.0.1:1", "test") {
+            @Override
+            public String chat(String userMessage) {
+                return "管理员支持创造模式。经济拮据，常吃泡面。Google账号被封了。";
+            }
+        }, null);
+
+        for (int i = 0; i < 6; i++) {
+            mem.record("g1", "观点" + i);
+        }
+
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            if (mem.buildContext("g1").contains("支持创造模式")) break;
+            Thread.sleep(50);
+        }
+
+        String ctx = mem.buildContext("g1");
+        assertTrue(ctx.contains("支持创造模式"), "正常立场应保留: " + ctx);
+        assertFalse(ctx.contains("经济拮据"), "摘要里的财务隐私应被剔除: " + ctx);
+        assertFalse(ctx.contains("泡面"), "摘要里的生活隐私应被剔除: " + ctx);
+        assertFalse(ctx.contains("Google账号被封"), "摘要里的账号隐私应被剔除: " + ctx);
+    }
+
+    @Test
+    void privateLegacyFileEntriesDropped(@TempDir File dir) throws Exception {
+        java.util.Map<String, List<String>> legacy = new java.util.LinkedHashMap<>();
+        legacy.put("g1", java.util.Arrays.asList(
+                "[以往观点摘要] 管理员支持创造模式",
+                "我的密码是123456",
+                "新观点：反对PvP"));
+        Files.write(new File(dir, "admin_stance.json").toPath(),
+                new com.google.gson.Gson().toJson(legacy).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+        AdminStanceMemory mem = new AdminStanceMemory(dir);
+        mem.configure(true, true, 5, null);
+        String ctx = mem.buildContext("g1");
+        assertTrue(ctx.contains("管理员支持创造模式"), "正常摘要应保留: " + ctx);
+        assertFalse(ctx.contains("密码是123456"), "凭证类隐私应被丢弃: " + ctx);
+        assertTrue(ctx.contains("反对PvP"), "正常条目应保留: " + ctx);
+    }
+
+    // ===== 开关与注入策略 =====
+
+    @Test
+    void disabledStanceRecordsNothing(@TempDir File dir) {
+        AdminStanceMemory mem = new AdminStanceMemory(dir);
+        mem.configure(false, false, 3, null);
+        mem.record("g1", "管理员支持创造模式");
+
+        assertEquals("", mem.buildContext("g1"), "关闭后不应注入任何立场");
+    }
+
+    @Test
+    void pendingNotInjectedByDefault(@TempDir File dir) {
+        AdminStanceMemory mem = new AdminStanceMemory(dir);
+        mem.record("g1", "管理员支持创造模式");
+
+        String ctx = mem.buildContext("g1");
+        // 默认不注入逐字原文：待归纳只是记录，不进提示词
+        assertFalse(ctx.contains("支持创造模式"), "默认不应注入待归纳原文: " + ctx);
+        assertFalse(ctx.contains("群主最近说的"), "默认不应出现待归纳段落: " + ctx);
+
+        // 显式开启后才会注入
+        mem.configure(true, true, 3, null);
+        String ctx2 = mem.buildContext("g1");
+        assertTrue(ctx2.contains("群主最近说的"), "开启后应注入待归纳段落: " + ctx2);
+    }
+
+    @Test
+    void contextCarriesUsageBoundary(@TempDir File dir) {
+        AdminStanceMemory mem = new AdminStanceMemory(dir);
+
+        mem.configure(true, true, 5, null);
+        mem.record("g1", "管理员支持创造模式");
+
+        String ctx = mem.buildContext("g1");
+        assertTrue(ctx.contains("不要在群里复述"), "应提示不要复述群主私事: " + ctx);
+        assertTrue(ctx.contains("不要为了表态而表态"), "应提示话题无关时不要硬表态: " + ctx);
+    }
+
     // ===== 工具 =====
+
+    private String readMd(File dir) throws Exception {
+        File f = new File(dir, "admin_stance.md");
+        if (!f.exists()) return "";
+        return new String(Files.readAllBytes(f.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+    }
 
     private int countOccurrences(String text, String sub) {
         int count = 0;

@@ -9,6 +9,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -33,6 +34,22 @@ public final class AdminStanceMemory {
     private static final Gson GSON = new Gson();
     private static final String SUMMARY_PREFIX = "[以往观点摘要] ";
     private static final String PENDING_HEADING = "### 待归纳";
+
+    /**
+     * 默认隐私过滤规则：命中即视为「个人隐私」，不记录、不注入、也不进摘要。
+     * 覆盖财务状况、账号/凭证状态、健康与生活困境——这些既不是「立场」，
+     * 也不该被模型在群里复述。
+     */
+    private static final String[] DEFAULT_PRIVACY_REGEXES = {
+            "(没钱|有钱|很穷|穷|经济拮据|拮据|工资|收入|泡面|续费|亏损|成本|利润|房租|贷款|预算|涨价)",
+            "(密码|密码本|账号|帐号|验证码|短信|辅助验证|登不上|登录不上|被封|封号|cookie|Cookie|密钥|私钥|身份证|手机号|api[ _-]?key)",
+            "(生病|感冒|发烧|医院|失眠|抑郁|焦虑症)"
+    };
+
+    private volatile boolean enabled = true;            // 总开关：关掉后不记录也不注入
+    private volatile boolean injectPending = false;     // 是否把待归纳原文注入提示词（默认关）
+    private volatile int maxPendingInject = 3;          // 注入的待归纳条数上限
+    private volatile List<Pattern> privacyPatterns = compilePrivacy(DEFAULT_PRIVACY_REGEXES);
 
     private static final class GroupMemory {
         volatile String summary = "";
@@ -63,11 +80,82 @@ public final class AdminStanceMemory {
     }
 
     /**
+     * 设置运行参数（由 {@link org.windy.xingtubot.common.config.BotConfig} 驱动）。
+     *
+     * @param enabled           总开关，false 时既不记录也不注入
+     * @param injectPending     是否把「待归纳」原文注入提示词（默认 false：原文是逐字发言，不是立场）
+     * @param maxPendingInject  注入的待归纳条数上限
+     * @param privacyRegexes    隐私过滤正则；为空则用 {@link #DEFAULT_PRIVACY_REGEXES}
+     */
+    public void configure(boolean enabled, boolean injectPending, int maxPendingInject, List<String> privacyRegexes) {
+        this.enabled = enabled;
+        this.injectPending = injectPending;
+        this.maxPendingInject = Math.max(0, maxPendingInject);
+        List<String> rules = (privacyRegexes == null || privacyRegexes.isEmpty())
+                ? Arrays.asList(DEFAULT_PRIVACY_REGEXES)
+                : privacyRegexes;
+        this.privacyPatterns = compilePrivacy(rules.toArray(new String[0]));
+        // 开关从关变开时，之前记录的内容可能含旧隐私规则命中的条目，这里做一次清洗
+        purgePrivatePending();
+    }
+
+    private static List<Pattern> compilePrivacy(String[] regexes) {
+        List<Pattern> list = new ArrayList<>();
+        for (String r : regexes) {
+            if (r == null || r.trim().isEmpty()) continue;
+            try {
+                list.add(Pattern.compile(r));
+            } catch (Exception ignored) {
+                // 非法正则忽略，不影响其它规则
+            }
+        }
+        return list;
+    }
+
+    /** 是否命中隐私规则。 */
+    private boolean isPrivate(String text) {
+        if (text == null || text.isEmpty()) return false;
+        for (Pattern p : privacyPatterns) {
+            if (p.matcher(text).find()) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 从 LLM 产出的摘要里剔除含隐私的句子——提示词已经要求过，但模型不保证遵守，
+     * 这里做第二道过滤，避免隐私经摘要落盘后再被注入提示词。
+     */
+    private String sanitizePrivate(String text) {
+        if (text == null || text.isEmpty()) return "";
+        if (privacyPatterns.isEmpty()) return text;
+        StringBuilder sb = new StringBuilder();
+        for (String part : text.split("(?<=[。！？!?;；\\n])", -1)) {
+            if (part.isEmpty()) continue;
+            if (!isPrivate(part)) sb.append(part);
+        }
+        return sb.toString().trim();
+    }
+
+    /** 清掉已记录内容里命中隐私规则的待归纳条目（加载旧文件 / 切换规则后调用）。 */
+    private void purgePrivatePending() {
+        boolean changed = false;
+        for (GroupMemory g : groups.values()) {
+            synchronized (g.pending) {
+                boolean removed = g.pending.removeIf(this::isPrivate);
+                changed |= removed;
+            }
+        }
+        if (changed) save();
+    }
+
+    /**
      * 记录一条超管发言（自动持久化，攒够阈值异步让 LLM 压缩进摘要）。
      */
     public void record(String guildId, String content) {
+        if (!enabled) return;
         if (guildId == null || content == null || content.trim().isEmpty()) return;
         String entry = content.trim().replaceAll("\\s+", " ");
+        if (isPrivate(entry)) return; // 隐私发言不入库
         GroupMemory g = groups.computeIfAbsent(guildId, k -> new GroupMemory());
         synchronized (g.pending) {
             // 去重（只看最后一条，与旧逻辑一致）
@@ -112,13 +200,18 @@ public final class AdminStanceMemory {
         }
 
         String prompt = "下面是某个QQ群里管理员立场的长期记忆（Markdown），以及他最近说的新话。\n" +
-                "请把新话里的立场合并进记忆：保留具体态度、偏好和结论，去掉重复、过时或无关细节，" +
-                "输出更新后的精炼 Markdown（200字以内；不要代码块包裹，不要任何标题行）。直接输出正文。\n\n" +
+                "请把新话里的立场合并进记忆，输出更新后的精炼 Markdown（200字以内；不要代码块包裹，不要任何标题行）。直接输出正文。\n\n" +
+                "合并规则：\n" +
+                "• 只保留与服务器、游戏、技术、群务相关且长期有效的态度、偏好和结论\n" +
+                "• 删除个人隐私与生活琐事（财务状况、账号状态、密码凭证、健康、住址、家人等）\n" +
+                "• 删除对 AI / 模型本身的评价（模型快不快、聪不聪明、好不好用）\n" +
+                "• 去掉重复、过时或无关细节\n" +
+                "• 写「持什么观点」，不要写成人物小传、性格评价或生活状况描述\n\n" +
                 "【当前记忆】\n" + (oldSummary.isEmpty() ? "（空）" : oldSummary) + "\n\n" +
                 "【管理员最近说的】\n" + input;
 
         try {
-            String summary = cleanSummary(aiService.chat(prompt));
+            String summary = sanitizePrivate(cleanSummary(aiService.chat(prompt)));
             if (summary.isEmpty()) return;
 
             GroupMemory g = groups.get(guildId);
@@ -163,23 +256,33 @@ public final class AdminStanceMemory {
      * 构建"超管观点"上下文，注入到 AI 系统提示中。
      */
     public String buildContext(String guildId) {
+        if (!enabled) return "";
         GroupMemory g = groups.get(guildId);
-        if (g == null || (g.summary.isEmpty() && g.pending.isEmpty())) return "";
+        if (g == null) return "";
+
+        List<String> pendingSnapshot;
+        synchronized (g.pending) {
+            pendingSnapshot = new ArrayList<>(g.pending);
+        }
+        if (g.summary.isEmpty() && (pendingSnapshot.isEmpty() || !injectPending)) return "";
 
         StringBuilder sb = new StringBuilder();
         sb.append("【你的立场依据——群主/管理员说过的话】\n");
-        sb.append("你在群里要跟群主/管理员保持一致。如果有人跟群主观点不同，你要站在群主那边。\n");
-        sb.append("不要直接说「群主说过」，而是自然地表达同样的立场。\n\n");
+        sb.append("下面是群主的偏好与倾向，供你把握语气和立场方向：\n");
+        sb.append("- 与群主保持一致；有人跟群主观点不同，你自然地站在群主那边\n");
+        sb.append("- 这是倾向，不是可引用的事实：不要在群里复述群主的私事、经历或个人信息\n");
+        sb.append("- 只在与话题相关时体现；话题无关时不要硬扯上群主的观点，也不要为了表态而表态\n");
+        sb.append("- 不要直接说「群主说过」，而是自然地表达同样的立场\n\n");
         if (!g.summary.isEmpty()) {
-            sb.append("群主立场的长期记忆：\n").append(g.summary.trim()).append("\n\n");
+            sb.append("群主的长期立场与偏好：\n").append(g.summary.trim()).append("\n\n");
         }
-        synchronized (g.pending) {
-            if (!g.pending.isEmpty()) {
-                sb.append("群主最近说的：\n");
-                for (String line : g.pending) {
-                    sb.append("- ").append(line).append("\n");
-                }
+        if (injectPending && !pendingSnapshot.isEmpty()) {
+            int from = Math.max(0, pendingSnapshot.size() - maxPendingInject);
+            sb.append("群主最近说的（仅供把握语气，不要复述原话）：\n");
+            for (int i = from; i < pendingSnapshot.size(); i++) {
+                sb.append("- ").append(pendingSnapshot.get(i)).append("\n");
             }
+            sb.append("\n");
         }
         return sb.toString();
     }
@@ -264,7 +367,7 @@ public final class AdminStanceMemory {
                 } else if (line.startsWith("- ") && inPending) {
                     GroupMemory g = groups.computeIfAbsent(currentGuild, k -> new GroupMemory());
                     String q = line.substring(2).trim();
-                    if (!q.isEmpty()) g.pending.add(q);
+                    if (!q.isEmpty() && !isPrivate(q)) g.pending.add(q);
                 } else if (!line.isEmpty() && !line.startsWith("<!--") && !inPending && summary != null) {
                     if (summary.length() > 0) summary.append('\n');
                     summary.append(line);
@@ -280,6 +383,7 @@ public final class AdminStanceMemory {
         GroupMemory g = groups.computeIfAbsent(guildId, k -> new GroupMemory());
         if (summary != null) {
             String s = summary.toString().trim();
+            s = sanitizePrivate(s);
             if (s.length() > MAX_LOADED_SUMMARY_CHARS) s = s.substring(0, MAX_LOADED_SUMMARY_CHARS);
             g.summary = s;
         }
@@ -301,6 +405,7 @@ public final class AdminStanceMemory {
                         boolean isSummary = item != null && item.startsWith("[以往观点摘要]");
                         String cleaned = stripNestedSummaryPrefix(item);
                         if (cleaned.isEmpty()) continue;
+                        if (isPrivate(cleaned)) continue;
                         if (isSummary) {
                             g.summary = cleaned;
                         } else {

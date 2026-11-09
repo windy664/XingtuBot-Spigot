@@ -71,6 +71,11 @@ public final class AiChatHandler implements BotMessageHandler {
         this.permission = permission;
         this.adminStance = new AdminStanceMemory(dataDir);
         this.adminStance.setAiService(aiService, logger);
+        this.adminStance.configure(
+                config.getBoolean("ai-admin-stance-enable", true),
+                config.getBoolean("ai-admin-stance-inject-pending", false),
+                config.getInt("ai-admin-stance-max-pending-inject", 3),
+                config.getStringList("ai-admin-stance-privacy-filter"));
         this.guards = new AiGuards(config);
         this.chimeIn = new ChimeInController(chimeInJudgeService, config, logger, groupContext);
         this.knowledgeSource = knowledgeSource;
