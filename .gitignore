@@ -33,6 +33,9 @@ FIX_*.md
 DEBUG_*.md
 MIGRATION_*.md
 
+# 本地方案文档目录（整改方案 / 观察清单等，不入库）
+docs/
+
 # Logs
 *.log
 
