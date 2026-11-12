@@ -66,6 +66,11 @@ public final class AiChatHandler implements BotMessageHandler {
     private final Supplier<List<String>> knowledgeSource;
     // AI 专属线程池：LLM 调用绝不在网关线程上发生
     private final AiExecutor executor;
+    // 人格卡（身份 / 行为 / 表达 / 忌讳 / few-shot）
+    private final AiPersona persona;
+    // 输出后处理管线：所有回复的唯一出口
+    private final AiPostProcessor postProcessorChimeIn;
+    private final AiPostProcessor postProcessorDirectAt;
 
     public AiChatHandler(AiService aiService, BotConfig config, BotLogger logger,
                          BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
@@ -100,6 +105,33 @@ public final class AiChatHandler implements BotMessageHandler {
         this.chimeIn = new ChimeInController(chimeInJudgeService, config, logger, groupContext);
         this.knowledgeSource = knowledgeSource;
         this.executor = executor != null ? executor : new AiExecutor(logger);
+        this.persona = AiPersona.fromConfig(config);
+
+        Map<String, String> pp = config.getStringMap("post-process");
+        double splitProb = parseDouble(pp.get("split-probability"), 0.5);
+        int maxParts = parseInt(pp.get("split-max-parts"), 3);
+        this.postProcessorChimeIn = new AiPostProcessor(
+                parseInt(pp.get("max-length-chime-in"), 120), splitProb, maxParts);
+        this.postProcessorDirectAt = new AiPostProcessor(
+                parseInt(pp.get("max-length-direct-at"), 200), splitProb, maxParts);
+    }
+
+    private static int parseInt(String raw, int def) {
+        if (raw == null || raw.trim().isEmpty()) return def;
+        try {
+            return Integer.parseInt(raw.trim());
+        } catch (NumberFormatException e) {
+            return def;
+        }
+    }
+
+    private static double parseDouble(String raw, double def) {
+        if (raw == null || raw.trim().isEmpty()) return def;
+        try {
+            return Double.parseDouble(raw.trim());
+        } catch (NumberFormatException e) {
+            return def;
+        }
     }
 
     @Override
@@ -241,11 +273,10 @@ public final class AiChatHandler implements BotMessageHandler {
         // --- 构建消息列表 ---
         List<Map<String, String>> messages = new ArrayList<>();
 
-        String personality = config.getStringResolved("personality",
-                "你是一位温柔、体贴、爱说简单话的女朋友").trim();
         messages.add(AiPromptBuilder.message("system",
-                AiPromptBuilder.buildSystemPrompt(personality, isDirectAt, attack, chimeInMode)));
+                AiPromptBuilder.buildSystemPrompt(persona, isDirectAt, attack, chimeInMode)));
 
+        // 立场依据与服务器知识库来自群主/服主配置，属于可信内容，仍放 system 层
         String stanceCtx = adminStance.buildContext(guildId);
         if (!stanceCtx.isEmpty()) {
             messages.add(AiPromptBuilder.message("system", stanceCtx));
@@ -256,26 +287,29 @@ public final class AiChatHandler implements BotMessageHandler {
             messages.add(AiPromptBuilder.message("system", knowledgeCtx));
         }
 
-        List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
-        if (!ctx.isEmpty()) {
-            StringBuilder ctxBuilder = new StringBuilder();
-            ctxBuilder.append("【群聊记录】\n");
-            int start = Math.max(0, ctx.size() - 12);
-            for (int i = start; i < ctx.size(); i++) {
-                ctxBuilder.append(ctx.get(i).toString()).append("\n");
-            }
-            messages.add(AiPromptBuilder.message("system", ctxBuilder.toString()));
-        }
-
+        // 历史多轮（user/assistant 成对，保证消息交替）
         String memKey = guildId + "#" + senderId;
         messages.addAll(replyMemory.getMessages(memKey));
 
+        // 群聊记录是群友原话 = 不可信输入，降权成 user 角色，并与当前消息合成一条
+        List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
+        if (ctx.size() > 12) {
+            ctx = ctx.subList(ctx.size() - 12, ctx.size());
+        }
+
         String userTag = event.getUsername() != null ? event.getUsername() : "群友";
         if (senderIsAdmin) userTag = "【管理员】" + userTag;
+        String userContent = AiPromptBuilder.buildUserTurn(ctx, userTag, msg);
 
         // 检测是否有图片（多模态）
         java.util.List<String> imageUrls = event.getImageUrls();
         boolean hasImage = imageUrls != null && !imageUrls.isEmpty();
+
+        if (hasImage) {
+            messages.add(AiPromptBuilder.multimodal("user", userContent, imageUrls.get(0)));
+        } else {
+            messages.add(AiPromptBuilder.message("user", userContent));
+        }
 
         // --- 调用 LLM（有图片用多模态模型，纯文字用默认模型）---
         String reply;
@@ -297,37 +331,45 @@ public final class AiChatHandler implements BotMessageHandler {
             return;
         }
 
-        String trimmed = reply.trim();
-        // NO_REPLY 是给判定用的内部标记，任何情况下都不能发出去（被 @ 时也不能把
-        // "NO_REPLY" 这种词甩给用户）
-        if (isNoReply(trimmed)) return;
-
-        // 发文字（敏感词过滤已由 core 的 sensitive-filter-handlers 统一处理）
-        if (!trimmed.isEmpty()) {
-            event.reply(trimmed);
-            if (!isDirectAt && !attack) {
-                chimeIn.markReplied(guildId);
-            }
+        // ── 输出后处理：所有回复的唯一出口 ──
+        // 剥 markdown / AI 味短语 / 特殊标记、限长、概率性拆条、
+        // 拦 NO_REPLY 与越狱话术。模型产出不经这里不许发出去。
+        AiPostProcessor processor = isDirectAt ? postProcessorDirectAt : postProcessorChimeIn;
+        AiPostProcessor.Result result = processor.process(reply);
+        if (result.silent || result.parts.isEmpty()) {
+            return;
         }
 
+        // 发文字（敏感词过滤已由 core 的 sensitive-filter-handlers 统一处理）
+        for (int i = 0; i < result.parts.size(); i++) {
+            if (i > 0) {
+                // 多条之间留个间隔，别像机关枪一样连发
+                try {
+                    Thread.sleep(400L + java.util.concurrent.ThreadLocalRandom.current().nextInt(600));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            event.reply(result.parts.get(i));
+        }
+
+        if (!isDirectAt && !attack) {
+            chimeIn.markReplied(guildId);
+        }
+
+        String joined = String.join("\n", result.parts);
         String botName = BotRuntimeState.getBotName();
-        groupContext.record(guildId, botName, trimmed);
+        groupContext.record(guildId, botName, joined);
         List<Map<String, String>> history = replyMemory.getMessages(memKey);
         history.add(AiPromptBuilder.message("user", userTag + "：" + msg));
-        history.add(AiPromptBuilder.message("assistant", trimmed));
+        history.add(AiPromptBuilder.message("assistant", joined));
         replyMemory.setMessages(memKey, history);
     }
 
-    /** 失败兜底话术。 */
+    /** 失败兜底话术。默认别再自称 AI——那是最像机器的一句话。 */
     private String fallbackMessage() {
-        return config.getString("ai-fallback-message", "AI 无法处理该请求。");
-    }
-
-    private static boolean isNoReply(String s) {
-        String upper = s.toUpperCase().replaceAll("[^A-Z]", "");
-        if (upper.equals("NOREPLY")) return true;
-        if (s.replaceAll("[\\s\\p{Punct}]", "").isEmpty()) return true;
-        return false;
+        return config.getString("ai-fallback-message", "我脑子刚才短路了一下，等会再聊");
     }
 
     /**
