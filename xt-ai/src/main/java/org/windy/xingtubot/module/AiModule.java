@@ -4,6 +4,7 @@ import org.windy.xingtubot.common.ai.AiService;
 import org.windy.xingtubot.common.config.BotConfig;
 import org.windy.xingtubot.common.module.BotModule;
 import org.windy.xingtubot.common.module.ModuleContext;
+import org.windy.xingtubot.module.ai.AiAdminCommand;
 import org.windy.xingtubot.module.ai.AiChatHandler;
 import org.windy.xingtubot.module.ai.AiExecutor;
 
@@ -67,6 +68,8 @@ public final class AiModule implements BotModule {
                 () -> knowledgeLines(ctx),
                 executor);
         ctx.registry().registerObserver(handler);
+        // 管理命令：用量查询 / 配置热重载 / 身份标识
+        ctx.registry().register(new AiAdminCommand(config, handler, handler.usageStats(), ctx.logger()));
 
         String omniModel = config.getString("llm-model-omni", "mimo-v2-omni");
         ctx.logger().info("[AI] AI 对话已加载（主模型: " + model + " @ " + baseUrl
@@ -78,6 +81,7 @@ public final class AiModule implements BotModule {
     @Override
     public void onDisable() {
         if (handler != null) {
+            handler.saveUsage();
             handler.shutdown();
             handler = null;
         }

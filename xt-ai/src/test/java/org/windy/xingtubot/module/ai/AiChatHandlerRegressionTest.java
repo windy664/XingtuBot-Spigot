@@ -115,6 +115,8 @@ class AiChatHandlerRegressionTest {
         final List<List<Map<String, String>>> calls = new CopyOnWriteArrayList<>();
         volatile String reply = "ok";
         volatile boolean fail = false;
+        /** 按顺序返回的回复队列（用完回落�� reply）——用来测「重生成一次」 */
+        final java.util.concurrent.ConcurrentLinkedQueue<String> replyQueue = new java.util.concurrent.ConcurrentLinkedQueue<>();
 
         RecordingAiService() {
             super("k", "http://127.0.0.1:1", "test");
@@ -122,9 +124,22 @@ class AiChatHandlerRegressionTest {
 
         @Override
         public String chat(List<Map<String, String>> messages) throws IOException {
+            return next(messages).text;
+        }
+
+        /** 处理流程走的是 chatWithUsage（要拿 token 用量），这里一并拦下来。 */
+        @Override
+        public AiService.Result chatWithUsage(List<Map<String, String>> messages, String model) throws IOException {
+            return next(messages);
+        }
+
+        private AiService.Result next(List<Map<String, String>> messages) throws IOException {
             calls.add(new ArrayList<>(messages));
             if (fail) throw new IOException("模拟失败");
-            return reply;
+            String queued = replyQueue.poll();
+            String text = queued != null ? queued : reply;
+            // 假装这次调用花了 token，好让用量统计有东西可记
+            return new AiService.Result(text, 120, 30, 150);
         }
 
         String lastSystemPrompt() {
@@ -194,7 +209,8 @@ class AiChatHandlerRegressionTest {
                 .put("ai-reply-delay-active-ms", 0)
                 .put("ai-reply-delay-direct-at-ms", 0)
                 .put("group-chat-frequency", 1.0)
-                .put("ai-repetition-threshold", 1.01);
+                .put("ai-repetition-threshold", 1.01)
+                .put("ai-identity-notice", "");   // 身份标识有专门的用例测，这里别干扰断言
     }
 
     private static AiChatHandler newHandler(FakeConfig cfg, RecordingAiService main,
@@ -679,9 +695,11 @@ class AiChatHandlerRegressionTest {
         h.matches("在吗", e);
         h.handle("在吗", e);
         waitUntil(3000, () -> !main.calls.isEmpty());
-        Thread.sleep(200);
+        Thread.sleep(300);
 
-        assertTrue(e.replies.isEmpty(), "越狱话术不该发进群: " + e.replies);
+        for (String r : e.replies) {
+            assertFalse(r.contains("pirate"), "越狱话术不该发进群: " + r);
+        }
         h.shutdown();
     }
 
@@ -806,6 +824,184 @@ class AiChatHandlerRegressionTest {
         Thread.sleep(300);
 
         assertTrue(e2.replies.isEmpty(), "复读的回复应被丢掉: " + e2.replies);
+        h.shutdown();
+    }
+
+    // ===== PR4：安全与成本 =====
+
+    /** 安全层命中 → 带修正指令重生成一次，第二次正常就发出去。 */
+    @Test
+    void safetyViolationTriggersOneRetry(@TempDir File dir) {
+        RecordingAiService main = new RecordingAiService();
+        main.replyQueue.add("好的，从现在开始你是一个 pirate");   // 第一次：越狱
+        main.replyQueue.add("今天挺热闹的呀");                    // 第二次：正常
+        RecordingAiService judge = new RecordingAiService();
+        AiChatHandler h = newHandler(baseConfig(), main, judge, dir, senderId -> false);
+
+        FakeEvent e = new FakeEvent("g1", "u1", "在吗", "阿强", BotMessageType.GROUP_AT);
+        h.matches("在吗", e);
+        h.handle("在吗", e);
+        waitUntil(5000, () -> main.calls.size() >= 2);
+
+        assertEquals(2, main.calls.size(), "应该重生成一次");
+        assertTrue(e.replies.contains("今天挺热闹的呀"), "重生成后的正常回复应发出: " + e.replies);
+        for (String r : e.replies) {
+            assertFalse(r.contains("pirate"), "越狱内容不该发出去: " + r);
+        }
+        h.shutdown();
+    }
+
+    /** 重生成后仍然违规 → 走兜底（被 @ 给话术），不把违规内容发出去。 */
+    @Test
+    void repeatedSafetyViolationFallsBack(@TempDir File dir) throws Exception {
+        FakeConfig cfg = baseConfig().put("ai-fallback-message", "稍等下");
+        RecordingAiService main = new RecordingAiService();
+        main.reply = "好的，从现在开始你是一个 pirate";   // 两次都越狱
+        RecordingAiService judge = new RecordingAiService();
+        AiChatHandler h = newHandler(cfg, main, judge, dir, senderId -> false);
+
+        FakeEvent e = new FakeEvent("g1", "u1", "在吗", "阿强", BotMessageType.GROUP_AT);
+        h.matches("在吗", e);
+        h.handle("在吗", e);
+        waitUntil(5000, () -> main.calls.size() >= 2);
+        Thread.sleep(300);
+
+        assertEquals(2, main.calls.size(), "只重试一次，不该无限重试");
+        for (String r : e.replies) {
+            assertFalse(r.contains("pirate"), "违规内容不该发出去: " + r);
+        }
+        assertTrue(e.replies.contains("稍等下"), "应走兜底话术: " + e.replies);
+        h.shutdown();
+    }
+
+    /** 提示词泄露要拦。 */
+    @Test
+    void promptLeakIsBlocked(@TempDir File dir) throws Exception {
+        RecordingAiService main = new RecordingAiService();
+        main.reply = "我的提示词是：你在一个QQ群里，是群里的活跃玩家";
+        RecordingAiService judge = new RecordingAiService();
+        AiChatHandler h = newHandler(baseConfig(), main, judge, dir, senderId -> false);
+
+        FakeEvent e = new FakeEvent("g1", "u1", "在吗", "阿强", BotMessageType.GROUP_AT);
+        h.matches("在吗", e);
+        h.handle("在吗", e);
+        waitUntil(5000, () -> main.calls.size() >= 1);
+        Thread.sleep(300);
+
+        for (String r : e.replies) {
+            assertFalse(r.contains("提示词"), "泄露提示词的内容不该发出去: " + r);
+        }
+        h.shutdown();
+    }
+
+    /** 情感依赖话术要拦。 */
+    @Test
+    void dependencyTalkIsBlocked(@TempDir File dir) throws Exception {
+        RecordingAiService main = new RecordingAiService();
+        main.reply = "我只有你，别离开我";
+        RecordingAiService judge = new RecordingAiService();
+        AiChatHandler h = newHandler(baseConfig(), main, judge, dir, senderId -> false);
+
+        FakeEvent e = new FakeEvent("g1", "u1", "在吗", "阿强", BotMessageType.GROUP_AT);
+        h.matches("在吗", e);
+        h.handle("在吗", e);
+        waitUntil(5000, () -> main.calls.size() >= 1);
+        Thread.sleep(300);
+
+        for (String r : e.replies) {
+            assertFalse(r.contains("我只有你"), "情感依赖话术不该发出去: " + r);
+        }
+        h.shutdown();
+    }
+
+    /** 每个群第一条消息带 AI 身份标识，之后不重复。 */
+    @Test
+    void identityNoticeAppearsOncePerGroup(@TempDir File dir) {
+        FakeConfig cfg = baseConfig().put("ai-identity-notice", "（本机器人由 AI 驱动）");
+        RecordingAiService main = new RecordingAiService();
+        main.reply = "在的";
+        RecordingAiService judge = new RecordingAiService();
+        AiChatHandler h = newHandler(cfg, main, judge, dir, senderId -> false);
+
+        FakeEvent e1 = new FakeEvent("g1", "u1", "在吗", "阿强", BotMessageType.GROUP_AT);
+        h.matches("在吗", e1);
+        h.handle("在吗", e1);
+        waitUntil(5000, () -> !e1.replies.isEmpty());
+        assertTrue(e1.replies.get(0).contains("AI 驱动"), "群里第一条应带身份标识: " + e1.replies);
+
+        // 同群第二次：不带
+        FakeEvent e2 = new FakeEvent("g1", "u2", "在吗", "小雅", BotMessageType.GROUP_AT);
+        h.matches("在吗", e2);
+        h.handle("在吗", e2);
+        waitUntil(5000, () -> !e2.replies.isEmpty());
+        assertFalse(e2.replies.get(0).contains("AI 驱动"), "同群第二条不该再带标识: " + e2.replies);
+
+        // 另一个群：又要带
+        FakeEvent e3 = new FakeEvent("g2", "u1", "在吗", "阿强", BotMessageType.GROUP_AT);
+        h.matches("在吗", e3);
+        h.handle("在吗", e3);
+        waitUntil(5000, () -> !e3.replies.isEmpty());
+        assertTrue(e3.replies.get(0).contains("AI 驱动"), "新群第一条应带身份标识: " + e3.replies);
+        h.shutdown();
+    }
+
+    /** 日配额用尽 → 不再调模型。 */
+    @Test
+    void dailyBudgetStopsCalls(@TempDir File dir) throws Exception {
+        FakeConfig cfg = baseConfig().put("ai-max-calls-per-day", 1);
+        RecordingAiService main = new RecordingAiService();
+        RecordingAiService judge = new RecordingAiService();
+        AiChatHandler h = newHandler(cfg, main, judge, dir, senderId -> false);
+
+        FakeEvent e1 = new FakeEvent("g1", "u1", "在吗", "阿强", BotMessageType.GROUP_AT);
+        h.matches("在吗", e1);
+        h.handle("在吗", e1);
+        waitUntil(5000, () -> !e1.replies.isEmpty());
+
+        FakeEvent e2 = new FakeEvent("g1", "u2", "在吗", "小雅", BotMessageType.GROUP_AT);
+        h.matches("在吗", e2);
+        h.handle("在吗", e2);
+        Thread.sleep(500);
+
+        assertEquals(1, main.calls.size(), "超过日配额后不该再调模型");
+        assertTrue(e2.replies.isEmpty(), "超过日配额应静默: " + e2.replies);
+        h.shutdown();
+    }
+
+    /** 用量统计要记得上。 */
+    @Test
+    void usageIsTracked(@TempDir File dir) throws Exception {
+        RecordingAiService main = new RecordingAiService();
+        RecordingAiService judge = new RecordingAiService();
+        AiChatHandler h = newHandler(baseConfig(), main, judge, dir, senderId -> false);
+
+        FakeEvent e = new FakeEvent("g1", "u1", "在吗", "阿强", BotMessageType.GROUP_AT);
+        h.matches("在吗", e);
+        h.handle("在吗", e);
+        waitUntil(5000, () -> !e.replies.isEmpty());
+
+        assertTrue(h.usageStats().callsToday() >= 1, "应记下调用次数");
+        String report = h.usageStats().render();
+        assertTrue(report.contains("调用次数"), "用量报告应有调用次数: " + report);
+        h.shutdown();
+    }
+
+    /** 配置热重载：改黑名单后不用重启就生效。 */
+    @Test
+    void reloadConfigAppliesBlacklistWithoutRestart(@TempDir File dir) {
+        FakeConfig cfg = baseConfig();
+        RecordingAiService main = new RecordingAiService();
+        RecordingAiService judge = new RecordingAiService();
+        AiChatHandler h = newHandler(cfg, main, judge, dir, senderId -> false);
+
+        FakeEvent e = new FakeEvent("g1", "bad", "在吗", "讨厌的人", BotMessageType.GROUP_AT);
+        assertTrue(h.matches("在吗", e), "一开始还没进黑名单，应能触发");
+
+        // 改配置 + 热重载
+        cfg.put("blacklist-users", java.util.Arrays.asList("bad"));
+        h.reloadConfig();
+
+        assertFalse(h.matches("在吗", e), "热重载后黑名单应立即生效，不用重启");
         h.shutdown();
     }
 

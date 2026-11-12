@@ -32,7 +32,7 @@ public class YamlBotConfig implements BotConfig {
     private final File dataDir;
     private final ClassLoader resourceLoader;
     private final String resourceName;
-    private final Map<String, Object> data;
+    private volatile Map<String, Object> data;
     // 经 set() 改动过、待写回的顶层键。save() 只就地替换这些键所在的行，其余行原样保留。
     private final Set<String> dirtyKeys = new HashSet<>();
 
@@ -45,6 +45,20 @@ public class YamlBotConfig implements BotConfig {
         this.dataDir = dataDir;
         this.resourceLoader = resourceLoader != null ? resourceLoader : YamlBotConfig.class.getClassLoader();
         this.resourceName = resourceName;
+        this.data = loadFromDisk();
+    }
+
+    /**
+     * 重新读盘：重新合并模板并加载 YAML。
+     * <p>供热重载使用（{@link #reload()}）。
+     */
+    @Override
+    public void reload() {
+        this.data = loadFromDisk();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> loadFromDisk() {
         Map<String, Object> loaded = new HashMap<>();
         try {
             Files.createDirectories(dataDir.toPath());
@@ -64,7 +78,7 @@ public class YamlBotConfig implements BotConfig {
             }
         } catch (IOException ignored) {
         }
-        this.data = loaded;
+        return loaded;
     }
 
     @Override

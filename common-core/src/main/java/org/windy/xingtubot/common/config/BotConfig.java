@@ -41,4 +41,17 @@ public interface BotConfig {
         String val = getString(path, def);
         return val.replace("{bot}", BotRuntimeState.getBotName());
     }
+
+    /**
+     * 重新从磁盘读取配置（可选）。
+     *
+     * <p>默认是空实现——不是所有实现都支持热重载。支持的实现（如
+     * {@link YamlBotConfig}）应当重新读文件并把新值生效。
+     *
+     * <p>用于「改完配置不想重启服务器」的场景：调用方在 reload() 之后
+     * 需要自己把读到的值重新应用到各个组件上。
+     */
+    default void reload() {
+        // 不支持热重载的实现什么都不做
+    }
 }

@@ -91,6 +91,30 @@ public class AiService {
      *                      例如传 "mimo-v2-omni" 处理含图片的消息。
      */
     public String chat(List<Map<String, String>> messages, String overrideModel) throws IOException {
+        return chatWithUsage(messages, overrideModel).text;
+    }
+
+    /** 一次调用返回正文 + token 用量。 */
+    public static final class Result {
+        public final String text;
+        public final int promptTokens;
+        public final int completionTokens;
+        public final int totalTokens;
+
+        public Result(String text, int promptTokens, int completionTokens, int totalTokens) {
+            this.text = text;
+            this.promptTokens = promptTokens;
+            this.completionTokens = completionTokens;
+            this.totalTokens = totalTokens;
+        }
+    }
+
+    /**
+     * 多轮对话，附带 token 用量统计。
+     *
+     * @param overrideModel 为 null 时使用默认模型
+     */
+    public Result chatWithUsage(List<Map<String, String>> messages, String overrideModel) throws IOException {
         String useModel = overrideModel != null ? overrideModel : model;
         JsonObject payload = buildPayload(messages, useModel);
 
@@ -167,7 +191,7 @@ public class AiService {
         return payload;
     }
 
-    private String doChat(JsonObject payload) throws IOException {
+    private Result doChat(JsonObject payload) throws IOException {
         Http.Response resp = Http.post(baseUrl + "/chat/completions")
                 .json(payload.toString())
                 .header("Authorization", "Bearer " + apiKey)
@@ -212,7 +236,20 @@ public class AiService {
         if (content == null || content.trim().isEmpty()) {
             throw new IOException("API 返回内容为空");
         }
-        return content;
+        return new Result(content, readInt(result, "prompt_tokens"),
+                readInt(result, "completion_tokens"), readInt(result, "total_tokens"));
+    }
+
+    /** 读 token 用量（部分 provider 不返回 usage，缺失时按 0 记）。 */
+    private static int readInt(JsonObject root, String key) {
+        try {
+            if (!root.has("usage") || !root.get("usage").isJsonObject()) return 0;
+            JsonObject usage = root.getAsJsonObject("usage");
+            if (!usage.has(key) || usage.get(key).isJsonNull()) return 0;
+            return usage.get(key).getAsInt();
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     /** 5xx 与网络类错误可重试；4xx 不重试。 */

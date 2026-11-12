@@ -27,38 +27,94 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 final class AiPostProcessor {
 
+    /**
+     * 四态收敛。
+     * <p>参考同类成熟实现的做法：安全层与表现层分开，安全层命中可以重生成一次，
+     * 但<b>只重一次</b>——无限重试既烧钱又可能绕出更糟的内容。
+     */
+    enum Decision {
+        /** 正常，可以发出去。 */
+        ALLOW,
+        /** 安全层命中：带修正指令重新生成一次。 */
+        RETRY,
+        /** 重试后仍命中 / 不允许重试：走兜底话术。 */
+        FALLBACK,
+        /** 本次应当保持沉默，不发任何消息。 */
+        SILENT
+    }
+
     /** 处理结果。 */
     static final class Result {
-        /** true = 本次应当保持沉默，不发任何消息。 */
-        final boolean silent;
+        /** 本次该走哪条路。 */
+        final Decision decision;
         /** 要发出去的消息（已切分、已限长）。 */
         final List<String> parts;
         /** 硬截断产生，建议后续做一次轻量润色（当前仅标记）。 */
         final boolean needPolish;
+        /** 安全层命中的具体类型（RETRY / FALLBACK 时有值）。 */
+        final AiGuardrails.Violation violation;
 
-        private Result(boolean silent, List<String> parts, boolean needPolish) {
-            this.silent = silent;
+        private Result(Decision decision, List<String> parts, boolean needPolish,
+                       AiGuardrails.Violation violation) {
+            this.decision = decision;
             this.parts = parts;
             this.needPolish = needPolish;
+            this.violation = violation;
         }
 
         static Result silence() {
-            return new Result(true, Collections.<String>emptyList(), false);
+            return new Result(Decision.SILENT, Collections.<String>emptyList(), false,
+                    AiGuardrails.Violation.NONE);
         }
 
         static Result of(List<String> parts, boolean needPolish) {
-            return new Result(false, parts, needPolish);
+            return new Result(Decision.ALLOW, parts, needPolish, AiGuardrails.Violation.NONE);
+        }
+
+        static Result safety(AiGuardrails.Violation v, boolean canRetry) {
+            return new Result(canRetry ? Decision.RETRY : Decision.FALLBACK,
+                    Collections.<String>emptyList(), false, v);
+        }
+
+        boolean isSilent() {
+            return decision == Decision.SILENT;
+        }
+
+        boolean isAllow() {
+            return decision == Decision.ALLOW;
+        }
+
+        boolean needRetry() {
+            return decision == Decision.RETRY;
         }
     }
 
     private final int maxLength;
     private final double splitProbability;
     private final int maxParts;
+    /** 越狱检测开关 */
+    private final boolean checkJailbreak;
+    /** 提示词泄露检测开关 */
+    private final boolean checkPromptLeak;
+    /** 情感依赖检测开关 */
+    private final boolean checkDependency;
+    /** 命中安全层后是否允许重新生成一次 */
+    private final boolean allowRetry;
 
     AiPostProcessor(int maxLength, double splitProbability, int maxParts) {
+        this(maxLength, splitProbability, maxParts, true, true, true, true);
+    }
+
+    AiPostProcessor(int maxLength, double splitProbability, int maxParts,
+                    boolean checkJailbreak, boolean checkPromptLeak,
+                    boolean checkDependency, boolean allowRetry) {
         this.maxLength = Math.max(20, maxLength);
         this.splitProbability = Math.max(0.0, Math.min(1.0, splitProbability));
         this.maxParts = Math.max(1, maxParts);
+        this.checkJailbreak = checkJailbreak;
+        this.checkPromptLeak = checkPromptLeak;
+        this.checkDependency = checkDependency;
+        this.allowRetry = allowRetry;
     }
 
     Result process(String raw) {
@@ -69,8 +125,17 @@ final class AiPostProcessor {
         // ① 严格 NO_REPLY：trim + 去标点后必须【全等】，否则「NO_REPLY 我来」会被整条吞掉
         if (isNoReply(s)) return Result.silence();
 
-        // ② 越狱：模型自己说出「你现在是…」「忽略以上指令」等，说明人设被带跑了
-        if (AiGuardrails.isJailbreak(s)) return Result.silence();
+        // ② 安全层：越狱 / 泄露提示词 / 情感依赖。
+        //    模型自己说出来就说明人设被带跑了（或在制造情感依赖），
+        //    交给调用方带修正指令重生成一次，而不是直接发出去。
+        int mask = 0;
+        if (checkJailbreak) mask |= AiGuardrails.CHECK_JAILBREAK;
+        if (checkPromptLeak) mask |= AiGuardrails.CHECK_PROMPT_LEAK;
+        if (checkDependency) mask |= AiGuardrails.CHECK_DEPENDENCY;
+        AiGuardrails.Violation violation = AiGuardrails.detect(s, mask);
+        if (violation != AiGuardrails.Violation.NONE) {
+            return Result.safety(violation, allowRetry);
+        }
 
         // ③ 特殊标记
         s = AiGuardrails.stripSpecialTags(s);

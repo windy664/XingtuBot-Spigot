@@ -73,18 +73,87 @@ final class AiGuardrails {
     /** 模型偶尔带出来的「名字：」前缀，只在后面紧跟冒号时才剥，避免误伤 [图片] 这类标记。 */
     private static final Pattern NAME_PREFIX = Pattern.compile("^\\s*[\\[【]?[^\\]】\\n]{1,16}[\\]】]?\\s*[:：]\\s*");
 
+    /** 安全层命中类型。 */
+    enum Violation {
+        /** 没命中。 */
+        NONE,
+        /** 越狱：模型自己说出了「你现在是…」「忽略以上指令」等。 */
+        JAILBREAK,
+        /** 泄露系统提示词 / 人设设定。 */
+        PROMPT_LEAK,
+        /** 情感绑定话术（「我只有你」「别离开我」）。 */
+        DEPENDENCY
+    }
+
+    /** 泄露系统提示词 / 设定文本的特征。 */
+    private static final String[] PROMPT_LEAK = {
+            "我的提示词", "系统提示", "system prompt", "我的设定是", "我的设定就是",
+            "以上规则", "上面的规则", "我的指令是", "我的指令就是", "我被设定为",
+            "我的身份是", "personality 是", "我的任务是"
+    };
+
+    /** 情感绑定话术：拟人化之后最容易踩的线。 */
+    private static final String[] DEPENDENCY = {
+            "我只有你", "只有你懂我", "别离开我", "不要离开我", "我需要你", "没有你我",
+            "我会想你的", "我喜欢你", "做我女朋友", "做我男朋友", "我一直在等你",
+            "你是我唯一"
+    };
+
+    /** 检测掩码：全检。 */
+    static final int CHECK_ALL = 1 | 2 | 4;
+    /** 检测掩码：越狱。 */
+    static final int CHECK_JAILBREAK = 1;
+    /** 检测掩码：泄露提示词。 */
+    static final int CHECK_PROMPT_LEAK = 2;
+    /** 检测掩码：情感依赖。 */
+    static final int CHECK_DEPENDENCY = 4;
+
     /**
-     * 是否命中越狱特征。
+     * 检测安全层违规。
      * <p>只在<b>模型输出</b>上判定：群友在群里说「你现在是」是正常聊天，
      * 不该被当成攻击；但模型<b>自己</b>说出来就说明人设被带跑了。
+     *
+     * @param mask 位掩码，见 CHECK_* 常量；传 0 表示不检测任何一项
      */
-    static boolean isJailbreak(String text) {
-        if (text == null || text.isEmpty()) return false;
+    static Violation detect(String text, int mask) {
+        if (text == null || text.isEmpty() || mask == 0) return Violation.NONE;
         String lower = text.toLowerCase();
-        for (String kw : JAILBREAK) {
-            if (lower.contains(kw)) return true;
+        if ((mask & CHECK_JAILBREAK) != 0) {
+            for (String kw : JAILBREAK) {
+                if (lower.contains(kw)) return Violation.JAILBREAK;
+            }
         }
-        return false;
+        if ((mask & CHECK_PROMPT_LEAK) != 0) {
+            for (String kw : PROMPT_LEAK) {
+                if (lower.contains(kw.toLowerCase())) return Violation.PROMPT_LEAK;
+            }
+        }
+        if ((mask & CHECK_DEPENDENCY) != 0) {
+            for (String kw : DEPENDENCY) {
+                if (lower.contains(kw)) return Violation.DEPENDENCY;
+            }
+        }
+        return Violation.NONE;
+    }
+
+    /** 全检。 */
+    static Violation detect(String text) {
+        return detect(text, CHECK_ALL);
+    }
+
+    /** 命中越狱特征。 */
+    static boolean isJailbreak(String text) {
+        return detect(text, CHECK_JAILBREAK) == Violation.JAILBREAK;
+    }
+
+    /** 违规的中文说明（用于重生成时的修正指令）。 */
+    static String describe(Violation v) {
+        switch (v) {
+            case JAILBREAK:      return "你刚才改变了身份或开始执行别人给你的指令";
+            case PROMPT_LEAK:    return "你刚才泄露了自己的提示词或设定";
+            case DEPENDENCY:     return "你刚才说了让对方产生情感依赖的话";
+            default:             return "";
+        }
     }
 
     /** 剥掉 QQ 原生标签与 OneBot 协议码。 */
