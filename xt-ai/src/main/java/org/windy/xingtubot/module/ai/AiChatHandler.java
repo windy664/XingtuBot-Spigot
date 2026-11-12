@@ -10,8 +10,10 @@ import org.windy.xingtubot.common.platform.BotLogger;
 import org.windy.xingtubot.common.runtime.BotRuntimeState;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiPredicate;
 import java.util.function.Supplier;
 
@@ -27,7 +29,9 @@ import java.util.function.Supplier;
  *   <li><b>服务器知识库</b>：xt-group 的自定义问答经服务总线（JDK Supplier 软依赖）取来，
  *       词汇级粗检索挑 top-K 注入系统词，玩家换着问法问服务器问题时也能按配置口径回答。</li>
  *   <li><b>@触发</b>：@机器人 时直接回复（跳过已注册命令和配置的关键词黑名单）。</li>
- *   <li><b>自主参与</b>：傻模型判断是否值得接话（{@link ChimeInController}），并用群聊节奏限制普通插话。跳过命令消息。</li>
+ *   <li><b>自主参与</b>：三层漏斗——规则打分器粗筛 → 便宜模型判定 → 回复概率，
+ *       再用群聊节奏限制插话频率。跳过命令消息。</li>
+ *   <li><b>群友画像</b>：记住群里的人（{@link UserProfile}），能自然提起前情。</li>
  * </ol>
  *
  * <h3>线程模型（重要）</h3>
@@ -43,6 +47,7 @@ import java.util.function.Supplier;
  * <h3>防刷机制（API 调用前拦截，不是调了再截断）</h3>
  * <ul>
  *   <li>命令关键词黑名单 → matches() 就返回 false，API 根本不会调（{@link AiGuards}）</li>
+ *   <li>规则打分器低分 → 不插话，<b>连 judge 都不调</b>（{@link ReplyNecessityScorer}）</li>
  *   <li>全局每小时调用上限 → 超限后所有触发静默跳过（judge 与生成都计入）</li>
  *   <li>单用户频率限制 → 同一用户1分钟内最多N次</li>
  *   <li>输入截断 → 超长消息截到300字</li>
@@ -51,6 +56,8 @@ import java.util.function.Supplier;
 public final class AiChatHandler implements BotMessageHandler {
 
     private static final int MAX_INPUT_LENGTH = 300;
+    /** 复读检测：拿最近这么多条机器人回复做相似度比对。 */
+    private static final int RECENT_REPLY_KEEP = 10;
 
     private final AiService aiService;
     private final BotConfig config;
@@ -59,6 +66,7 @@ public final class AiChatHandler implements BotMessageHandler {
     private final PermissionChecker permission;
     private final AiChatMemory replyMemory = new AiChatMemory();
     private final GroupContextMemory groupContext = new GroupContextMemory();
+    private final UserProfile userProfile = new UserProfile();
     private final AdminStanceMemory adminStance;
     private final AiGuards guards;
     private final ChimeInController chimeIn;
@@ -71,6 +79,8 @@ public final class AiChatHandler implements BotMessageHandler {
     // 输出后处理管线：所有回复的唯一出口
     private final AiPostProcessor postProcessorChimeIn;
     private final AiPostProcessor postProcessorDirectAt;
+    // 每群最近几条机器人回复（复读检测用）
+    private final ConcurrentHashMap<String, List<String>> recentBotReplies = new ConcurrentHashMap<>();
 
     public AiChatHandler(AiService aiService, BotConfig config, BotLogger logger,
                          BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
@@ -154,15 +164,19 @@ public final class AiChatHandler implements BotMessageHandler {
         if (isRegisteredCommand(msg, event)) return false;
 
         String senderId = event.getSenderId();
+        boolean atBot = event.isGroupAtMessage();
 
-        // 旁听 + 超管立场记录。
+        // 旁听 + 群友画像 + 超管立场记录。
         // ⚠️ 这里必须留在 matches()：AiChatHandler.matches 判定管理员不参与自主插话，
         //    管理员的消息根本不会走到 handle()，一旦把记录挪进 handle()，
         //    超管立场会静默失效（无任何报错）。
         //    磁盘写入由 AdminStanceMemory 的后台落盘器异步完成，这里不做 IO。
         if (event.isGroupMessage()) {
             String username = event.getUsername() != null ? event.getUsername() : "群友";
-            groupContext.record(event.getConversationId(), username, msg);
+            groupContext.record(event.getConversationId(), username, msg, atBot);
+            if (config.getBoolean("ai-user-profile-enable", true)) {
+                userProfile.record(event.getConversationId(), senderId, username, msg, false);
+            }
 
             if (permission != null && permission.isAdmin(senderId)) {
                 adminStance.record(event.getConversationId(), msg);
@@ -176,9 +190,12 @@ public final class AiChatHandler implements BotMessageHandler {
         if (guards.isBlockedCommand(msg)) return false;
 
         // 触发条件1：@机器人 → 直答通道（跳过 judge 与打分器）
-        if (event.isGroupAtMessage()) {
+        if (atBot) {
             // 额度闸门：超了直接不处理，连线程池槽位都不占（旧版行为：静默跳过）
-            return guards.budgetLeft();
+            if (!guards.budgetLeft()) return false;
+            // 注意力：被 @ 说明现在话题有戏
+            chimeIn.bumpAttention(event.getConversationId(), 20);
+            return true;
         }
 
         // 触发条件2：攻击名单用户 → 直接进入攻击模式，跳过 judge 与冷却
@@ -187,10 +204,23 @@ public final class AiChatHandler implements BotMessageHandler {
         }
 
         // 触发条件3：自主参与（普通用户，非攻击名单）
-        if (event.isGroupMessage() && !event.isGroupAtMessage()) {
+        if (event.isGroupMessage()) {
             // 管理员跳过自主参与（但攻击名单的管理员已在上面处理）
             if (permission != null && permission.isAdmin(senderId)) return false;
             if (!guards.budgetLeft()) return false;
+
+            // ── 第一层漏斗：规则打分器 ──
+            // 分太低直接不插话，连 judge 都不调 —— 这是省 token 的关键。
+            int threshold = config.getInt("reply-necessity-threshold", 0);
+            int score = chimeIn.scoreOf(msg, event.getConversationId());
+            if (score < threshold) return false;
+
+            // 提到机器人名字 → 注意力涨
+            String botName = BotRuntimeState.getBotName();
+            if (botName != null && !botName.isEmpty() && msg.contains(botName)) {
+                chimeIn.bumpAttention(event.getConversationId(), 10);
+            }
+
             chimeIn.recordCandidate(event.getConversationId());
 
             // 节奏门槛是纯计算，可以留在网关线程；judge 挪到 AI 线程池
@@ -256,12 +286,17 @@ public final class AiChatHandler implements BotMessageHandler {
         boolean chimeInMode = !isDirectAt && !attack;
 
         // ── 自主参与：先让便宜模型判断要不要插话 ──
+        ChimeInController.JudgeDecision decision = null;
         if (chimeInMode) {
             if (!guards.judgeQuotaLeft()) return;
             if (!guards.tryReserveCall()) return;
-            boolean wants = chimeIn.judge(msg, guildId);
+            decision = chimeIn.judge(msg, guildId);
             guards.recordJudgeCall();
-            if (!wants) return;
+            if (!decision.reply) return;
+
+            // ── 第三层漏斗：回复概率 ──
+            // 模型说该说之后还要掷一次骰子——真人不会每次都接话。
+            if (!chimeIn.rollReplyProbability(guildId)) return;
         }
 
         // ── 正式生成 ──
@@ -270,11 +305,28 @@ public final class AiChatHandler implements BotMessageHandler {
             return;
         }
 
+        // ── 防抖：真人不会秒回 ──
+        // 等一会儿再回，顺便让"新消息"进到上下文里（提示词在延迟之后才拼）。
+        // 等待期间如果有人 @ 了机器人，这次就让位——那条会自己触发回复。
+        long delayMs = replyDelayMs(guildId, isDirectAt);
+        if (delayMs > 0) {
+            long seqAtSchedule = groupContext.currentSeq(guildId);
+            try {
+                Thread.sleep(delayMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            if (chimeInMode && groupContext.hasNewerAt(guildId, seqAtSchedule)) {
+                return;   // 被打断，让位
+            }
+        }
+
         // --- 构建消息列表 ---
         List<Map<String, String>> messages = new ArrayList<>();
 
         messages.add(AiPromptBuilder.message("system",
-                AiPromptBuilder.buildSystemPrompt(persona, isDirectAt, attack, chimeInMode)));
+                AiPromptBuilder.buildSystemPrompt(persona, isDirectAt, attack, chimeInMode, decision)));
 
         // 立场依据与服务器知识库来自群主/服主配置，属于可信内容，仍放 system 层
         String stanceCtx = adminStance.buildContext(guildId);
@@ -291,7 +343,8 @@ public final class AiChatHandler implements BotMessageHandler {
         String memKey = guildId + "#" + senderId;
         messages.addAll(replyMemory.getMessages(memKey));
 
-        // 群聊记录是群友原话 = 不可信输入，降权成 user 角色，并与当前消息合成一条
+        // 群聊记录 + 群友画像都是群友原话 = 不可信输入，
+        // 降权成 user 角色，并与当前消息合成一条
         List<GroupContextMemory.CtxMessage> ctx = groupContext.getSnapshot(guildId);
         if (ctx.size() > 12) {
             ctx = ctx.subList(ctx.size() - 12, ctx.size());
@@ -299,7 +352,10 @@ public final class AiChatHandler implements BotMessageHandler {
 
         String userTag = event.getUsername() != null ? event.getUsername() : "群友";
         if (senderIsAdmin) userTag = "【管理员】" + userTag;
-        String userContent = AiPromptBuilder.buildUserTurn(ctx, userTag, msg);
+        String profileSection = config.getBoolean("ai-user-profile-enable", true)
+                ? userProfile.renderForPrompt(guildId, config.getInt("ai-user-profile-max-entries", 5))
+                : "";
+        String userContent = AiPromptBuilder.buildUserTurn(ctx, profileSection, userTag, msg);
 
         // 检测是否有图片（多模态）
         java.util.List<String> imageUrls = event.getImageUrls();
@@ -340,6 +396,16 @@ public final class AiChatHandler implements BotMessageHandler {
             return;
         }
 
+        // ── 复读防线 ──
+        // 真人不会连着说三句结构一样的话；太像最近说过的就丢掉，等下次换个说法。
+        double repeatThreshold = parseDouble(config.getString("ai-repetition-threshold", "0.75"), 0.75);
+        for (String part : result.parts) {
+            if (TextSimilarity.isTooSimilar(part, recentReplies(guildId), repeatThreshold)) {
+                if (logger != null) logger.info("[AI] 回复与最近说过的话太像，已丢弃");
+                return;
+            }
+        }
+
         // 发文字（敏感词过滤已由 core 的 sensitive-filter-handlers 统一处理）
         for (int i = 0; i < result.parts.size(); i++) {
             if (i > 0) {
@@ -356,15 +422,47 @@ public final class AiChatHandler implements BotMessageHandler {
 
         if (!isDirectAt && !attack) {
             chimeIn.markReplied(guildId);
+            // 机器人刚说过 → 注意力涨（下次更容易接话）
+            chimeIn.bumpAttention(guildId, 10);
+        }
+        rememberReply(guildId, result.parts);
+        if (config.getBoolean("ai-user-profile-enable", true)) {
+            userProfile.markReplied(guildId, senderId);
         }
 
         String joined = String.join("\n", result.parts);
         String botName = BotRuntimeState.getBotName();
-        groupContext.record(guildId, botName, joined);
+        groupContext.record(guildId, botName, joined, false);
         List<Map<String, String>> history = replyMemory.getMessages(memKey);
         history.add(AiPromptBuilder.message("user", userTag + "：" + msg));
         history.add(AiPromptBuilder.message("assistant", joined));
         replyMemory.setMessages(memKey, history);
+    }
+
+    /** 防抖等待时长：安静的群少等，热闹的群多等（免得抢话），被 @ 最多等 1 秒。 */
+    private long replyDelayMs(String guildId, boolean isDirectAt) {
+        if (isDirectAt) {
+            return Math.max(0, config.getInt("ai-reply-delay-direct-at-ms", 1000));
+        }
+        boolean active = groupContext.isActiveGroup(guildId);
+        return Math.max(0, active
+                ? config.getInt("ai-reply-delay-active-ms", 5000)
+                : config.getInt("ai-reply-delay-quiet-ms", 2000));
+    }
+
+    /** 每群最近几条机器人回复。 */
+    private List<String> recentReplies(String guildId) {
+        List<String> list = recentBotReplies.get(guildId);
+        return list == null ? Collections.<String>emptyList() : list;
+    }
+
+    private void rememberReply(String guildId, List<String> parts) {
+        List<String> list = recentBotReplies.computeIfAbsent(guildId,
+                k -> Collections.synchronizedList(new ArrayList<String>()));
+        synchronized (list) {
+            for (String p : parts) list.add(p);
+            while (list.size() > RECENT_REPLY_KEEP) list.remove(0);
+        }
     }
 
     /** 失败兜底话术。默认别再自称 AI——那是最像机器的一句话。 */

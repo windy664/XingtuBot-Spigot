@@ -188,7 +188,13 @@ class AiChatHandlerRegressionTest {
                 .put("ai-max-judge-calls-per-hour", 0)
                 .put("ai-max-replies-per-hour", 0)
                 .put("ai-admin-stance-enable", true)
-                .put("ai-admin-stance-inject-pending", false);
+                .put("ai-admin-stance-inject-pending", false)
+                // 测试里要确定性：关掉防抖延迟、回复概率拉满、复读阈值关到不生效
+                .put("ai-reply-delay-quiet-ms", 0)
+                .put("ai-reply-delay-active-ms", 0)
+                .put("ai-reply-delay-direct-at-ms", 0)
+                .put("group-chat-frequency", 1.0)
+                .put("ai-repetition-threshold", 1.01);
     }
 
     private static AiChatHandler newHandler(FakeConfig cfg, RecordingAiService main,
@@ -227,10 +233,10 @@ class AiChatHandlerRegressionTest {
 
         FakeEvent e = new FakeEvent("g1", "u1", "今天服务器有点卡", "阿强", BotMessageType.GROUP);
 
-        // 前两条攒不够消息，第三条才成为候选
+        // 前两条攒不够消息，第三条才成为候选（三条内容要不同，连发同一条会被复读检测拦下）
         assertFalse(h.matches("今天服务器有点卡", e));
-        assertFalse(h.matches("今天服务器有点卡", e));
-        assertTrue(h.matches("今天服务器有点卡", e));
+        assertFalse(h.matches("刚才又崩了一次", e));
+        assertTrue(h.matches("这服最近不太稳定啊", e));
 
         assertTrue(main.calls.isEmpty(), "matches() 不应触发主模型调用");
         assertTrue(judge.calls.isEmpty(), "matches() 不应触发 judge 调用");
@@ -318,10 +324,10 @@ class AiChatHandlerRegressionTest {
 
         FakeEvent e = new FakeEvent("g1", "u1", "今天服务器有点卡", "阿强", BotMessageType.GROUP);
         h.matches("今天服务器有点卡", e);
-        h.matches("今天服务器有点卡", e);
-        assertTrue(h.matches("今天服务器有点卡", e));
+        h.matches("刚才又崩了一次", e);
+        assertTrue(h.matches("这服最近不太稳定啊", e));
 
-        h.handle("今天服务器有点卡", e);
+        h.handle("这服最近不太稳定啊", e);
         waitUntil(5000, () -> !e.replies.isEmpty());
 
         assertFalse(judge.calls.isEmpty(), "自主插话应调用 judge");
@@ -676,6 +682,130 @@ class AiChatHandlerRegressionTest {
         Thread.sleep(200);
 
         assertTrue(e.replies.isEmpty(), "越狱话术不该发进群: " + e.replies);
+        h.shutdown();
+    }
+
+    // ===== PR3：节奏与关系感 =====
+
+    /** 噪声消息不该触发 judge —— 这是省 token 的关键。 */
+    @Test
+    void noiseNeverReachesJudge(@TempDir File dir) {
+        RecordingAiService main = new RecordingAiService();
+        RecordingAiService judge = new RecordingAiService();
+        judge.reply = "CHIME_IN";
+        AiChatHandler h = newHandler(baseConfig(), main, judge, dir, senderId -> false);
+
+        // 广告 → 打分器直接拦下
+        FakeEvent spam = new FakeEvent("g1", "u1", "代练加群 http://example.com", "广告狗", BotMessageType.GROUP);
+        assertFalse(h.matches("代练加群 http://example.com", spam), "广告不该进入插话候选");
+        // 短反应 → 拦下
+        FakeEvent shortOne = new FakeEvent("g1", "u2", "哈哈", "阿强", BotMessageType.GROUP);
+        assertFalse(h.matches("哈哈", shortOne), "短反应不该进入插话候选");
+
+        assertTrue(judge.calls.isEmpty(), "被拦下的消息不该调 judge");
+        assertTrue(main.calls.isEmpty(), "被拦下的消息不该调主模型");
+        h.shutdown();
+    }
+
+    /** judge 用 JSON 契约回复时能正确解析成「要插话」。 */
+    @Test
+    void jsonJudgeContractWorks(@TempDir File dir) {
+        RecordingAiService main = new RecordingAiService();
+        RecordingAiService judge = new RecordingAiService();
+        judge.reply = "{\"action\":\"REPLY\",\"social_action\":\"JOKE\",\"delivery_style\":\"玩梗\"}";
+        AiChatHandler h = newHandler(baseConfig(), main, judge, dir, senderId -> false);
+
+        FakeEvent e = new FakeEvent("g1", "u1", "这服最近不太稳定啊", "阿强", BotMessageType.GROUP);
+        h.matches("这服最近不太稳定啊", e);
+        h.matches("刚才又崩了一次", e);
+        h.matches("大家都来 complaints 一下", e);
+        h.handle("大家都来 complaints 一下", e);
+        waitUntil(5000, () -> !main.calls.isEmpty());
+
+        assertFalse(judge.calls.isEmpty(), "应调用 judge");
+        assertFalse(main.calls.isEmpty(), "JSON 判定为 REPLY 时应生成回复");
+        String prompt = main.lastSystemPrompt();
+        assertTrue(prompt != null && prompt.contains("抖机灵"), "判定意图应进系统词: " + prompt);
+        h.shutdown();
+    }
+
+    /** judge 说 PASS → 不生成。 */
+    @Test
+    void jsonJudgePassMeansSilence(@TempDir File dir) {
+        RecordingAiService main = new RecordingAiService();
+        RecordingAiService judge = new RecordingAiService();
+        judge.reply = "{\"action\":\"PASS\"}";
+        AiChatHandler h = newHandler(baseConfig(), main, judge, dir, senderId -> false);
+
+        FakeEvent e = new FakeEvent("g1", "u1", "这服最近不太稳定啊", "阿强", BotMessageType.GROUP);
+        h.matches("这服最近不太稳定啊", e);
+        h.matches("刚才又崩了一次", e);
+        h.matches("大家都来 complaints 一下", e);
+        h.handle("大家都来 complaints 一下", e);
+
+        waitUntil(3000, () -> !judge.calls.isEmpty());
+        assertTrue(main.calls.isEmpty(), "PASS 时不该调主模型");
+        assertTrue(e.replies.isEmpty(), "PASS 时不该发言");
+        h.shutdown();
+    }
+
+    /** 群友画像应进提示词。 */
+    @Test
+    void userProfileAppearsInPrompt(@TempDir File dir) {
+        RecordingAiService main = new RecordingAiService();
+        RecordingAiService judge = new RecordingAiService();
+        AiChatHandler h = newHandler(baseConfig(), main, judge, dir, senderId -> false);
+
+        // 先积累一点群友画像
+        FakeEvent a = new FakeEvent("g1", "u9", "今天谁上线", "阿强", BotMessageType.GROUP);
+        h.matches("今天谁上线", a);
+
+        FakeEvent e = new FakeEvent("g1", "u1", "在吗", "小雅", BotMessageType.GROUP_AT);
+        h.matches("在吗", e);
+        h.handle("在吗", e);
+        waitUntil(5000, () -> !main.calls.isEmpty());
+
+        boolean found = false;
+        for (Map<String, String> m : main.calls.get(main.calls.size() - 1)) {
+            if (m.get("content") != null && m.get("content").contains("你认识的群友")) {
+                found = true;
+                assertTrue(m.get("content").contains("阿强"), "画像应包含群友: " + m.get("content"));
+                assertTrue(m.get("content").contains("今天谁上线"), "画像应包含群友说过的话");
+            }
+        }
+        assertTrue(found, "画像段应出现在发给模型的 messages 里");
+        h.shutdown();
+    }
+
+    /** 复读防线：跟上一次说的一模一样就丢掉。 */
+    @Test
+    void repeatedReplyIsDropped(@TempDir File dir) throws Exception {
+        FakeConfig cfg = baseConfig().put("ai-repetition-threshold", 0.5);
+        RecordingAiService main = new RecordingAiService();
+        main.reply = "确实挺卡的呀";
+        RecordingAiService judge = new RecordingAiService();
+        judge.reply = "CHIME_IN";
+        AiChatHandler h = newHandler(cfg, main, judge, dir, senderId -> false);
+
+        // 第一次：正常发出
+        FakeEvent e1 = new FakeEvent("g1", "u1", "今天好卡", "阿强", BotMessageType.GROUP);
+        h.matches("今天好卡", e1);
+        h.matches("刚才又崩了", e1);
+        h.matches("大家都来说下", e1);
+        h.handle("大家都来说下", e1);
+        waitUntil(5000, () -> !e1.replies.isEmpty());
+        assertTrue(e1.replies.contains("确实挺卡的呀"), "第一次应正常发出: " + e1.replies);
+
+        // 第二次：模型说了几乎一样的话 → 应被丢掉
+        FakeEvent e2 = new FakeEvent("g1", "u2", "今天好卡", "小雅", BotMessageType.GROUP);
+        h.matches("今天好卡", e2);
+        h.matches("刚才又崩了", e2);
+        h.matches("大家都来说下", e2);
+        h.handle("大家都来说下", e2);
+        waitUntil(5000, () -> main.calls.size() >= 2);
+        Thread.sleep(300);
+
+        assertTrue(e2.replies.isEmpty(), "复读的回复应被丢掉: " + e2.replies);
         h.shutdown();
     }
 
