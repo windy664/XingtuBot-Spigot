@@ -114,6 +114,9 @@ class AdminStanceMemoryTest {
         mem1.configure(true, true, 5, null);
         mem1.record("g1", "持久化测试1");
         mem1.record("g1", "持久化测试2");
+        // record() 只写内存，落盘由后台落盘器异步完成（避免在 QQ 网关线程做磁盘 IO），
+        // 这里显式 flush 保证重新加载时数据已落盘
+        mem1.flush();
 
         // 重新加载
         AdminStanceMemory mem2 = new AdminStanceMemory(dir);
@@ -154,6 +157,7 @@ class AdminStanceMemoryTest {
     void mdFileCreated(@TempDir File dir) {
         AdminStanceMemory mem = new AdminStanceMemory(dir);
         mem.record("g1", "md文件测试");
+        mem.flush();
 
         assertTrue(new File(dir, "admin_stance.md").exists(), "应生成 admin_stance.md");
         assertFalse(new File(dir, "admin_stance.json").exists(), "不应再写 json");
@@ -234,6 +238,7 @@ class AdminStanceMemoryTest {
         assertTrue(ctx.contains("MC百科"), "正常的服务器相关发言应保留: " + ctx);
 
         // 也不应落盘
+        mem.flush();
         String md = readMd(dir);
         assertFalse(md.contains("经济拮据"), "财务隐私不应写入 md: " + md);
         assertFalse(md.contains("Google账号被封"), "账号隐私不应写入 md: " + md);

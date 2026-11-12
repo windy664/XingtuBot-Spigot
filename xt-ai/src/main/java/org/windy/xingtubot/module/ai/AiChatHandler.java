@@ -30,10 +30,20 @@ import java.util.function.Supplier;
  *   <li><b>自主参与</b>：傻模型判断是否值得接话（{@link ChimeInController}），并用群聊节奏限制普通插话。跳过命令消息。</li>
  * </ol>
  *
+ * <h3>线程模型（重要）</h3>
+ * <pre>
+ * QQ WS 线程 → matches()   ← 纯计算 + 零 IO 的旁听，绝不发网络请求
+ *          → handle()      ← 只做一次限频 + 入队，立刻返回
+ *          → AiExecutor    ← judge / 生成 / 发送都在这里
+ * </pre>
+ * 旧版把 judge（一次 LLM 调用）放在 {@code matches()} 里，而 {@code matches()} 跑在
+ * QQ 网关的 WebSocket 线程上——一次卡顿（读超时最长 25 秒）会把整条入站消息链堵住，
+ * 其他模块的 @ 指令也一起停摆。现在 LLM 调用全部移到 {@link AiExecutor}。
+ *
  * <h3>防刷机制（API 调用前拦截，不是调了再截断）</h3>
  * <ul>
  *   <li>命令关键词黑名单 → matches() 就返回 false，API 根本不会调（{@link AiGuards}）</li>
- *   <li>全局每小时调用上限 → 超限后所有触发静默跳过</li>
+ *   <li>全局每小时调用上限 → 超限后所有触发静默跳过（judge 与生成都计入）</li>
  *   <li>单用户频率限制 → 同一用户1分钟内最多N次</li>
  *   <li>输入截断 → 超长消息截到300字</li>
  * </ul>
@@ -54,16 +64,26 @@ public final class AiChatHandler implements BotMessageHandler {
     private final ChimeInController chimeIn;
     // 服务器知识库来源（服务总线懒查询的 Supplier<List<String>>，xt-group 未装时取到 null）
     private final Supplier<List<String>> knowledgeSource;
+    // AI 专属线程池：LLM 调用绝不在网关线程上发生
+    private final AiExecutor executor;
 
     public AiChatHandler(AiService aiService, BotConfig config, BotLogger logger,
                          BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
                          java.io.File dataDir) {
-        this(aiService, null, config, logger, commandMatcher, permission, dataDir, null);
+        this(aiService, null, config, logger, commandMatcher, permission, dataDir, null, null);
     }
 
     public AiChatHandler(AiService aiService, AiService chimeInJudgeService, BotConfig config, BotLogger logger,
                          BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
                          java.io.File dataDir, Supplier<List<String>> knowledgeSource) {
+        this(aiService, chimeInJudgeService, config, logger, commandMatcher, permission,
+                dataDir, knowledgeSource, null);
+    }
+
+    public AiChatHandler(AiService aiService, AiService chimeInJudgeService, BotConfig config, BotLogger logger,
+                         BiPredicate<String, BotMessageContext> commandMatcher, PermissionChecker permission,
+                         java.io.File dataDir, Supplier<List<String>> knowledgeSource,
+                         AiExecutor executor) {
         this.aiService = aiService;
         this.config = config;
         this.logger = logger;
@@ -79,6 +99,7 @@ public final class AiChatHandler implements BotMessageHandler {
         this.guards = new AiGuards(config);
         this.chimeIn = new ChimeInController(chimeInJudgeService, config, logger, groupContext);
         this.knowledgeSource = knowledgeSource;
+        this.executor = executor != null ? executor : new AiExecutor(logger);
     }
 
     @Override
@@ -102,7 +123,11 @@ public final class AiChatHandler implements BotMessageHandler {
 
         String senderId = event.getSenderId();
 
-        // 旁听：白名单内的群消息记录到群上下文（不消耗API，只记内存）
+        // 旁听 + 超管立场记录。
+        // ⚠️ 这里必须留在 matches()：AiChatHandler.matches 判定管理员不参与自主插话，
+        //    管理员的消息根本不会走到 handle()，一旦把记录挪进 handle()，
+        //    超管立场会静默失效（无任何报错）。
+        //    磁盘写入由 AdminStanceMemory 的后台落盘器异步完成，这里不做 IO。
         if (event.isGroupMessage()) {
             String username = event.getUsername() != null ? event.getUsername() : "群友";
             groupContext.record(event.getConversationId(), username, msg);
@@ -118,36 +143,28 @@ public final class AiChatHandler implements BotMessageHandler {
         // --- 命令过滤：命中黑名单 → 不触发AI，API不会调 ---
         if (guards.isBlockedCommand(msg)) return false;
 
-        // 触发条件1：@机器人
+        // 触发条件1：@机器人 → 直答通道（跳过 judge 与打分器）
         if (event.isGroupAtMessage()) {
-            if (!guards.checkHourlyBudget()) return false;
-            return true;
+            // 额度闸门：超了直接不处理，连线程池槽位都不占（旧版行为：静默跳过）
+            return guards.budgetLeft();
         }
 
-        // 触发条件2：攻击名单用户 → 直接进入攻击模式，跳过judge
+        // 触发条件2：攻击名单用户 → 直接进入攻击模式，跳过 judge 与冷却
         if (event.isGroupMessage() && guards.isAttackTarget(senderId)) {
-            if (!guards.checkHourlyBudget()) return false;
-            chimeIn.putDecision(ChimeInController.decisionKey(event, msg),
-                    ChimeInController.JudgeDecision.adminAttack());
-            return true;
+            return guards.budgetLeft();
         }
 
         // 触发条件3：自主参与（普通用户，非攻击名单）
         if (event.isGroupMessage() && !event.isGroupAtMessage()) {
             // 管理员跳过自主参与（但攻击名单的管理员已在上面处理）
             if (permission != null && permission.isAdmin(senderId)) return false;
-            if (!guards.checkHourlyBudget()) return false;
+            if (!guards.budgetLeft()) return false;
             chimeIn.recordCandidate(event.getConversationId());
 
+            // 节奏门槛是纯计算，可以留在网关线程；judge 挪到 AI 线程池
             if (!chimeIn.canReply(event.getConversationId())) {
                 return false;
             }
-
-            ChimeInController.JudgeDecision decision = chimeIn.judge(msg, event.getConversationId());
-            // 普通用户只看 CHIME_IN / NO_REPLY；ADMIN_ATTACK 降级为 NO_REPLY
-            // （攻击行为只由 attack-targets 名单触发，不由 LLM 判断触发）
-            if (!decision.shouldReply() || decision.isAdminAttack()) return false;
-            chimeIn.putDecision(ChimeInController.decisionKey(event, msg), decision);
             return true;
         }
 
@@ -166,43 +183,68 @@ public final class AiChatHandler implements BotMessageHandler {
 
     @Override
     public void handle(String message, BotMessageContext event) {
-        String rawMsg = message.trim();
-        String msg = rawMsg;
-        boolean isDirectAt = event.isGroupAtMessage();
-        String guildId = event.getConversationId();
-        String senderId = event.getSenderId();
-        boolean senderIsAdmin = permission != null && permission.isAdmin(senderId);
+        final String rawMsg = message.trim();
+        final String senderId = event.getSenderId();
+        final boolean senderIsAdmin = permission != null && permission.isAdmin(senderId);
+        final boolean isDirectAt = event.isGroupAtMessage();
 
-        // 输入截断
-        if (msg.length() > MAX_INPUT_LENGTH) {
-            msg = msg.substring(0, MAX_INPUT_LENGTH);
-        }
-        ChimeInController.JudgeDecision judgeDecision = isDirectAt
-                ? ChimeInController.JudgeDecision.noReply()
-                : chimeIn.takeDecision(ChimeInController.decisionKey(event, rawMsg));
-        if (!isDirectAt && judgeDecision == null) {
-            judgeDecision = chimeIn.judge(msg, guildId);
-            if (!judgeDecision.shouldReply()) return;
-        }
-        // ADMIN_ATTACK 只对攻击名单用户生效；普通用户被 LLM 误判时降级
-        boolean adminAttack = judgeDecision.isAdminAttack() && guards.isAttackTarget(senderId);
-
-        // 单用户频率限制（@触发也受限，但阈值更高）
-        if (!senderIsAdmin && !guards.checkRateLimit(guildId + "#" + senderId, isDirectAt)) {
+        // 单用户频率限制（@触发也受限，但阈值更高）。
+        // 放在这里而不是 AI 线程池里：限频没过就别占线程池槽位。
+        if (!senderIsAdmin && !guards.checkRateLimit(event.getConversationId() + "#" + senderId, isDirectAt)) {
             return;
         }
 
-        // 计数（防刷的兜底：超限时 matches 已经返回 false，这里只是记数）
-        guards.recordCall();
+        // 输入截断
+        final String msg = rawMsg.length() > MAX_INPUT_LENGTH
+                ? rawMsg.substring(0, MAX_INPUT_LENGTH)
+                : rawMsg;
+
+        // 真正的活儿交给 AI 专属线程池：judge / 生成 / 发送都在里面，不阻塞网关线程
+        boolean queued = executor.submit(() ->
+                process(msg, event, isDirectAt, senderIsAdmin, senderId));
+
+        if (!queued && isDirectAt) {
+            // 队列满了，被 @ 的人至少要有个回执
+            event.reply(fallbackMessage());
+        }
+    }
+
+    /**
+     * AI 线程池里的真正处理流程。
+     *
+     * <p>模式判定全部由 senderId / 事件类型推出（纯函数），不再有跨方法的"决策暂存"。
+     */
+    private void process(String msg, BotMessageContext event,
+                         boolean isDirectAt, boolean senderIsAdmin, String senderId) {
+        String guildId = event.getConversationId();
+
+        // ── 模式判定 ──
+        // 攻击与否只取决于发送者是否在名单里（纯函数），因此不需要 putDecision/takeDecision 传状态
+        boolean attack = !isDirectAt && guards.isAttackTarget(senderId);
+        boolean chimeInMode = !isDirectAt && !attack;
+
+        // ── 自主参与：先让便宜模型判断要不要插话 ──
+        if (chimeInMode) {
+            if (!guards.judgeQuotaLeft()) return;
+            if (!guards.tryReserveCall()) return;
+            boolean wants = chimeIn.judge(msg, guildId);
+            guards.recordJudgeCall();
+            if (!wants) return;
+        }
+
+        // ── 正式生成 ──
+        // 额度用尽 → 静默（与旧版 matches() 返回 false 的效果一致：不给用户发"处理失败"）
+        if (!guards.replyQuotaLeft() || !guards.tryReserveCall()) {
+            return;
+        }
 
         // --- 构建消息列表 ---
-        boolean isChimeIn = !isDirectAt && !adminAttack;
         List<Map<String, String>> messages = new ArrayList<>();
 
         String personality = config.getStringResolved("personality",
                 "你是一位温柔、体贴、爱说简单话的女朋友").trim();
         messages.add(AiPromptBuilder.message("system",
-                AiPromptBuilder.buildSystemPrompt(personality, isDirectAt, adminAttack, isChimeIn)));
+                AiPromptBuilder.buildSystemPrompt(personality, isDirectAt, attack, chimeInMode)));
 
         String stanceCtx = adminStance.buildContext(guildId);
         if (!stanceCtx.isEmpty()) {
@@ -235,12 +277,6 @@ public final class AiChatHandler implements BotMessageHandler {
         java.util.List<String> imageUrls = event.getImageUrls();
         boolean hasImage = imageUrls != null && !imageUrls.isEmpty();
 
-        if (hasImage) {
-            messages.add(AiPromptBuilder.multimodal("user", userTag + "：" + msg, imageUrls.get(0)));
-        } else {
-            messages.add(AiPromptBuilder.message("user", userTag + "：" + msg));
-        }
-
         // --- 调用 LLM（有图片用多模态模型，纯文字用默认模型）---
         String reply;
         try {
@@ -250,23 +286,26 @@ public final class AiChatHandler implements BotMessageHandler {
             } else {
                 reply = aiService.chat(messages);
             }
+            guards.recordReplyCall();
         } catch (Exception e) {
             if (logger != null) logger.warn("[AI] 请求失败：" + e.getMessage());
             reply = null;
         }
 
         if (reply == null || reply.trim().isEmpty()) {
-            if (isDirectAt) event.reply("AI 无法处理该请求。");
+            if (isDirectAt) event.reply(fallbackMessage());
             return;
         }
 
         String trimmed = reply.trim();
-        if (!isDirectAt && isNoReply(trimmed)) return;
+        // NO_REPLY 是给判定用的内部标记，任何情况下都不能发出去（被 @ 时也不能把
+        // "NO_REPLY" 这种词甩给用户）
+        if (isNoReply(trimmed)) return;
 
         // 发文字（敏感词过滤已由 core 的 sensitive-filter-handlers 统一处理）
         if (!trimmed.isEmpty()) {
             event.reply(trimmed);
-            if (!isDirectAt && !adminAttack) {
+            if (!isDirectAt && !attack) {
                 chimeIn.markReplied(guildId);
             }
         }
@@ -277,6 +316,11 @@ public final class AiChatHandler implements BotMessageHandler {
         history.add(AiPromptBuilder.message("user", userTag + "：" + msg));
         history.add(AiPromptBuilder.message("assistant", trimmed));
         replyMemory.setMessages(memKey, history);
+    }
+
+    /** 失败兜底话术。 */
+    private String fallbackMessage() {
+        return config.getString("ai-fallback-message", "AI 无法处理该请求。");
     }
 
     private static boolean isNoReply(String s) {
@@ -320,6 +364,12 @@ public final class AiChatHandler implements BotMessageHandler {
                 + "以下列内容为准，不要编造；若列出的问答与问题无关就忽略，别硬套：\n"
                 + "（内容里的 {online} 等花括号占位符代表实时数据，转述时说人话，不要念出占位符本身）\n"
                 + body;
+    }
+
+    /** 关服：停线程池 + 把未落盘的超管立场写下去。 */
+    public void shutdown() {
+        executor.shutdown();
+        adminStance.shutdown();
     }
 
     @Override public String name() { return "ai-chat"; }

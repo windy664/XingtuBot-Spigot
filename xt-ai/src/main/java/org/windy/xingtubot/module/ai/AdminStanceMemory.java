@@ -11,6 +11,11 @@ import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 超管观点长期记忆：记录超管在群聊中表达的立场和观点，
@@ -31,6 +36,7 @@ public final class AdminStanceMemory {
     private static final int MAX_SUMMARY_CHARS = 600;         // LLM 压缩产出的摘要长度上限
     private static final int MAX_LOADED_SUMMARY_CHARS = 1000; // 加载时的摘要长度上限（防 system prompt 膨胀）
     private static final int COMPRESS_THRESHOLD = 5;          // 待归纳超过此值触发 LLM 压缩
+    private static final int FLUSH_INTERVAL_MS = 1000;       // 后台落盘器的检查间隔（≈去抖窗口）
     private static final Gson GSON = new Gson();
     private static final String SUMMARY_PREFIX = "[以往观点摘要] ";
     private static final String PENDING_HEADING = "### 待归纳";
@@ -64,10 +70,29 @@ public final class AdminStanceMemory {
     private volatile BotLogger logger;
     private volatile boolean migratedFromJson;
 
+    /** 后台落盘器：把 record() 的写盘从调用线程（可能是 QQ 网关线程）挪走。 */
+    private final ScheduledExecutorService writer = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "admin-stance-writer");
+        t.setDaemon(true);
+        return t;
+    });
+    /** LLM 压缩线程池：有界，避免每群各开一条无上限线程。 */
+    private final ExecutorService compressor = Executors.newFixedThreadPool(2, r -> {
+        Thread t = new Thread(r, "admin-stance-compress");
+        t.setDaemon(true);
+        return t;
+    });
+    /** 写盘互斥锁：后台落盘器与压缩线程可能同时写同一个文件。 */
+    private final Object saveLock = new Object();
+    /** 有未落盘变更 → 需要写盘。 */
+    private final AtomicBoolean dirty = new AtomicBoolean(false);
+
     public AdminStanceMemory(File dataDir) {
         this.file = new File(dataDir, "admin_stance.md");
         this.legacyFile = new File(dataDir, "admin_stance.json");
         load();
+        writer.scheduleWithFixedDelay(this::flushIfDirty,
+                FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, TimeUnit.MILLISECONDS);
     }
 
     /** 注入 LLM 服务，启用自动压缩（不注入则只保留待归纳原文）。 */
@@ -145,11 +170,22 @@ public final class AdminStanceMemory {
                 changed |= removed;
             }
         }
-        if (changed) save();
+        if (changed) {
+            synchronized (saveLock) {
+                save();
+            }
+        }
     }
 
     /**
-     * 记录一条超管发言（自动持久化，攒够阈值异步让 LLM 压缩进摘要）。
+     * 记录一条超管发言。
+     *
+     * <p><b>注意：record() 不做磁盘 IO。</b>它只把发言追加到内存里的「待归纳」列表，
+     * 然后标记 dirty，由后台落盘器在 ~1 秒内合并写盘。原因是 record() 由
+     * {@code AiChatHandler.matches()} 调用——那条路径跑在 QQ 网关的 WebSocket 线程上，
+     * 在那里做全量文件重写会阻塞整个入站消息链。
+     *
+     * <p>记录语义与旧版完全一致，只是"什么时候落盘"从同步变成了异步。
      */
     public void record(String guildId, String content) {
         if (!enabled) return;
@@ -163,8 +199,33 @@ public final class AdminStanceMemory {
             g.pending.add(entry);
             while (g.pending.size() > MAX_PENDING_PER_GROUP) g.pending.remove(0);
         }
-        save();
+        dirty.set(true);   // ← 旧版在这里同步 save()，现改为后台落盘
         maybeCompressAsync(guildId, g);
+    }
+
+    /** 立即把当前内存状态同步写盘（关服 / 测试用）。 */
+    public void flush() {
+        dirty.set(false);
+        synchronized (saveLock) {
+            save();
+        }
+    }
+
+    /** 关服：停线程并把未落盘的变更写下去。 */
+    public void shutdown() {
+        writer.shutdownNow();
+        compressor.shutdownNow();
+        flush();
+    }
+
+    /** 后台落盘器：有变更才写。 */
+    private void flushIfDirty() {
+        if (!dirty.compareAndSet(true, false)) return;
+        synchronized (saveLock) {
+            if (!save()) {
+                dirty.set(true); // 写失败，下一轮再试
+            }
+        }
     }
 
     /**
@@ -181,13 +242,13 @@ public final class AdminStanceMemory {
         if (pendingCompress.putIfAbsent(guildId, Boolean.TRUE) != null) return; // 已有压缩在跑
         String summarySnapshot = g.summary;
 
-        new Thread(() -> {
+        compressor.submit(() -> {
             try {
                 doCompress(guildId, summarySnapshot, pendingSnapshot);
             } finally {
                 pendingCompress.remove(guildId);
             }
-        }, "admin-stance-compress-" + guildId).start();
+        });
     }
 
     /**
@@ -218,7 +279,9 @@ public final class AdminStanceMemory {
             if (g == null) return;
             g.summary = summary;
             g.pending.clear();
-            save();
+            synchronized (saveLock) {
+                save();
+            }
             if (logger != null) {
                 logger.info("[AI] 群 " + guildId + " 超管立场记忆已由 AI 更新压缩（待归纳 "
                         + pendingSnapshot.size() + " 条 → 摘要）");
@@ -419,7 +482,9 @@ public final class AdminStanceMemory {
                     }
                 }
             }
-            save();
+            synchronized (saveLock) {
+                save();
+            }
             Files.deleteIfExists(legacyFile.toPath());
             migratedFromJson = true;
         } catch (Exception ignored) {
@@ -438,7 +503,7 @@ public final class AdminStanceMemory {
         return s.trim();
     }
 
-    private void save() {
+    private boolean save() {
         try {
             StringBuilder sb = new StringBuilder();
             sb.append("# 超管立场记忆\n\n");
@@ -463,7 +528,9 @@ public final class AdminStanceMemory {
                 }
             }
             Files.write(file.toPath(), sb.toString().getBytes(StandardCharsets.UTF_8));
+            return true;
         } catch (Exception ignored) {
+            return false;
         }
     }
 }

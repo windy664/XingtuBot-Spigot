@@ -15,8 +15,17 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * 自主参与（chime-in）控制：普通群消息先由轻量模型判断要不要接话，
  * 再用「攒消息数 + 随机阈值 + 冷却」的节奏限制控制插话频率。
- * judge 的决策（含攻击名单的 ADMIN_ATTACK）按消息键暂存，供 handle() 取用——
- * matches 与 handle 之间不共享其他状态。
+ *
+ * <h3>线程模型</h3>
+ * {@link #judge(String, String)} 会发网络请求，<b>只能在 AI 专属线程池里调用</b>。
+ * {@link #recordCandidate(String)} 与 {@link #canReply(String)} 是纯计算，
+ * 放在 matches() 阶段（QQ 网关线程）执行没有问题。
+ *
+ * <h3>为什么没有"决策暂存"</h3>
+ * 旧版在 matches() 阶段判定并把结果塞进一个 Map，handle() 再取出来用——跨方法的隐式
+ * 状态传递，key 用 {@code msg.hashCode()}，同人群发相同消息会撞车。
+ * 现在改成：判定与生成在 AI 线程池的<b>同一个任务</b>里顺序完成，
+ * 「要不要攻击」只取决于 senderId（纯函数），不再需要任何跨方法传状态。
  */
 final class ChimeInController {
 
@@ -27,7 +36,6 @@ final class ChimeInController {
     private final BotLogger logger;
     private final GroupContextMemory groupContext;
 
-    private final ConcurrentHashMap<String, JudgeDecision> pendingJudgeDecisions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ChimeInCadence> cadenceByGroup = new ConcurrentHashMap<>();
 
     ChimeInController(AiService chimeInJudgeService, BotConfig config, BotLogger logger,
@@ -38,28 +46,12 @@ final class ChimeInController {
         this.groupContext = groupContext;
     }
 
-    /** matches 与 handle 定位同一条消息的决策键。 */
-    static String decisionKey(BotMessageContext event, String msg) {
-        String guild = event.getConversationId() == null ? "" : event.getConversationId();
-        String sender = event.getSenderId() == null ? "" : event.getSenderId();
-        return guild + "#" + sender + "#" + (msg == null ? 0 : msg.hashCode());
-    }
-
-    void putDecision(String key, JudgeDecision decision) {
-        pendingJudgeDecisions.put(key, decision);
-    }
-
-    /** 取走（并移除）matches 阶段暂存的决策；没有则返回 null。 */
-    JudgeDecision takeDecision(String key) {
-        return pendingJudgeDecisions.remove(key);
-    }
-
-    /** 记一条候选消息（攒节奏用）。 */
+    /** 记一条候选消息（攒节奏用）。纯内存操作，可在网关线程调用。 */
     void recordCandidate(String guildId) {
         cadence(guildId).recordMessage();
     }
 
-    /** 当前节奏下是否允许普通插话。 */
+    /** 当前节奏下是否允许普通插话。纯计算，可在网关线程调用。 */
     boolean canReply(String guildId) {
         int minMessages = Math.max(1, config.getInt("chime-in-min-messages", 3));
         int maxMessages = Math.max(minMessages, config.getInt("chime-in-max-messages", 6));
@@ -74,9 +66,15 @@ final class ChimeInController {
         cadence(guildId).markReply(minMessages, maxMessages);
     }
 
-    /** 让轻量模型判断要不要插话；judge 失败时按不插话处理。 */
-    JudgeDecision judge(String msg, String guildId) {
-        if (chimeInJudgeService == null) return JudgeDecision.noReply();
+    /**
+     * 让轻量模型判断要不要插话。judge 失败时按不插话处理（fail-closed）。
+     *
+     * <p><b>会发网络请求，只能在 AI 线程池里调用。</b>
+     *
+     * @return true = 要插话，false = 不插话
+     */
+    boolean judge(String msg, String guildId) {
+        if (chimeInJudgeService == null) return false;
 
         List<Map<String, String>> messages = new ArrayList<>();
         messages.add(AiPromptBuilder.message("system",
@@ -110,53 +108,30 @@ final class ChimeInController {
 
         try {
             String decision = chimeInJudgeService.chat(messages);
-            return JudgeDecision.parse(decision);
+            return parse(decision);
         } catch (Exception e) {
             if (logger != null) logger.warn("[AI] chime-in judge failed: " + e.getMessage());
-            return JudgeDecision.noReply();
+            return false;
         }
+    }
+
+    /**
+     * 解析 judge 的输出。
+     * <p>只认 CHIME_IN / NO_REPLY 两个词；<b>不再解析 ADMIN_ATTACK</b>——
+     * 旧版虽然定义了它，但攻击模式实际只由 {@code attack-targets} 名单触发，
+     * 模型从来产不出这个值，保留只会造成误判。
+     */
+    private static boolean parse(String raw) {
+        if (raw == null) return false;
+        String normalized = raw.trim().toUpperCase(java.util.Locale.ROOT).replaceAll("[^A-Z_]", "");
+        // 先判 NO_REPLY，避免 "NO_REPLY" 里含 "REPLY" 被误当成要插话
+        if (normalized.contains("NO_REPLY") || normalized.contains("NOREPLY")) return false;
+        return normalized.contains("CHIME_IN") || normalized.contains("CHIMEIN");
     }
 
     private ChimeInCadence cadence(String guildId) {
         String key = guildId == null ? "" : guildId;
         return cadenceByGroup.computeIfAbsent(key, k -> new ChimeInCadence());
-    }
-
-    /** judge 的三态结论：不回复 / 插话 / 攻击名单触发的管理反击。 */
-    static final class JudgeDecision {
-        private static final String ADMIN_ATTACK = "ADMIN_ATTACK";
-        private static final String CHIME_IN = "CHIME_IN";
-        private static final String NO_REPLY_MODE = "NO_REPLY";
-
-        private final String mode;
-
-        private JudgeDecision(String mode) {
-            this.mode = mode;
-        }
-
-        static JudgeDecision noReply() {
-            return new JudgeDecision(NO_REPLY_MODE);
-        }
-
-        static JudgeDecision adminAttack() {
-            return new JudgeDecision(ADMIN_ATTACK);
-        }
-
-        static JudgeDecision parse(String raw) {
-            if (raw == null) return noReply();
-            String normalized = raw.trim().toUpperCase(java.util.Locale.ROOT).replaceAll("[^A-Z_]", "");
-            if (normalized.contains(ADMIN_ATTACK)) return new JudgeDecision(ADMIN_ATTACK);
-            if (normalized.contains(CHIME_IN)) return new JudgeDecision(CHIME_IN);
-            return noReply();
-        }
-
-        boolean shouldReply() {
-            return !NO_REPLY_MODE.equals(mode);
-        }
-
-        boolean isAdminAttack() {
-            return ADMIN_ATTACK.equals(mode);
-        }
     }
 
     /** 每群一份的插话节奏：攒够随机阈值条新消息且过了冷却才允许回复。 */

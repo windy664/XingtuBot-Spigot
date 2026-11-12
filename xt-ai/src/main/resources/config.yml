@@ -11,6 +11,21 @@ llm-model: "mimo-v2.5"
 # 多模态模型（有人发图片时自动切换，能看懂图片）
 llm-model-omni: "mimo-v2-omni"
 
+# 生成参数
+# temperature：0.7~1.1 偏自然。调高更发散（更啰嗦/更可能说怪话），调低更稳更套路。
+llm-temperature: 0.9
+# max_tokens：0 = 不发送该字段（推荐，不同 provider 对 max_tokens / max_completion_tokens
+# 的支持不一致，不发最保险）。配成 >0 可以限制输出长度、防小作文；
+# 若 provider 不认这个字段并报 400，机器人会自动去掉它重试一次。
+llm-max-tokens: 0
+# 超时（毫秒）。聊天场景等 60 秒没有意义，默认 5s 连接 / 25s 读取。
+llm-connect-timeout-ms: 5000
+llm-read-timeout-ms: 25000
+# 失败重试次数。只对网络错误与 5xx 生效；401/403/400 直接失败不重试。
+llm-retry: 1
+# 失败兜底话术（被 @ 时对方等不到回复会看到这句）
+ai-fallback-message: "AI 无法处理该请求。"
+
 ##########################################
 # 群聊白名单
 ##########################################
@@ -67,24 +82,35 @@ blacklist-users:
   - "92D29612EA667F031B36794EFB737DB0"
 
 ##########################################
-# 防刷 + 命令过滤
+# 防刷 + 额度
 ##########################################
-
-# 全局每小时最大API调用次数（超限后所有触发静默跳过，0=不限）
-# 60次 ≈ 平均1分钟1次，足够正常聊天，防连续刷
+# 每小时 LLM 请求总数上限（硬上限）。judge（要不要插话）和正式生成都算。
+# ⚠️ 一次自主插话会消耗 2 次额度（先 judge 一次，再生成一次），
+#    所以实际插话条数约为这个值的一半。想保持原来的插话频率，把它调大一倍即可。
+# 0 = 不限
 ai-max-calls-per-hour: 60
+
+# 每小时 judge 调用单独上限。judge 每条群消息都可能触发一次，是请求量的大头，
+# 想省钱就单独设一个值（比如 20）。0 = 不单独限制（仍受上面的总上限约束）。
+ai-max-judge-calls-per-hour: 0
+
+# 每小时正式回复条数单独上限（不统计 judge）。0 = 不限。
+ai-max-replies-per-hour: 0
 
 ##########################################
 # 自主参与判断是否回复（傻模型）
 ##########################################
 # 普通群消息先由轻量模型判断
 chime-in-judge-enable: true
-# OpenRouter 兼容 OpenAI 接口；不用 OpenRouter 时改成你的兼容接口地址
-chime-in-judge-base-url: "https://openrouter.ai/api/v1"
-# 留空 = 复用上面的 llm-api-key；如果主模型不是 OpenRouter，就在这里单独填 OpenRouter key
+# ⚠️ 下面三项「留空 = 与主模型同一个 provider / 同一个 key / 同一个模型」，推荐保持留空。
+#    只有当你要用便宜的第三方模型做判定时，才单独填 base-url + api-key（必须成对填）。
+#    旧版本这里默认指向 OpenRouter 但 key 回退用主模型的 key，会导致每次 401 且静默失效。
+chime-in-judge-base-url: ""
 chime-in-judge-api-key: ""
-# OpenRouter 免费模型路由；会从可用免费模型中选择
-chime-in-judge-model: "openrouter/free"
+chime-in-judge-model: ""
+# 判定模型参数：判定要稳定，温度设 0；输出很短，64 token 足够。
+chime-in-judge-temperature: 0
+chime-in-judge-max-tokens: 64
 # 普通自主插话要先攒够几条新群消息；每次回复后会在 min~max 之间重新选一个阈值
 chime-in-min-messages: 3
 chime-in-max-messages: 6
